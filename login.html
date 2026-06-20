@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shelf — Sign in to your library</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Outfit:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    :root {
+      --paper: #f5f4ee;
+      --card: #ffffff;
+      --ink: #1e2022;
+      --forest: #e85d56;
+      --forest-deep: #b33933;
+      --brass: #6e7072;
+      --rust: #e85d56;
+      --line: #e4e3da;
+      --serif: 'Playfair Display', Georgia, serif;
+      --sans: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      min-height: 100vh;
+      background: radial-gradient(ellipse at top, #efe6cf 0%, var(--paper) 60%);
+      font-family: var(--sans);
+      color: var(--ink);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+    }
+
+    /* ── wordmark ── */
+    .wordmark {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 22px;
+      transition: var(--transition);
+    }
+
+    .wordmark svg {
+      width: 26px;
+      height: 26px;
+      color: var(--forest);
+      transition: var(--transition);
+    }
+
+    .wordmark:hover svg {
+      transform: rotate(-8deg) scale(1.1);
+    }
+
+    .wordmark span {
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: 22px;
+      letter-spacing: 0.02em;
+      color: var(--forest-deep);
+    }
+
+    /* ── drawer ── */
+    .drawer {
+      width: 100%;
+      max-width: 420px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 0 6px;
+      position: relative;
+    }
+
+    .tab {
+      flex: 1;
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-align: center;
+      padding: 12px 6px 16px;
+      background: var(--forest-deep);
+      color: #cfd9d2;
+      border: none;
+      border-radius: 8px 8px 0 0;
+      cursor: pointer;
+      opacity: 0.55;
+      transform: translateY(4px);
+      transition: var(--transition);
+      z-index: 1;
+    }
+
+    .tab.active {
+      opacity: 1;
+      background: var(--forest);
+      color: #f6efdd;
+      transform: translateY(0);
+      z-index: 2;
+    }
+
+    .tab:hover:not(.active) {
+      opacity: 0.8;
+      transform: translateY(2px);
+    }
+
+    .card {
+      position: relative;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 4px 12px 12px 12px;
+      box-shadow: 0 18px 40px -20px rgba(31, 58, 46, 0.25);
+      padding: 34px 30px 26px;
+      overflow: hidden;
+      transition: box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      box-shadow: 0 24px 48px -20px rgba(31, 58, 46, 0.3);
+    }
+
+    /* perforated top edge */
+    .card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 10px;
+      background-image: radial-gradient(circle, var(--paper) 2.5px, transparent 2.6px);
+      background-size: 14px 14px;
+      background-position: 6px -5px;
+    }
+
+    /* stamp */
+    .stamp {
+      position: absolute;
+      top: 26px;
+      right: 24px;
+      width: 84px;
+      height: 84px;
+      border: 2px solid var(--rust);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: rotate(-12deg);
+      opacity: 0.8;
+      pointer-events: none;
+      transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .card:hover .stamp {
+      transform: rotate(-18deg) scale(1.05);
+    }
+
+    .stamp-inner {
+      font-family: var(--sans);
+      color: var(--rust);
+      text-align: center;
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      line-height: 1.35;
+      text-transform: uppercase;
+    }
+
+    .stamp-inner b {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      margin: 2px 0
+    }
+
+    .eyebrow {
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--brass);
+      margin-bottom: 6px;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    h1.heading {
+      font-family: var(--serif);
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--forest-deep);
+      max-width: 220px;
+      line-height: 1.2;
+      margin-bottom: 26px;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    /* ── Google button ── */
+    .google-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 4px;
+      transition: var(--transition);
+    }
+
+    /* ── divider ── */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--sans);
+      font-size: 10.5px;
+      font-weight: 500;
+      color: #9a9180;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin: 18px 0;
+      transition: var(--transition);
+    }
+
+    .divider::before,
+    .divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--line);
+    }
+
+    /* ── fields ── */
+    .field {
+      position: relative;
+      margin-bottom: 18px;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .field input {
+      width: 100%;
+      padding: 14px 12px 8px;
+      font-size: 15px;
+      font-family: var(--sans);
+      background: transparent;
+      border: none;
+      border-bottom: 1.5px solid var(--line);
+      outline: none;
+      color: var(--ink);
+      transition: border-color .2s;
+    }
+
+    .field input:focus {
+      border-bottom-color: var(--forest)
+    }
+
+    .field label {
+      position: absolute;
+      left: 12px;
+      top: 14px;
+      font-family: var(--sans);
+      font-size: 13px;
+      color: #8a826f;
+      pointer-events: none;
+      transition: all .15s ease;
+    }
+
+    .field input:focus~label,
+    .field input:not(:placeholder-shown)~label {
+      top: -2px;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      color: var(--forest);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    /* Animated Mode Container */
+    .form-content-wrapper {
+      position: relative;
+      transition: height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Smooth Slide/Crossfade Transition Classes */
+    .fade-out {
+      opacity: 0 !important;
+      transform: translateY(-8px);
+      pointer-events: none;
+    }
+
+    .fade-in {
+      opacity: 1 !important;
+      transform: translateY(0);
+    }
+
+    /* ── OTP boxes ── */
+    .otp-group {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin: 4px 0 20px;
+    }
+
+    .otp-box {
+      width: 46px;
+      height: 54px;
+      border: 1.5px solid var(--line);
+      border-radius: 8px;
+      font-family: var(--sans);
+      font-size: 22px;
+      font-weight: 600;
+      text-align: center;
+      color: var(--ink);
+      background: transparent;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .otp-box:focus {
+      border-color: var(--forest);
+      box-shadow: 0 0 0 3px rgba(232, 93, 86, 0.12);
+    }
+
+    .otp-box.filled {
+      border-color: var(--forest-deep);
+    }
+
+    /* ── error / success ── */
+    .msg-line {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--sans);
+      font-weight: 500;
+      font-size: 11.5px;
+      margin: -6px 0 16px;
+      border-radius: 6px;
+      padding: 8px 10px;
+      transition: var(--transition);
+    }
+
+    .msg-line.show {
+      display: flex
+    }
+
+    .msg-line.error {
+      color: var(--rust);
+      background: rgba(232, 93, 86, .07);
+    }
+
+    .msg-line.success {
+      color: #2a7a4c;
+      background: rgba(42, 122, 76, .07);
+    }
+
+    .msg-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .msg-line.error .msg-dot {
+      background: var(--rust);
+    }
+
+    .msg-line.success .msg-dot {
+      background: #2a7a4c;
+    }
+
+    /* ── actions ── */
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 6px;
+    }
+
+    .ghost-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 11.5px;
+      color: var(--brass);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      transition: color .2s;
+    }
+
+    .ghost-btn:hover {
+      color: var(--forest)
+    }
+
+    .stamp-btn {
+      background: var(--forest);
+      color: #f6efdd;
+      border: none;
+      padding: 12px 22px;
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: 14.5px;
+      border-radius: 3px;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      transition: background .2s, transform .1s, box-shadow .2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stamp-btn:hover {
+      background: var(--forest-deep);
+      box-shadow: 0 4px 12px rgba(232, 93, 86, 0.2);
+    }
+
+    .stamp-btn:active {
+      transform: scale(0.97)
+    }
+
+    .stamp-btn:disabled {
+      background: #c5bfb0;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* spinner */
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(246, 239, 221, .3);
+      border-top-color: #f6efdd;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    /* resend timer */
+    .resend-row {
+      text-align: center;
+      margin: 8px 0 16px;
+      font-family: var(--sans);
+      font-size: 11.5px;
+      color: #7a7263;
+    }
+
+    .resend-link {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: var(--sans);
+      font-weight: 500;
+      font-size: 11.5px;
+      color: var(--forest);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .resend-link:disabled {
+      color: var(--brass);
+      cursor: not-allowed;
+      text-decoration: none;
+    }
+
+    /* switch line */
+    .switch-line {
+      margin-top: 20px;
+      text-align: center;
+      font-family: var(--sans);
+      font-size: 11.5px;
+      color: #7a7263;
+    }
+
+    .switch-line button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 11.5px;
+      color: var(--forest);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    /* step indicator */
+    .step-dots {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 22px;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--line);
+      transition: background .3s;
+    }
+
+    .dot.active {
+      background: var(--forest);
+    }
+
+    .dot.done {
+      background: var(--forest-deep);
+    }
+
+    .hidden {
+      display: none !important
+    }
+
+    footer {
+      margin-top: 26px;
+      font-family: var(--sans);
+      font-size: 11.5px;
+      font-weight: 500;
+      color: #8a826f;
+      display: flex;
+      gap: 18px;
+      text-align: center;
+    }
+
+    footer a {
+      color: #8a826f;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      transition: color 0.2s;
+    }
+
+    footer a:hover {
+      color: var(--forest)
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        padding: 28px 20px 22px
+      }
+
+      .stamp {
+        width: 66px;
+        height: 66px;
+        top: 18px;
+        right: 16px
+      }
+
+      h1.heading {
+        font-size: 22px
+      }
+
+      .otp-box {
+        width: 40px;
+        height: 48px;
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="wordmark">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+      stroke-linejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </svg>
+    <span>Shelf</span>
+  </div>
+
+  <div class="drawer">
+    <div class="tabs">
+      <button class="tab active" id="tabSignin">Check in</button>
+      <button class="tab" id="tabSignup">New member</button>
+    </div>
+
+    <div class="card">
+      <div class="stamp">
+        <div class="stamp-inner" id="stampText"><b>SHELF</b>MEMBER<br>ACCESS</div>
+      </div>
+
+      <div class="form-content-wrapper" id="formContentWrapper">
+        <div class="eyebrow" id="eyebrow">Returning member</div>
+        <h1 class="heading" id="heading">Welcome back to your shelf</h1>
+
+        <!-- Step dots -->
+        <div class="step-dots" id="stepDots">
+          <div class="dot active" id="dot0"></div>
+          <div class="dot" id="dot1"></div>
+        </div>
+
+        <!-- ── STEP 1: Identifier + (signup: name) ── -->
+        <div id="step1">
+          <!-- Google OAuth -->
+          <div class="google-wrap" id="googleWrap">
+            <div id="g_id_onload"
+              data-client_id="392400546780-ulh2mdlcfdu7tf4e3460kq6qvkt61qvd.apps.googleusercontent.com"
+              data-context="signin" data-ux_mode="popup" data-callback="handleCredentialResponse"
+              data-auto_prompt="false"></div>
+            <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="outline"
+              data-text="signin_with" data-size="large" data-logo_alignment="left" data-width="280"></div>
+          </div>
+          <div class="divider" id="orDivider">or use email / phone</div>
+
+          <!-- Name field (signup only) -->
+          <div class="field hidden" id="nameField">
+            <input type="text" id="nameInput" placeholder=" ">
+            <label for="nameInput">Full name</label>
+          </div>
+
+          <!-- Identifier field -->
+          <div class="field">
+            <input type="text" id="identifierInput" placeholder=" " inputmode="email">
+            <label for="identifierInput">Email or phone number</label>
+          </div>
+
+          <div class="msg-line error" id="step1Error">
+            <span class="msg-dot"></span>
+            <span id="step1ErrorMsg">Something went wrong.</span>
+          </div>
+
+          <div class="actions">
+            <span></span>
+            <button class="stamp-btn" id="sendOtpBtn" onclick="handleSendOtp()">
+              <span id="sendBtnText">Send code</span>
+              <div class="spinner" id="sendSpinner"></div>
+            </button>
+          </div>
+        </div>
+
+        <!-- ── STEP 2: OTP ── -->
+        <div id="step2" class="hidden">
+          <p style="font-family:var(--sans);font-size:12px;color:#7a7263;margin-bottom:16px;line-height:1.6;"
+            id="otpSentMsg">A 6-digit code was sent to your email.</p>
+
+          <div class="otp-group" id="otpGroup">
+            <input class="otp-box" id="otp0" type="text" inputmode="numeric" maxlength="1">
+            <input class="otp-box" id="otp1" type="text" inputmode="numeric" maxlength="1">
+            <input class="otp-box" id="otp2" type="text" inputmode="numeric" maxlength="1">
+            <input class="otp-box" id="otp3" type="text" inputmode="numeric" maxlength="1">
+            <input class="otp-box" id="otp4" type="text" inputmode="numeric" maxlength="1">
+            <input class="otp-box" id="otp5" type="text" inputmode="numeric" maxlength="1">
+          </div>
+
+          <div class="resend-row">
+            <span id="timerText">Resend in <b id="timerCount">60</b>s</span>
+            <button class="resend-link" id="resendBtn" onclick="handleResend()" style="display:none">
+              Resend code
+            </button>
+          </div>
+
+          <div class="msg-line error" id="step2Error">
+            <span class="msg-dot"></span>
+            <span id="step2ErrorMsg">Invalid OTP.</span>
+          </div>
+          <div class="msg-line success" id="step2Success">
+            <span class="msg-dot"></span>
+            <span>Verified! Signing you in…</span>
+          </div>
+
+          <div class="actions">
+            <button class="ghost-btn" onclick="goBack()">← Back</button>
+            <button class="stamp-btn" id="verifyOtpBtn" onclick="handleVerifyOtp()">
+              <span id="verifyBtnText">Verify</span>
+              <div class="spinner" id="verifySpinner"></div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Switch signin/signup -->
+      <div class="switch-line" id="switchLine">
+        <span id="switchPrompt">New here?</span>
+        <button type="button" id="switchBtn">Get a library card</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <a href="#">Privacy</a>
+    <a href="#">Terms</a>
+    <a href="#">Help</a>
+  </footer>
+
+  <script>
+    // ── State ──────────────────────────────────────────────────────────────────
+    const API = '/api';
+    let mode = 'signin'; // 'signin' | 'signup'
+    let currentStep = 1;
+    let resendTimer = null;
+
+    // ── Element refs ──────────────────────────────────────────────────────────
+    const tabSignin = document.getElementById('tabSignin');
+    const tabSignup = document.getElementById('tabSignup');
+    const eyebrow = document.getElementById('eyebrow');
+    const heading = document.getElementById('heading');
+    const stampText = document.getElementById('stampText');
+    const step1El = document.getElementById('step1');
+    const step2El = document.getElementById('step2');
+    const nameField = document.getElementById('nameField');
+    const nameInput = document.getElementById('nameInput');
+    const identifierInput = document.getElementById('identifierInput');
+    const step1Error = document.getElementById('step1Error');
+    const step1ErrorMsg = document.getElementById('step1ErrorMsg');
+    const step2Error = document.getElementById('step2Error');
+    const step2ErrorMsg = document.getElementById('step2ErrorMsg');
+    const step2Success = document.getElementById('step2Success');
+    const sendBtnText = document.getElementById('sendBtnText');
+    const sendSpinner = document.getElementById('sendSpinner');
+    const sendOtpBtn = document.getElementById('sendOtpBtn');
+    const verifyBtnText = document.getElementById('verifyBtnText');
+    const verifySpinner = document.getElementById('verifySpinner');
+    const verifyOtpBtn = document.getElementById('verifyOtpBtn');
+    const otpSentMsg = document.getElementById('otpSentMsg');
+    const timerText = document.getElementById('timerText');
+    const timerCount = document.getElementById('timerCount');
+    const resendBtn = document.getElementById('resendBtn');
+    const switchPrompt = document.getElementById('switchPrompt');
+    const switchBtn = document.getElementById('switchBtn');
+    const dot0 = document.getElementById('dot0');
+    const dot1 = document.getElementById('dot1');
+    const googleWrap = document.getElementById('googleWrap');
+    const orDivider = document.getElementById('orDivider');
+    const formContentWrapper = document.getElementById('formContentWrapper');
+
+    const otpBoxes = [0, 1, 2, 3, 4, 5].map(i => document.getElementById(`otp${i}`));
+
+    // ── OTP input wiring ──────────────────────────────────────────────────────
+    otpBoxes.forEach((box, i) => {
+      box.addEventListener('input', e => {
+        const val = e.target.value.replace(/\D/g, '');
+        box.value = val ? val[0] : '';
+        box.classList.toggle('filled', !!box.value);
+        if (val && i < 5) otpBoxes[i + 1].focus();
+        if (getOtpValue().length === 6) handleVerifyOtp();
+      });
+      box.addEventListener('keydown', e => {
+        if (e.key === 'Backspace' && !box.value && i > 0) {
+          otpBoxes[i - 1].focus();
+          otpBoxes[i - 1].value = '';
+          otpBoxes[i - 1].classList.remove('filled');
+        }
+        if (e.key === 'Enter') handleVerifyOtp();
+      });
+      box.addEventListener('paste', e => {
+        e.preventDefault();
+        const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+        pasted.split('').slice(0, 6).forEach((ch, j) => {
+          if (otpBoxes[j]) { otpBoxes[j].value = ch; otpBoxes[j].classList.add('filled'); }
+        });
+        if (pasted.length >= 6) handleVerifyOtp();
+      });
+    });
+
+    identifierInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleSendOtp(); });
+
+    function getOtpValue() {
+      return otpBoxes.map(b => b.value).join('');
+    }
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+    function setMode(m) {
+      if (mode === m && currentStep === 1) return;
+      mode = m;
+
+      tabSignin.classList.toggle('active', m === 'signin');
+      tabSignup.classList.toggle('active', m === 'signup');
+
+
+
+      setTimeout(() => {
+        goToStep1();
+
+        if (m === 'signup') {
+          eyebrow.textContent = 'New member';
+          heading.textContent = 'Set up your library card';
+          stampText.innerHTML = '<b>SHELF</b>NEW<br>CARD';
+          nameField.classList.remove('hidden');
+          switchPrompt.textContent = 'Already a member?';
+          switchBtn.textContent = 'Check in instead';
+        } else {
+          eyebrow.textContent = 'Returning member';
+          heading.textContent = 'Welcome back to your shelf';
+          stampText.innerHTML = '<b>SHELF</b>MEMBER<br>ACCESS';
+          nameField.classList.add('hidden');
+          switchPrompt.textContent = 'New here?';
+          switchBtn.textContent = 'Get a library card';
+        }
+
+
+        // Clean up classes after animation runs
+        setTimeout(() => {
+          formContentWrapper.classList.remove('fade-in');
+        }, 200);
+      }, 200);
+    }
+
+    function goToStep1() {
+      currentStep = 1;
+      step1El.classList.remove('hidden');
+      step2El.classList.add('hidden');
+      googleWrap.classList.remove('hidden');
+      orDivider.classList.remove('hidden');
+      dot0.className = 'dot active';
+      dot1.className = 'dot';
+      clearMsg(step1Error);
+      clearMsg(step2Error);
+      clearMsg(step2Success);
+      stopTimer();
+    }
+
+    function goToStep2(identifier) {
+      currentStep = 2;
+      step1El.classList.add('hidden');
+      step2El.classList.remove('hidden');
+      googleWrap.classList.add('hidden');
+      orDivider.classList.add('hidden');
+      dot0.className = 'dot done';
+      dot1.className = 'dot active';
+      const isEmail = identifier.includes('@');
+      const masked = isEmail
+        ? identifier.replace(/(.{2})(.*)(@.*)/, '$1****$3')
+        : identifier.slice(0, 3) + '****' + identifier.slice(-3);
+      otpSentMsg.textContent = `A 6-digit code was sent to ${masked}. Check your ${isEmail ? 'email' : 'phone'}.`;
+      otpBoxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
+      clearMsg(step2Error);
+      clearMsg(step2Success);
+      setTimeout(() => otpBoxes[0].focus(), 100);
+      startTimer(60);
+    }
+
+    function goBack() { goToStep1(); }
+
+    function showError(el, msgEl, text) {
+      msgEl.textContent = text;
+      el.classList.add('show');
+      el.classList.remove('success');
+      el.classList.add('error');
+    }
+    function showSuccess(el) {
+      el.classList.add('show');
+      el.classList.remove('error');
+      el.classList.add('success');
+    }
+    function clearMsg(...els) { els.forEach(el => el.classList.remove('show')); }
+
+    function setBtnLoading(btn, textEl, spinnerEl, loading) {
+      btn.disabled = loading;
+      textEl.style.display = loading ? 'none' : '';
+      spinnerEl.style.display = loading ? 'block' : 'none';
+    }
+
+    // ── Timer ─────────────────────────────────────────────────────────────────
+    function startTimer(seconds) {
+      stopTimer();
+      let remaining = seconds;
+      timerText.style.display = '';
+      resendBtn.style.display = 'none';
+      timerCount.textContent = remaining;
+
+      resendTimer = setInterval(() => {
+        remaining--;
+        timerCount.textContent = remaining;
+        if (remaining <= 0) {
+          stopTimer();
+          timerText.style.display = 'none';
+          resendBtn.style.display = 'inline';
+        }
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (resendTimer) { clearInterval(resendTimer); resendTimer = null; }
+    }
+
+    // ── Safe Fetch Helper ──────────────────────────────────────────────────────
+    async function safeFetchJson(url, options) {
+      try {
+        const res = await fetch(url, options);
+        let data = {};
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            data = await res.json();
+          } catch (e) {
+            // ignore JSON parse error
+          }
+        }
+        return { res, data, error: null };
+      } catch (err) {
+        return { res: null, data: null, error: err };
+      }
+    }
+
+    // ── API calls ─────────────────────────────────────────────────────────────
+    async function handleSendOtp() {
+      clearMsg(step1Error);
+      const identifier = identifierInput.value.trim();
+      if (!identifier) {
+        showError(step1Error, step1ErrorMsg, 'Please enter your email or phone number.');
+        return;
+      }
+      // Basic validation
+      const isEmail = identifier.includes('@');
+      if (isEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) {
+        showError(step1Error, step1ErrorMsg, 'Please enter a valid email address.');
+        return;
+      }
+      if (!isEmail && !/^\+?[\d\s\-]{8,15}$/.test(identifier)) {
+        showError(step1Error, step1ErrorMsg, 'Please enter a valid phone number (e.g. +91XXXXXXXXXX).');
+        return;
+      }
+      if (mode === 'signup' && !nameInput.value.trim()) {
+        showError(step1Error, step1ErrorMsg, 'Please enter your full name.');
+        return;
+      }
+
+      setBtnLoading(sendOtpBtn, sendBtnText, sendSpinner, true);
+      const name = mode === 'signup' ? nameInput.value.trim() : undefined;
+      const { res, data, error } = await safeFetchJson(`${API}/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: identifier.toLowerCase(), purpose: mode, name })
+      });
+
+      if (error) {
+        showError(step1Error, step1ErrorMsg, 'Network error. Please check your connection.');
+        setBtnLoading(sendOtpBtn, sendBtnText, sendSpinner, false);
+        return;
+      }
+
+      if (!res.ok) {
+        showError(step1Error, step1ErrorMsg, data.error || `Server error (${res.status}). Failed to send OTP.`);
+        setBtnLoading(sendOtpBtn, sendBtnText, sendSpinner, false);
+        return;
+      }
+
+      goToStep2(identifier);
+      setBtnLoading(sendOtpBtn, sendBtnText, sendSpinner, false);
+    }
+
+    async function handleVerifyOtp() {
+      const otp = getOtpValue();
+      if (otp.length < 6) return;
+      clearMsg(step2Error, step2Success);
+
+      setBtnLoading(verifyOtpBtn, verifyBtnText, verifySpinner, true);
+      stopTimer();
+      
+      const identifier = identifierInput.value.trim().toLowerCase();
+      const { res, data, error } = await safeFetchJson(`${API}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier,
+          otp,
+          purpose: mode,
+          name: mode === 'signup' ? nameInput.value.trim() : undefined
+        })
+      });
+
+      if (error) {
+        showError(step2Error, step2ErrorMsg, 'Network error. Please try again.');
+        startTimer(60);
+        setBtnLoading(verifyOtpBtn, verifyBtnText, verifySpinner, false);
+        return;
+      }
+
+      if (!res.ok) {
+        showError(step2Error, step2ErrorMsg, data.error || `Verification failed (${res.status}).`);
+        otpBoxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
+        otpBoxes[0].focus();
+        startTimer(60);
+        setBtnLoading(verifyOtpBtn, verifyBtnText, verifySpinner, false);
+        return;
+      }
+
+      // ✅ Success
+      showSuccess(step2Success);
+      const authResult = {
+        id: data.user.id,
+        name: data.user.name || data.user.email || data.user.phone,
+        email: data.user.email,
+        phone: data.user.phone,
+        avatar: data.user.avatar_url || '',
+        token: data.token
+      };
+      completeAuth(authResult);
+      setBtnLoading(verifyOtpBtn, verifyBtnText, verifySpinner, false);
+    }
+
+    async function handleResend() {
+      clearMsg(step2Error, step2Success);
+      resendBtn.disabled = true;
+      const identifier = identifierInput.value.trim().toLowerCase();
+      const { res, data, error } = await safeFetchJson(`${API}/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier, purpose: mode })
+      });
+
+      if (error || !res.ok) {
+        step2ErrorMsg.textContent = (data && data.error) || 'Failed to resend. Try again.';
+        step2Error.classList.add('show');
+      } else {
+        otpBoxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
+        otpBoxes[0].focus();
+        startTimer(60);
+      }
+      resendBtn.disabled = false;
+    }
+
+    // ── Google OAuth ──────────────────────────────────────────────────────────
+    async function handleCredentialResponse(response) {
+      clearMsg(step1Error);
+      const { res, data, error } = await safeFetchJson(`${API}/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential })
+      });
+
+      if (error) {
+        showError(step1Error, step1ErrorMsg, 'Google sign-in failed. Please check your connection.');
+        return;
+      }
+
+      if (!res.ok) {
+        showError(step1Error, step1ErrorMsg, data.error || `Google sign-in failed (${res.status}).`);
+        return;
+      }
+
+      const authResult = {
+        id: data.user.id,
+        name: data.user.name,
+        email: data.user.email,
+        avatar: data.user.avatar_url || '',
+        token: data.token
+      };
+      completeAuth(authResult);
+    }
+
+    // ── Complete auth ─────────────────────────────────────────────────────────
+    function completeAuth(user) {
+      // Store token in localStorage for the main app
+      localStorage.setItem('shelf_auth_token', user.token);
+      localStorage.setItem('shelf_current_user', JSON.stringify(user));
+
+      if (window.opener && typeof window.opener.handleLoginSuccess === 'function') {
+        window.opener.handleLoginSuccess(user);
+      } else {
+        localStorage.setItem('shelf_login_event', JSON.stringify({
+          timestamp: Date.now(),
+          user
+        }));
+      }
+      setTimeout(() => window.close(), 800);
+    }
+
+    // ── Tab / switch ──────────────────────────────────────────────────────────
+    tabSignin.addEventListener('click', () => setMode('signin'));
+    tabSignup.addEventListener('click', () => setMode('signup'));
+    switchBtn.addEventListener('click', () => setMode(mode === 'signin' ? 'signup' : 'signin'));
+    window.handleCredentialResponse = handleCredentialResponse;
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    setMode('signin');
+  </script>
+</body>
+
+</html>
