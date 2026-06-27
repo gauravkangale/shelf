@@ -1,16 +1,19 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { Pencil, Trash2, CheckSquare, Square, Check, X, Plus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Pencil, Trash2, CheckSquare, Check, X, Plus } from 'lucide-react';
 import { BOOK_COLORS, INITIAL_SHORTCUTS } from '../constants';
 import BookShortcutModal from './BookShortcutModal';
+import { userKey } from '../utils/userKey';
+
+const SHORTCUTS_KEY = 'homepage_shortcuts';
 
 export default function BookmarksSection() {
   const [bookmarks, setBookmarks] = useState(() => {
-    const saved = localStorage.getItem('homepage_shortcuts');
+    const saved = localStorage.getItem(userKey(SHORTCUTS_KEY));
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (parsed.some(s => s.title === 'The World of Ice and Fire' || s.title === 'Fantastic Beasts')) {
-          localStorage.setItem('homepage_shortcuts', JSON.stringify(INITIAL_SHORTCUTS));
+          localStorage.setItem(userKey(SHORTCUTS_KEY), JSON.stringify(INITIAL_SHORTCUTS));
           return INITIAL_SHORTCUTS;
         }
         return parsed;
@@ -20,6 +23,19 @@ export default function BookmarksSection() {
     }
     return INITIAL_SHORTCUTS;
   });
+
+  useEffect(() => {
+    const reload = () => {
+      try {
+        const saved = localStorage.getItem(userKey(SHORTCUTS_KEY));
+        setBookmarks(saved ? JSON.parse(saved) : INITIAL_SHORTCUTS);
+      } catch {
+        setBookmarks(INITIAL_SHORTCUTS);
+      }
+    };
+    window.addEventListener('user-switched', reload);
+    return () => window.removeEventListener('user-switched', reload);
+  }, []);
 
   // Selection mode states
   const [selectMode, setSelectMode] = useState(false);
@@ -43,7 +59,7 @@ export default function BookmarksSection() {
   // Save bookmarks
   const saveBookmarksList = (newList) => {
     setBookmarks(newList);
-    localStorage.setItem('homepage_shortcuts', JSON.stringify(newList));
+    localStorage.setItem(userKey(SHORTCUTS_KEY), JSON.stringify(newList));
   };
 
   // Selection handlers
@@ -177,15 +193,15 @@ export default function BookmarksSection() {
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#fcfbf7', marginLeft: '80px' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--surface-bg)', marginLeft: '80px' }}>
       {/* Header bar */}
       <header style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: '24px 40px',
-        borderBottom: '1px solid #e4e3da',
-        background: '#fff'
+        borderBottom: '1px solid var(--border-color)',
+        background: 'var(--panel-bg)'
       }}>
         <div>
           <h1 style={{ fontFamily: 'var(--serif)', fontSize: '28px', color: 'var(--forest-deep)', margin: 0 }}>Saved Bookmarks</h1>

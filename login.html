@@ -75,7 +75,8 @@
     /* ── drawer ── */
     .drawer {
       width: 100%;
-      max-width: 420px;
+      max-width: 520px;
+      min-width: 360px;
     }
 
     .tabs {
@@ -609,17 +610,6 @@
 
         <!-- ── STEP 1: Identifier + (signup: name) ── -->
         <div id="step1">
-          <!-- Google OAuth -->
-          <div class="google-wrap" id="googleWrap">
-            <div id="g_id_onload"
-              data-client_id="392400546780-ulh2mdlcfdu7tf4e3460kq6qvkt61qvd.apps.googleusercontent.com"
-              data-context="signin" data-ux_mode="popup" data-callback="handleCredentialResponse"
-              data-auto_prompt="false"></div>
-            <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="outline"
-              data-text="signin_with" data-size="large" data-logo_alignment="left" data-width="280"></div>
-          </div>
-          <div class="divider" id="orDivider">or use email / phone</div>
-
           <!-- Name field (signup only) -->
           <div class="field hidden" id="nameField">
             <input type="text" id="nameInput" placeholder=" ">
@@ -627,9 +617,13 @@
           </div>
 
           <!-- Identifier field -->
-          <div class="field">
+          <div class="field" style="margin-bottom: 8px;">
             <input type="text" id="identifierInput" placeholder=" " inputmode="email">
             <label for="identifierInput">Email or phone number</label>
+          </div>
+
+          <div style="text-align: right; margin-bottom: 20px;" id="forgotContainer">
+            <button type="button" class="resend-link" id="forgotBtn" onclick="showForgotModal()" style="font-size: 11px; background: none; border: none; padding: 0; color: var(--brass); cursor: pointer; text-decoration: underline;">Forgot Username?</button>
           </div>
 
           <div class="msg-line error" id="step1Error">
@@ -644,6 +638,14 @@
               <div class="spinner" id="sendSpinner"></div>
             </button>
           </div>
+
+          <!-- Google OAuth -->
+          <div class="divider hidden" id="orDivider" style="margin-top: 24px; margin-bottom: 16px;">or continue with
+            Google</div>
+          <div class="google-wrap hidden" id="googleWrap">
+            <div id="googleButton">bkfjkbv f</div>
+          </div>
+
         </div>
 
         <!-- ── STEP 2: OTP ── -->
@@ -684,6 +686,58 @@
             </button>
           </div>
         </div>
+
+        <!-- ── STEP 3: USERNAME SELECTION ── -->
+        <div id="step3" class="hidden">
+          <p style="font-family:var(--sans);font-size:12px;color:#7a7263;margin-bottom:16px;line-height:1.6;">
+            Choose a unique username to activate your borrower card.
+          </p>
+          <div class="field">
+            <input type="text" id="usernameInput" placeholder=" ">
+            <label for="usernameInput">Unique Username *</label>
+          </div>
+          <div class="msg-line error" id="step3Error">
+            <span class="msg-dot"></span>
+            <span id="step3ErrorMsg">Username is already taken.</span>
+          </div>
+          <div class="msg-line success" id="step3Success">
+            <span class="msg-dot"></span>
+            <span>Card activated! Redirecting…</span>
+          </div>
+          <div class="actions">
+            <span></span>
+            <button class="stamp-btn" id="activateBtn" onclick="handleActivateCard()">
+              <span id="activateBtnText">Activate Card</span>
+              <div class="spinner" id="activateSpinner"></div>
+            </button>
+          </div>
+        </div>
+
+        <!-- ── FORGOT USERNAME VIEW ── -->
+        <div id="forgotView" class="hidden">
+          <p style="font-family:var(--sans);font-size:12px;color:#7a7263;margin-bottom:16px;line-height:1.6;">
+            Enter your email address and we will mail you your registered username.
+          </p>
+          <div class="field">
+            <input type="email" id="forgotEmailInput" placeholder=" ">
+            <label for="forgotEmailInput">Digital Mail Address</label>
+          </div>
+          <div class="msg-line error" id="forgotError">
+            <span class="msg-dot"></span>
+            <span id="forgotErrorMsg">Failed to send mail.</span>
+          </div>
+          <div class="msg-line success" id="forgotSuccess">
+            <span class="msg-dot"></span>
+            <span>Check your mail for username details!</span>
+          </div>
+          <div class="actions">
+            <button class="ghost-btn" onclick="cancelForgot()">← Back</button>
+            <button class="stamp-btn" id="forgotSendBtn" onclick="handleForgotSend()">
+              <span id="forgotSendBtnText">Send Mail</span>
+              <div class="spinner" id="forgotSpinner"></div>
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Switch signin/signup -->
@@ -706,6 +760,7 @@
     let mode = 'signin'; // 'signin' | 'signup'
     let currentStep = 1;
     let resendTimer = null;
+    let googleEnabled = false;
 
     // ── Element refs ──────────────────────────────────────────────────────────
     const tabSignin = document.getElementById('tabSignin');
@@ -817,8 +872,13 @@
       currentStep = 1;
       step1El.classList.remove('hidden');
       step2El.classList.add('hidden');
-      googleWrap.classList.remove('hidden');
-      orDivider.classList.remove('hidden');
+      if (googleEnabled) {
+        googleWrap.classList.remove('hidden');
+        orDivider.classList.remove('hidden');
+      } else {
+        googleWrap.classList.add('hidden');
+        orDivider.classList.add('hidden');
+      }
       dot0.className = 'dot active';
       dot1.className = 'dot';
       clearMsg(step1Error);
@@ -964,7 +1024,7 @@
 
       setBtnLoading(verifyOtpBtn, verifyBtnText, verifySpinner, true);
       stopTimer();
-      
+
       const identifier = identifierInput.value.trim().toLowerCase();
       const { res, data, error } = await safeFetchJson(`${API}/auth/verify-otp`, {
         method: 'POST',
@@ -999,12 +1059,17 @@
         id: data.user.id,
         name: data.user.name || data.user.email || data.user.phone,
         email: data.user.email,
+        username: data.user.username,
         phone: data.user.phone,
         avatar: data.user.avatar_url || '',
         token: data.token
       };
-      completeAuth(authResult);
       setBtnLoading(verifyOtpBtn, verifyBtnText, verifySpinner, false);
+      if (!authResult.username) {
+        goToStep3(authResult);
+      } else {
+        completeAuth(authResult);
+      }
     }
 
     async function handleResend() {
@@ -1029,6 +1094,47 @@
     }
 
     // ── Google OAuth ──────────────────────────────────────────────────────────
+    async function initGoogleSignIn() {
+      const { res, data, error } = await safeFetchJson(`${API}/auth/config`);
+      if (!error && res && res.ok && data.googleClientId) {
+        googleEnabled = true;
+        try {
+          google.accounts.id.initialize({
+            client_id: data.googleClientId,
+            callback: handleCredentialResponse,
+            context: 'signin',
+            ux_mode: 'popup',
+            auto_prompt: false
+          });
+          google.accounts.id.renderButton(
+            document.getElementById('googleButton'),
+            {
+              type: 'standard',
+              shape: 'rectangular',
+              theme: 'outline',
+              text: 'signin_with',
+              size: 'large',
+              logo_alignment: 'left',
+              width: 280
+            }
+          );
+          if (currentStep === 1) {
+            googleWrap.classList.remove('hidden');
+            orDivider.classList.remove('hidden');
+          }
+        } catch (e) {
+          console.error('Failed to initialize Google Sign-In:', e);
+          googleEnabled = false;
+          googleWrap.classList.add('hidden');
+          orDivider.classList.add('hidden');
+        }
+      } else {
+        googleEnabled = false;
+        googleWrap.classList.add('hidden');
+        orDivider.classList.add('hidden');
+      }
+    }
+
     async function handleCredentialResponse(response) {
       clearMsg(step1Error);
       const { res, data, error } = await safeFetchJson(`${API}/auth/google`, {
@@ -1051,10 +1157,152 @@
         id: data.user.id,
         name: data.user.name,
         email: data.user.email,
+        username: data.user.username,
         avatar: data.user.avatar_url || '',
         token: data.token
       };
-      completeAuth(authResult);
+      if (!authResult.username) {
+        goToStep3(authResult);
+      } else {
+        completeAuth(authResult);
+      }
+    }
+
+    let tempAuthUser = null;
+
+    function goToStep3(authUser) {
+      tempAuthUser = authUser;
+      currentStep = 3;
+      step1El.classList.add('hidden');
+      step2El.classList.add('hidden');
+      googleWrap.classList.add('hidden');
+      orDivider.classList.add('hidden');
+      document.getElementById('stepDots').style.display = 'none';
+      document.getElementById('step3').classList.remove('hidden');
+      document.getElementById('switchLine').style.display = 'none';
+      
+      const usernameInput = document.getElementById('usernameInput');
+      // Pre-fill with a clean name slug
+      usernameInput.value = (authUser.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      clearMsg(document.getElementById('step3Error'));
+      clearMsg(document.getElementById('step3Success'));
+      setTimeout(() => usernameInput.focus(), 100);
+    }
+
+    async function handleActivateCard() {
+      const usernameInput = document.getElementById('usernameInput');
+      const val = usernameInput.value.trim().toLowerCase();
+      const errorEl = document.getElementById('step3Error');
+      const errorMsgEl = document.getElementById('step3ErrorMsg');
+      const successEl = document.getElementById('step3Success');
+      
+      if (!val) {
+        showError(errorEl, errorMsgEl, 'Username is required');
+        return;
+      }
+      if (!/^[a-zA-Z0-9_]{3,15}$/.test(val)) {
+        showError(errorEl, errorMsgEl, 'Username must be 3-15 characters and contain only letters, numbers, or underscores.');
+        return;
+      }
+      
+      const btn = document.getElementById('activateBtn');
+      const spinner = document.getElementById('activateSpinner');
+      const btnText = document.getElementById('activateBtnText');
+      
+      setBtnLoading(btn, btnText, spinner, true);
+      clearMsg(errorEl);
+      
+      const { res, data, error } = await safeFetchJson('/api/users/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tempAuthUser.token}`
+        },
+        body: JSON.stringify({
+          name: tempAuthUser.name || val,
+          username: val,
+          email: tempAuthUser.email || '',
+          avatar_url: tempAuthUser.avatar || ''
+        })
+      });
+      
+      setBtnLoading(btn, btnText, spinner, false);
+      
+      if (error) {
+        showError(errorEl, errorMsgEl, 'Activation failed. Please check connection.');
+        return;
+      }
+      
+      if (!res.ok) {
+        showError(errorEl, errorMsgEl, data.error || 'Failed to activate borrower card.');
+        return;
+      }
+      
+      showSuccess(successEl);
+      tempAuthUser.username = val;
+      setTimeout(() => {
+        completeAuth(tempAuthUser);
+      }, 1000);
+    }
+
+    function showForgotModal() {
+      step1El.classList.add('hidden');
+      step2El.classList.add('hidden');
+      googleWrap.classList.add('hidden');
+      orDivider.classList.add('hidden');
+      document.getElementById('stepDots').style.display = 'none';
+      document.getElementById('switchLine').style.display = 'none';
+      document.getElementById('forgotView').classList.remove('hidden');
+      
+      const forgotEmailInput = document.getElementById('forgotEmailInput');
+      forgotEmailInput.value = '';
+      clearMsg(document.getElementById('forgotError'), document.getElementById('forgotSuccess'));
+      setTimeout(() => forgotEmailInput.focus(), 100);
+    }
+
+    function cancelForgot() {
+      document.getElementById('forgotView').classList.add('hidden');
+      document.getElementById('stepDots').style.display = '';
+      document.getElementById('switchLine').style.display = '';
+      goToStep1();
+    }
+
+    async function handleForgotSend() {
+      const emailInput = document.getElementById('forgotEmailInput');
+      const email = emailInput.value.trim();
+      const errorEl = document.getElementById('forgotError');
+      const errorMsgEl = document.getElementById('forgotErrorMsg');
+      const successEl = document.getElementById('forgotSuccess');
+      
+      if (!email) {
+        showError(errorEl, errorMsgEl, 'Email address is required.');
+        return;
+      }
+      
+      const btn = document.getElementById('forgotSendBtn');
+      const spinner = document.getElementById('forgotSpinner');
+      const btnText = document.getElementById('forgotSendBtnText');
+      
+      setBtnLoading(btn, btnText, spinner, true);
+      clearMsg(errorEl, successEl);
+      
+      const { res, data, error } = await safeFetchJson('/api/auth/forgot-username', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      
+      setBtnLoading(btn, btnText, spinner, false);
+      
+      if (error || !res.ok) {
+        showError(errorEl, errorMsgEl, (data && data.error) || 'Failed to send retrieve request.');
+        return;
+      }
+      
+      showSuccess(successEl);
+      setTimeout(() => {
+        cancelForgot();
+      }, 3000);
     }
 
     // ── Complete auth ─────────────────────────────────────────────────────────
@@ -1082,6 +1330,26 @@
 
     // ── Init ──────────────────────────────────────────────────────────────────
     setMode('signin');
+
+    // Safe Google Sign-In Initialization
+    function startGoogleSignInInit() {
+      if (typeof google !== 'undefined' && google.accounts) {
+        initGoogleSignIn();
+      } else {
+        let attempts = 0;
+        const interval = setInterval(() => {
+          attempts++;
+          if (typeof google !== 'undefined' && google.accounts) {
+            clearInterval(interval);
+            initGoogleSignIn();
+          } else if (attempts > 50) {
+            clearInterval(interval);
+            console.warn('Google SDK not loaded yet.');
+          }
+        }, 100);
+      }
+    }
+    startGoogleSignInInit();
   </script>
 </body>
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, BookOpen, Clock, Bookmark, Settings, Menu } from 'lucide-react';
+import { Home, Users, Clock, Bookmark, Settings, IdCard } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
   const [time, setTime] = React.useState(new Date());
@@ -37,9 +37,9 @@ export default function Sidebar({ activeTab, setActiveTab }) {
         <button
           className={`nav-item ${activeTab === 'library' ? 'active' : ''}`}
           onClick={() => setActiveTab('library')}
-          aria-label="Library"
+          aria-label="Friends"
         >
-          <BookOpen size={20} />
+          <Users size={20} />
         </button>
         <button
           className={`nav-item ${activeTab === 'timer' ? 'active' : ''}`}
@@ -60,7 +60,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
           onClick={() => setActiveTab('settings')}
           aria-label="Settings"
         >
-          <Settings size={20} />
+          <IdCard size={20} />
         </button>
       </nav>
 
@@ -70,7 +70,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
           onClick={() => setActiveTab('more')}
           aria-label="more"
         >
-          <Menu size={20} />
+          <Settings size={20} />
         </button>
       </div>
     </aside>
