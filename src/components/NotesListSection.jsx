@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
+import { uGet, uSet } from '../utils/userKey';
 
 export default function NotesListSection({ selectedDate }) {
   const [allNotes, setAllNotes] = useState(() => {
-    const saved = localStorage.getItem('shelf_daily_notes');
-    return saved ? JSON.parse(saved) : {};
+    return uGet('shelf_daily_notes', {});
   });
 
   const [newNoteText, setNewNoteText] = useState('');
@@ -12,13 +12,9 @@ export default function NotesListSection({ selectedDate }) {
   // Sync state if notes are modified elsewhere
   useEffect(() => {
     const handleSync = () => {
-      const saved = localStorage.getItem('shelf_daily_notes');
+      const saved = uGet('shelf_daily_notes');
       if (saved) {
-        try {
-          setAllNotes(JSON.parse(saved));
-        } catch (e) {
-          // ignore
-        }
+        setAllNotes(saved);
       }
     };
     window.addEventListener('notes-updated', handleSync);
@@ -43,7 +39,7 @@ export default function NotesListSection({ selectedDate }) {
     };
 
     setAllNotes(updated);
-    localStorage.setItem('shelf_daily_notes', JSON.stringify(updated));
+    uSet('shelf_daily_notes', updated);
     window.dispatchEvent(new Event('notes-updated'));
     setNewNoteText('');
   };
@@ -66,7 +62,7 @@ export default function NotesListSection({ selectedDate }) {
             padding: '8px 12px',
             borderRadius: '16px',
             border: '1px solid var(--border-color)',
-            background: '#faf9f5',
+            background: 'var(--option-bg)',
             fontFamily: 'var(--font-sans)',
             outline: 'none'
           }}
@@ -84,10 +80,10 @@ export default function NotesListSection({ selectedDate }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'var(--accent-color, #e85d56)',
+            background: 'var(--accent-color, var(--danger-color))',
             boxShadow: 'none',
             border: 'none',
-            color: '#fff',
+            color: 'var(--button-text)',
             cursor: 'pointer'
           }}
         >

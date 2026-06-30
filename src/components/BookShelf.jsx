@@ -79,7 +79,7 @@ export default function BookShelf({ displayedShortcuts, openEditModal, openAddMo
           {isFiltered && (
             <span style={{
               marginLeft: '8px', fontSize: '10px', fontWeight: '600',
-              background: 'var(--accent-color, #b33933)', color: '#fff',
+              background: 'var(--accent-color, var(--rust))', color: 'var(--button-text)',
               borderRadius: '10px', padding: '2px 8px',
               verticalAlign: 'middle', textTransform: 'uppercase', letterSpacing: '0.05em'
             }}>
@@ -95,7 +95,7 @@ export default function BookShelf({ displayedShortcuts, openEditModal, openAddMo
               style={{
                 fontSize: '11px', fontWeight: '600', padding: '6px 12px',
                 borderRadius: '14px', border: '1px solid #e4e3da',
-                background: '#fff', color: '#1e2022', cursor: 'pointer', fontFamily: 'inherit'
+                background: 'var(--surface-bg)', color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit'
               }}
             >
               ({processedShortcuts.length})
@@ -105,7 +105,7 @@ export default function BookShelf({ displayedShortcuts, openEditModal, openAddMo
             title="Filter & Sort shortcuts"
             onClick={(e) => { e.stopPropagation(); setShowMenu(v => !v); }}
             style={{
-              background: showMenu ? 'var(--accent-color, #1e2022)' : 'rgba(0,0,0,0.04)',
+              background: showMenu ? 'var(--accent-color, var(--ink))' : 'rgba(0,0,0,0.04)',
               border: 'none',
               borderRadius: '50%',
               width: '32px',
@@ -114,7 +114,7 @@ export default function BookShelf({ displayedShortcuts, openEditModal, openAddMo
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              color: showMenu ? '#fff' : 'var(--text-secondary, #6e7072)',
+              color: showMenu ? 'var(--surface-bg)' : 'var(--text-secondary, var(--text-secondary))',
               transition: 'all 0.2s'
             }}
           >
@@ -124,7 +124,7 @@ export default function BookShelf({ displayedShortcuts, openEditModal, openAddMo
           {showMenu && (
             <div style={{
               position: 'absolute', top: '40px', right: 0,
-              background: '#fff', borderRadius: '14px',
+              background: 'var(--surface-bg)', borderRadius: '14px',
               border: '1px solid rgba(0,0,0,0.08)',
               boxShadow: '0 8px 32px rgba(0,0,0,0.13)',
               padding: '8px', zIndex: 200, minWidth: '190px',
@@ -148,17 +148,17 @@ export default function BookShelf({ displayedShortcuts, openEditModal, openAddMo
                       padding: '9px 12px', background: item.active ? '#f5f4ee' : 'none',
                       border: 'none', borderRadius: '9px',
                       cursor: 'pointer', fontSize: '13px',
-                      color: item.danger ? '#e85d56' : item.active ? '#1e2022' : '#3e3a35',
+                      color: item.danger ? 'var(--danger-color)' : item.active ? 'var(--ink)' : '#3e3a35',
                       fontWeight: item.active ? '600' : '400',
                       fontFamily: 'inherit',
                       transition: 'background 0.12s'
                     }}
-                    onMouseEnter={e => e.currentTarget.style.background = item.active ? '#eeede6' : '#f9f8f4'}
+                    onMouseEnter={e => e.currentTarget.style.background = item.active ? '#eeede6' : 'var(--option-bg)'}
                     onMouseLeave={e => e.currentTarget.style.background = item.active ? '#f5f4ee' : 'none'}
                   >
-                    <span style={{ color: item.active ? 'var(--accent-color, #b33933)' : '#9a9a94' }}>{item.icon}</span>
+                    <span style={{ color: item.active ? 'var(--accent-color, var(--rust))' : '#9a9a94' }}>{item.icon}</span>
                     {item.label}
-                    {item.active && <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#b33933' }}>✓</span>}
+                    {item.active && <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--rust)' }}>✓</span>}
                   </button>
                 )
               )}

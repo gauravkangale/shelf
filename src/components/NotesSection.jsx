@@ -98,7 +98,7 @@ export default function NotesSection({ selectedDate }) {
             padding: '8px 12px',
             borderRadius: '16px',
             border: '1px solid var(--border-color)',
-            background: '#faf9f5',
+            background: 'var(--option-bg)',
             fontFamily: 'var(--font-sans)',
             outline: 'none'
           }}
@@ -116,10 +116,10 @@ export default function NotesSection({ selectedDate }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'var(--accent-color, #e85d56)',
+            background: 'var(--accent-color, var(--danger-color))',
             boxShadow: 'none',
             border: 'none',
-            color: '#fff',
+            color: 'var(--button-text)',
             cursor: 'pointer'
           }}
         >
@@ -144,7 +144,7 @@ export default function NotesSection({ selectedDate }) {
                 display: 'inline-flex',
                 alignItems: 'center',
                 padding: '6px 12px',
-                background: note.completed ? 'rgba(0, 0, 0, 0.02)' : '#fff',
+                background: note.completed ? 'rgba(0, 0, 0, 0.02)' : 'var(--surface-bg)',
                 border: '1px solid var(--border-color)',
                 borderRadius: '20px',
                 cursor: 'grab',

@@ -61,37 +61,43 @@ export default function RightSidebar({
   }, [activeProfile]);
 
   React.useEffect(() => {
-    if (isLoggedIn) {
-      const savedBook = localStorage.getItem(`current_book_${activeProfile.email}`);
-      if (savedBook) {
-        try {
-          setBook(JSON.parse(savedBook));
-        } catch (e) {
-          setBook(DEFAULT_BOOK);
-        }
-      } else {
+    const savedBook = localStorage.getItem(`current_book_${activeProfile.email}`);
+
+    if (savedBook) {
+      try {
+        setBook(JSON.parse(savedBook));
+      } catch {
         setBook(DEFAULT_BOOK);
       }
     } else {
+      // Use the default book until the user edits and saves it
       setBook(DEFAULT_BOOK);
     }
+
     setIsEditing(false);
-  }, [activeProfile, isLoggedIn]);
+  }, [activeProfile]);
 
   const handleSaveBook = (e) => {
     e.preventDefault();
+
     const updatedBook = {
       title: editTitle.trim(),
       currentPage: editCurrentPage.trim(),
       totalPages: editTotalPages.trim(),
       description: editDesc.trim(),
-      author: editAuthor.trim()
+      author: editAuthor.trim(),
     };
+
     setBook(updatedBook);
-    localStorage.setItem(`current_book_${activeProfile.email}`, JSON.stringify(updatedBook));
+
+    // Save for this profile
+    localStorage.setItem(
+      `current_book_${activeProfile.email}`,
+      JSON.stringify(updatedBook)
+    );
+
     setIsEditing(false);
   };
-
   const startEditing = () => {
     setEditTitle(book.title);
     setEditCurrentPage(book.currentPage);
@@ -201,16 +207,20 @@ export default function RightSidebar({
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <h2 className="current-book-title">{book.title}</h2>
-              {isLoggedIn && (
-                <button
-                  className="pencil-edit-icon"
-                  style={{ opacity: 1, position: 'static', width: '22px', height: '22px', cursor: 'pointer' }}
-                  onClick={startEditing}
-                  title="Edit Book Details"
-                >
-                  <Pencil size={10} />
-                </button>
-              )}
+              <button
+                className="pencil-edit-icon"
+                style={{
+                  opacity: 1,
+                  position: "static",
+                  width: "22px",
+                  height: "22px",
+                  cursor: "pointer",
+                }}
+                onClick={startEditing}
+                title="Edit Book Details"
+              >
+                <Pencil size={10} />
+              </button>
             </div>
             <div className="page-progress">
               <span className="active-num">{book.currentPage}</span>

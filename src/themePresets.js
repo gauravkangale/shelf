@@ -26,7 +26,7 @@ export const theme = {
   gradientPurple: 'linear-gradient(135deg, #7c538c 0%, #4b2d56 100%)',
   gradientGold: 'linear-gradient(135deg, #b8860b 0%, #8b6508 100%)',
   gradientDark: 'linear-gradient(135deg, #2d2d2d 0%, #151515 100%)',
-  
+
   // NewSeriesCollection specific gradients
   seriesGradient1: 'linear-gradient(135deg, #a83d36 0%, #5c1b17 100%)',
   seriesGradient2: 'linear-gradient(135deg, #b8860b 0%, #8b6508 100%)',

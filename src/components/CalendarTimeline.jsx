@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { uGet } from '../utils/userKey';
 
 export default function CalendarTimeline({
   selectedDate,
@@ -14,20 +15,15 @@ export default function CalendarTimeline({
 
   useEffect(() => {
     const updateNotesMap = () => {
-      const saved = localStorage.getItem('shelf_daily_notes');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          const map = {};
-          Object.keys(parsed).forEach(key => {
-            if (parsed[key] && parsed[key].length > 0) {
-              map[key] = true;
-            }
-          });
-          setHasNotesMap(map);
-        } catch (e) {
-          // ignore
-        }
+      const parsed = uGet('shelf_daily_notes');
+      if (parsed) {
+        const map = {};
+        Object.keys(parsed).forEach(key => {
+          if (parsed[key] && parsed[key].length > 0) {
+            map[key] = true;
+          }
+        });
+        setHasNotesMap(map);
       } else {
         setHasNotesMap({});
       }

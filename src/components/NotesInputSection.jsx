@@ -1,23 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import { uGet, uSet } from '../utils/userKey';
 
 const ROTATIONS = ['-1.5deg', '1deg', '-2deg', '1.5deg', '0.5deg'];
 
 export default function NotesInputSection({ selectedDate }) {
   const [allNotes, setAllNotes] = useState(() => {
-    const saved = localStorage.getItem('shelf_daily_notes');
-    return saved ? JSON.parse(saved) : {};
+    return uGet('shelf_daily_notes', {});
   });
 
   // Sync state if notes are modified elsewhere
   useEffect(() => {
     const handleSync = () => {
-      const saved = localStorage.getItem('shelf_daily_notes');
+      const saved = uGet('shelf_daily_notes');
       if (saved) {
-        try {
-          setAllNotes(JSON.parse(saved));
-        } catch (e) {
-          // ignore
-        }
+        setAllNotes(saved);
       }
     };
     window.addEventListener('notes-updated', handleSync);
@@ -35,7 +31,7 @@ export default function NotesInputSection({ selectedDate }) {
       )
     };
     setAllNotes(updated);
-    localStorage.setItem('shelf_daily_notes', JSON.stringify(updated));
+    uSet('shelf_daily_notes', updated);
     window.dispatchEvent(new Event('notes-updated'));
   };
 
@@ -45,7 +41,7 @@ export default function NotesInputSection({ selectedDate }) {
       [dateKey]: (allNotes[dateKey] || []).filter((note) => note.id !== noteId)
     };
     setAllNotes(updated);
-    localStorage.setItem('shelf_daily_notes', JSON.stringify(updated));
+    uSet('shelf_daily_notes', updated);
     window.dispatchEvent(new Event('notes-updated'));
   };
 

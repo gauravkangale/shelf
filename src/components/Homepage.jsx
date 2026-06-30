@@ -7,26 +7,41 @@ import RightSidebar from './RightSidebar';
 import BookShortcutModal from './BookShortcutModal';
 import NotesInputSection from './NotesInputSection';
 import { BOOK_COLORS, INITIAL_SHORTCUTS } from '../constants';
+import { uGet, uSet } from '../utils/userKey';
 
-export default function Homepage() {
+export default function Homepage({
+  activeProfile,
+  profileAccounts,
+  switchProfileAccount,
+  isEditingProfileAccounts,
+  setIsEditingProfileAccounts,
+  deleteProfileAccount,
+  isAddingProfileAcc,
+  setIsAddingProfileAcc,
+  addProfileAccount,
+  newProfileAccName,
+  setNewProfileAccName,
+  newProfileAccEmail,
+  setNewProfileAccEmail,
+  newProfileAccAvatar,
+  setNewProfileAccAvatar,
+  isProfileDropdownOpen,
+  setIsProfileDropdownOpen,
+  setActiveTab
+}) {
   // Search Engine & query states
   const [searchEngine, setSearchEngine] = useState('google'); // 'google' or 'shelf'
   const [searchQuery, setSearchQuery] = useState('');
 
   // Shortcuts/bookmarks shelf
   const [shortcuts, setShortcuts] = useState(() => {
-    const saved = localStorage.getItem('homepage_shortcuts');
+    const saved = uGet('homepage_shortcuts');
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.some(s => s.title === 'The World of Ice and Fire' || s.title === 'Fantastic Beasts')) {
-          localStorage.setItem('homepage_shortcuts', JSON.stringify(INITIAL_SHORTCUTS));
-          return INITIAL_SHORTCUTS;
-        }
-        return parsed;
-      } catch (e) {
+      if (saved.some(s => s.title === 'The World of Ice and Fire' || s.title === 'Fantastic Beasts')) {
+        uSet('homepage_shortcuts', INITIAL_SHORTCUTS);
         return INITIAL_SHORTCUTS;
       }
+      return saved;
     }
     return INITIAL_SHORTCUTS;
   });
@@ -44,23 +59,22 @@ export default function Homepage() {
   const [shortcutKey, setShortcutKey] = useState('');
   const [editId, setEditId] = useState(null);
 
-  // Global profile accounts state
-  const [profileAccounts, setProfileAccounts] = useState(() => {
-    const saved = localStorage.getItem('profile_accounts');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
-  const [isEditingProfileAccounts, setIsEditingProfileAccounts] = useState(false);
-  const [isAddingProfileAcc, setIsAddingProfileAcc] = useState(false);
-  const [newProfileAccName, setNewProfileAccName] = useState('');
-  const [newProfileAccEmail, setNewProfileAccEmail] = useState('');
-  const [newProfileAccAvatar, setNewProfileAccAvatar] = useState('');
-
   // Persist shortcuts
   useEffect(() => {
-    localStorage.setItem('homepage_shortcuts', JSON.stringify(shortcuts));
+    uSet('homepage_shortcuts', shortcuts);
   }, [shortcuts]);
+
+  // Listen for trash-drop bookmark deletions (from Header trash zone)
+  useEffect(() => {
+    const handler = (e) => {
+      const id = e.detail?.id;
+      if (id !== undefined && id !== null) {
+        setShortcuts(prev => prev.filter(s => String(s.id) !== String(id)));
+      }
+    };
+    window.addEventListener('delete-bookmark', handler);
+    return () => window.removeEventListener('delete-bookmark', handler);
+  }, []);
 
   // Handle Search submit
   const handleSearchSubmit = (e) => {
@@ -167,47 +181,6 @@ export default function Homepage() {
     setIsModalOpen(false);
   };
 
-  // Save profile accounts
-  useEffect(() => {
-    localStorage.setItem('profile_accounts', JSON.stringify(profileAccounts));
-  }, [profileAccounts]);
-
-  // Switch active profile account
-  const switchProfileAccount = (id) => {
-    setProfileAccounts(profileAccounts.map(acc => ({
-      ...acc,
-      active: acc.id === id
-    })));
-  };
-
-  // Add a new profile account
-  const addProfileAccount = (e) => {
-    e.preventDefault();
-    if (!newProfileAccName.trim() || !newProfileAccEmail.trim()) return;
-    const newAcc = {
-      id: Date.now().toString(),
-      name: newProfileAccName.trim(),
-      email: newProfileAccEmail.trim(),
-      avatar: newProfileAccAvatar.trim(),
-      active: false
-    };
-    setProfileAccounts([...profileAccounts, newAcc]);
-    setNewProfileAccName('');
-    setNewProfileAccEmail('');
-    setNewProfileAccAvatar('');
-    setIsAddingProfileAcc(false);
-  };
-
-  // Delete a profile account
-  const deleteProfileAccount = (e, id) => {
-    e.stopPropagation();
-    const updated = profileAccounts.filter(acc => acc.id !== id);
-    if (updated.length > 0 && !updated.some(acc => acc.active)) {
-      updated[0].active = true;
-    }
-    setProfileAccounts(updated);
-  };
-
   // Close profile dropdown on window click
   useEffect(() => {
     const handleOutsideClick = () => {
@@ -215,72 +188,7 @@ export default function Homepage() {
     };
     window.addEventListener('click', handleOutsideClick);
     return () => window.removeEventListener('click', handleOutsideClick);
-  }, []);
-
-  // Handle popup window login success
-  useEffect(() => {
-    const handleLoginSuccess = (userData) => {
-      setProfileAccounts(prevAccounts => {
-        // Check if account already exists by email or phone
-        const existing = prevAccounts.find(acc =>
-          (userData.email && acc.email === userData.email) ||
-          (userData.phone && acc.phone === userData.phone)
-        );
-        if (existing) {
-          // Switch to this account and update details
-          return prevAccounts.map(acc => {
-            const isMatch = (userData.email && acc.email === userData.email) ||
-              (userData.phone && acc.phone === userData.phone);
-            if (isMatch) {
-              return {
-                ...acc,
-                name: userData.name || acc.name,
-                email: userData.email || acc.email || '',
-                phone: userData.phone || acc.phone || '',
-                avatar: userData.avatar || acc.avatar || '',
-                active: true
-              };
-            }
-            return { ...acc, active: false };
-          });
-        } else {
-          // Add new account and make it active
-          const newAcc = {
-            id: userData.id || Date.now().toString(),
-            name: userData.name || userData.email || userData.phone || 'Member',
-            email: userData.email || '',
-            phone: userData.phone || '',
-            avatar: userData.avatar || '',
-            active: true
-          };
-          return prevAccounts.map(acc => ({ ...acc, active: false })).concat(newAcc);
-        }
-      });
-      setIsProfileDropdownOpen(false);
-    };
-
-    window.handleLoginSuccess = handleLoginSuccess;
-
-    const handleStorageEvent = (e) => {
-      if (e.key === 'shelf_login_event' && e.newValue) {
-        try {
-          const { user } = JSON.parse(e.newValue);
-          if (user) {
-            handleLoginSuccess(user);
-            localStorage.removeItem('shelf_login_event');
-          }
-        } catch (err) {
-          console.error(err);
-        }
-      }
-    };
-    window.addEventListener('storage', handleStorageEvent);
-
-    return () => {
-      delete window.handleLoginSuccess;
-      window.removeEventListener('storage', handleStorageEvent);
-    };
-  }, []);
+  }, [setIsProfileDropdownOpen]);
 
   // Filter shortcuts for search if shelf filter is active
   const displayedShortcuts = searchEngine === 'shelf' && searchQuery.trim()
@@ -345,13 +253,6 @@ export default function Homepage() {
       });
       setSelectedDate(new Date());
     }
-  };
-
-  const activeProfile = profileAccounts.find(acc => acc.active) || profileAccounts[0] || {
-    id: 'guest',
-    name: 'Guest User',
-    email: 'guest@local.browser',
-    avatar: ''
   };
 
   return (

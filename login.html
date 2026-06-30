@@ -623,7 +623,9 @@
           </div>
 
           <div style="text-align: right; margin-bottom: 20px;" id="forgotContainer">
-            <button type="button" class="resend-link" id="forgotBtn" onclick="showForgotModal()" style="font-size: 11px; background: none; border: none; padding: 0; color: var(--brass); cursor: pointer; text-decoration: underline;">Forgot Username?</button>
+            <button type="button" class="resend-link" id="forgotBtn" onclick="showForgotModal()"
+              style="font-size: 11px; background: none; border: none; padding: 0; color: var(--brass); cursor: pointer; text-decoration: underline;">Forgot
+              Username?</button>
           </div>
 
           <div class="msg-line error" id="step1Error">
@@ -694,7 +696,7 @@
           </p>
           <div class="field">
             <input type="text" id="usernameInput" placeholder=" ">
-            <label for="usernameInput">Unique Username *</label>
+            <label for="usernameInput">Username</label>
           </div>
           <div class="msg-line error" id="step3Error">
             <span class="msg-dot"></span>
@@ -1180,7 +1182,7 @@
       document.getElementById('stepDots').style.display = 'none';
       document.getElementById('step3').classList.remove('hidden');
       document.getElementById('switchLine').style.display = 'none';
-      
+
       const usernameInput = document.getElementById('usernameInput');
       // Pre-fill with a clean name slug
       usernameInput.value = (authUser.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1195,7 +1197,7 @@
       const errorEl = document.getElementById('step3Error');
       const errorMsgEl = document.getElementById('step3ErrorMsg');
       const successEl = document.getElementById('step3Success');
-      
+
       if (!val) {
         showError(errorEl, errorMsgEl, 'Username is required');
         return;
@@ -1204,14 +1206,14 @@
         showError(errorEl, errorMsgEl, 'Username must be 3-15 characters and contain only letters, numbers, or underscores.');
         return;
       }
-      
+
       const btn = document.getElementById('activateBtn');
       const spinner = document.getElementById('activateSpinner');
       const btnText = document.getElementById('activateBtnText');
-      
+
       setBtnLoading(btn, btnText, spinner, true);
       clearMsg(errorEl);
-      
+
       const { res, data, error } = await safeFetchJson('/api/users/profile', {
         method: 'PUT',
         headers: {
@@ -1225,19 +1227,19 @@
           avatar_url: tempAuthUser.avatar || ''
         })
       });
-      
+
       setBtnLoading(btn, btnText, spinner, false);
-      
+
       if (error) {
         showError(errorEl, errorMsgEl, 'Activation failed. Please check connection.');
         return;
       }
-      
+
       if (!res.ok) {
         showError(errorEl, errorMsgEl, data.error || 'Failed to activate borrower card.');
         return;
       }
-      
+
       showSuccess(successEl);
       tempAuthUser.username = val;
       setTimeout(() => {
@@ -1253,7 +1255,7 @@
       document.getElementById('stepDots').style.display = 'none';
       document.getElementById('switchLine').style.display = 'none';
       document.getElementById('forgotView').classList.remove('hidden');
-      
+
       const forgotEmailInput = document.getElementById('forgotEmailInput');
       forgotEmailInput.value = '';
       clearMsg(document.getElementById('forgotError'), document.getElementById('forgotSuccess'));
@@ -1273,32 +1275,32 @@
       const errorEl = document.getElementById('forgotError');
       const errorMsgEl = document.getElementById('forgotErrorMsg');
       const successEl = document.getElementById('forgotSuccess');
-      
+
       if (!email) {
         showError(errorEl, errorMsgEl, 'Email address is required.');
         return;
       }
-      
+
       const btn = document.getElementById('forgotSendBtn');
       const spinner = document.getElementById('forgotSpinner');
       const btnText = document.getElementById('forgotSendBtnText');
-      
+
       setBtnLoading(btn, btnText, spinner, true);
       clearMsg(errorEl, successEl);
-      
+
       const { res, data, error } = await safeFetchJson('/api/auth/forgot-username', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
       });
-      
+
       setBtnLoading(btn, btnText, spinner, false);
-      
+
       if (error || !res.ok) {
         showError(errorEl, errorMsgEl, (data && data.error) || 'Failed to send retrieve request.');
         return;
       }
-      
+
       showSuccess(successEl);
       setTimeout(() => {
         cancelForgot();

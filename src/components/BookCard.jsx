@@ -5,14 +5,25 @@ export default function BookCard({ item, openEditModal }) {
   const isMac = typeof window !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const modifierName = isMac ? 'Ctrl' : 'Alt';
 
+  const handleDragStart = (e) => {
+    // Encode as "bookmark::<json>" — same protocol the trash zone expects
+    e.dataTransfer.setData(
+      'text/plain',
+      `bookmark::${JSON.stringify({ id: item.id, title: item.title })}`
+    );
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
   return (
     <a
       href={item.url}
       target="_blank"
       rel="noopener noreferrer"
       className="book-card"
-      title={`Click to visit website. ${modifierName} + ${item.shortcutKey} to launch.`}
+      title={`Click to visit. Drag to trash to delete. ${modifierName}+${item.shortcutKey} to launch.`}
       style={{ textDecoration: 'none' }}
+      draggable
+      onDragStart={handleDragStart}
     >
       <div className="book-cover-wrapper">
         <div

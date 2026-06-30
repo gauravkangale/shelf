@@ -2,36 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { Pencil, Trash2, CheckSquare, Check, X, Plus } from 'lucide-react';
 import { BOOK_COLORS, INITIAL_SHORTCUTS } from '../constants';
 import BookShortcutModal from './BookShortcutModal';
-import { userKey } from '../utils/userKey';
+import { uGet, uSet } from '../utils/userKey';
 
 const SHORTCUTS_KEY = 'homepage_shortcuts';
 
+// Flag set in onDragStart to distinguish reorder vs trash drags
+let _dragTargetIsTrash = false;
+
 export default function BookmarksSection() {
   const [bookmarks, setBookmarks] = useState(() => {
-    const saved = localStorage.getItem(userKey(SHORTCUTS_KEY));
+    const saved = uGet(SHORTCUTS_KEY);
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.some(s => s.title === 'The World of Ice and Fire' || s.title === 'Fantastic Beasts')) {
-          localStorage.setItem(userKey(SHORTCUTS_KEY), JSON.stringify(INITIAL_SHORTCUTS));
-          return INITIAL_SHORTCUTS;
-        }
-        return parsed;
-      } catch (e) {
+      if (saved.some(s => s.title === 'The World of Ice and Fire' || s.title === 'Fantastic Beasts')) {
+        uSet(SHORTCUTS_KEY, INITIAL_SHORTCUTS);
         return INITIAL_SHORTCUTS;
       }
+      return saved;
     }
     return INITIAL_SHORTCUTS;
   });
 
   useEffect(() => {
     const reload = () => {
-      try {
-        const saved = localStorage.getItem(userKey(SHORTCUTS_KEY));
-        setBookmarks(saved ? JSON.parse(saved) : INITIAL_SHORTCUTS);
-      } catch {
-        setBookmarks(INITIAL_SHORTCUTS);
-      }
+      const saved = uGet(SHORTCUTS_KEY);
+      setBookmarks(saved || INITIAL_SHORTCUTS);
     };
     window.addEventListener('user-switched', reload);
     return () => window.removeEventListener('user-switched', reload);
@@ -59,7 +53,7 @@ export default function BookmarksSection() {
   // Save bookmarks
   const saveBookmarksList = (newList) => {
     setBookmarks(newList);
-    localStorage.setItem(userKey(SHORTCUTS_KEY), JSON.stringify(newList));
+    uSet(SHORTCUTS_KEY, newList);
   };
 
   // Selection handlers
@@ -156,10 +150,27 @@ export default function BookmarksSection() {
     setIsModalOpen(false);
   };
 
+  // ── Listen for global delete-bookmark event (fired by trash confirmation) ──
+  useEffect(() => {
+    const handler = (e) => {
+      const id = e.detail?.id;
+      if (id !== undefined && id !== null) {
+        const remaining = bookmarks.filter(b => String(b.id) !== String(id));
+        saveBookmarksList(remaining);
+      }
+    };
+    window.addEventListener('delete-bookmark', handler);
+    return () => window.removeEventListener('delete-bookmark', handler);
+  }, [bookmarks]);
+
   // HTML5 Drag and Drop handlers
   const handleDragStart = (e, index) => {
+    const item = bookmarks[index];
+    // Encode as "bookmark::<json>" so trash zone can identify it reliably
+    // (Custom MIME types are unreliable across browsers; text/plain is safe)
+    e.dataTransfer.setData('text/plain', `bookmark::${JSON.stringify({ id: item.id, title: item.title })}`);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', index);
+    _dragTargetIsTrash = false;
 
     // Set indices asynchronously so the browser captures the drag image at full opacity first
     requestAnimationFrame(() => {
@@ -177,13 +188,15 @@ export default function BookmarksSection() {
   };
 
   const handleDragEnd = () => {
-    if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
+    // Only reorder if not dropped on trash
+    if (!_dragTargetIsTrash && draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
       const listCopy = [...bookmarks];
       const draggedItem = listCopy[draggedIndex];
       listCopy.splice(draggedIndex, 1);
       listCopy.splice(dragOverIndex, 0, draggedItem);
       saveBookmarksList(listCopy);
     }
+    _dragTargetIsTrash = false;
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
@@ -205,7 +218,7 @@ export default function BookmarksSection() {
       }}>
         <div>
           <h1 style={{ fontFamily: 'var(--serif)', fontSize: '28px', color: 'var(--forest-deep)', margin: 0 }}>Saved Bookmarks</h1>
-          <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: '#8a826f', margin: '4px 0 0' }}>
+          <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--brass)', margin: '4px 0 0' }}>
             Arrange your digital bookshelf by dragging, editing, or managing bookmarks.
           </p>
         </div>
@@ -222,7 +235,7 @@ export default function BookmarksSection() {
                   alignItems: 'center',
                   gap: '6px',
                   background: selectedIds.length > 0 ? 'var(--rust)' : '#e4e3da',
-                  color: selectedIds.length > 0 ? '#000000' : '#8a826f',
+                  color: selectedIds.length > 0 ? '#000000' : 'var(--brass)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '8px 16px',
@@ -265,8 +278,8 @@ export default function BookmarksSection() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  background: 'var(--accent-color, #e85d56)',
-                  color: '#fff',
+                  background: 'var(--accent-color, var(--danger-color))',
+                  color: 'var(--button-text)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '8px 16px',
@@ -286,7 +299,7 @@ export default function BookmarksSection() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  background: '#fff',
+                  background: 'var(--surface-bg)',
                   color: 'var(--ink)',
                   border: '1px solid #c5bfb0',
                   borderRadius: '6px',
@@ -315,7 +328,7 @@ export default function BookmarksSection() {
             justifyContent: 'center',
             alignItems: 'center',
             height: '100%',
-            color: '#8a826f',
+            color: 'var(--brass)',
             fontFamily: 'var(--sans)'
           }}>
             <h2 style={{ fontFamily: 'var(--serif)', color: 'var(--forest-deep)', marginBottom: '8px' }}>Your Bookshelf is Empty</h2>
@@ -365,15 +378,15 @@ export default function BookmarksSection() {
                       top: '8px',
                       left: '8px',
                       zIndex: 10,
-                      background: isSelected ? 'var(--forest)' : '#fff',
-                      border: isSelected ? 'none' : '2px solid #8a826f',
+                      background: isSelected ? 'var(--forest)' : 'var(--surface-bg)',
+                      border: isSelected ? 'none' : '2px solid var(--brass)',
                       borderRadius: '4px',
                       width: '20px',
                       height: '20px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#fff',
+                      color: 'var(--button-text)',
                       boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
                     }}>
                       {isSelected && <Check size={14} strokeWidth={3} />}
@@ -388,7 +401,7 @@ export default function BookmarksSection() {
                       margin: 0,
                       gap: '0px',
                       transform: isSelected ? 'scale(0.96) translateY(2px)' : (isDragOver ? 'scale(1.04)' : 'none'),
-                      border: isSelected ? '2px solid var(--forest)' : (isDragOver ? '2px dashed var(--accent-color, #e85d56)' : 'none'),
+                      border: isSelected ? '2px solid var(--forest)' : (isDragOver ? '2px dashed var(--accent-color, var(--danger-color))' : 'none'),
                       boxShadow: isDragOver ? '0 8px 16px rgba(232, 93, 86, 0.25)' : 'none',
                       borderRadius: '8px',
                       boxSizing: 'border-box',
@@ -447,7 +460,7 @@ export default function BookmarksSection() {
                       <div className="book-card-subtitle" style={{
                         fontFamily: 'var(--sans)',
                         fontSize: '10px',
-                        color: '#8a826f',
+                        color: 'var(--brass)',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',

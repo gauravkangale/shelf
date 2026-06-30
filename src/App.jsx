@@ -44,7 +44,15 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
       return;
     }
 
-    const result = await updateActiveProfile(name, username, email, avatar);
+    const cleanedUsername = username.trim().toLowerCase();
+    const originalUsername = activeProfile.username?.trim().toLowerCase();
+
+    const result = await updateActiveProfile(
+      name,
+      username,
+      email,
+      avatar
+    );
     if (result && result.success) {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -81,26 +89,26 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
       minHeight: '100vh'
     }}>
       <div style={{ maxWidth: '520px', width: '100%' }}>
-        
+
         {/* Main Library Card container */}
         <div className="library-card" style={{
-          background: '#fcfaf2',
-          border: '1px solid #d5cebf',
-          borderTop: '8px solid #b33933', // vintage red top strip
+          background: 'var(--library-card-bg)',
+          border: '1px solid var(--library-card-border)',
+          borderTop: '8px solid var(--rust)', // vintage red top strip
           borderRadius: '4px',
           padding: '24px 32px 32px 32px',
           boxShadow: '0 12px 35px rgba(110, 90, 70, 0.15)',
           position: 'relative',
           fontFamily: 'var(--sans)',
-          color: '#2b2927'
+          color: 'var(--message-other-text)'
         }}>
-          
+
           {/* Card Header */}
           <div style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-start',
-            borderBottom: '2px solid #b33933',
+            borderBottom: '2px solid var(--rust)',
             paddingBottom: '12px',
             marginBottom: '28px'
           }}>
@@ -110,27 +118,27 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
                 fontSize: '18px',
                 fontWeight: '700',
                 letterSpacing: '0.05em',
-                color: '#b33933',
+                color: 'var(--rust)',
                 textTransform: 'uppercase'
               }}>Shelf Public Library</div>
               <div style={{
                 fontSize: '11px',
-                color: '#8a826f',
+                color: 'var(--brass)',
                 fontFamily: 'monospace',
                 textTransform: 'uppercase',
                 marginTop: '2px'
               }}>Official Borrower Card</div>
             </div>
-            
+
             {/* Vintage QR Code */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
-              <div 
-                style={{ 
+              <div
+                style={{
                   width: '68px',
                   height: '68px',
-                  border: '1px solid #d5cebf',
+                  border: '1px solid var(--library-card-border)',
                   padding: '3px',
-                  background: '#fcfaf2',
+                  background: 'var(--library-card-bg)',
                   display: 'flex',
                   justifyContent: 'center',
                   alignItems: 'center',
@@ -139,20 +147,20 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
                 }}
                 title={`Profile Link: ${profileUrl}`}
               >
-                <img 
+                <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=64x64&color=2b2927&bgcolor=fcfaf2&margin=0&data=${encodeURIComponent(profileUrl)}`}
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                   alt="Profile QR Code"
                 />
               </div>
-              <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#8a826f', marginTop: '2px' }}>
+              <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--brass)', marginTop: '2px' }}>
                 {activeProfile.id ? `ID-${activeProfile.id.slice(0, 8).toUpperCase()}` : 'GUEST-001'}
               </div>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            
+
             {/* Profile Info block with Stapled Avatar Photo */}
             <div style={{
               display: 'flex',
@@ -160,9 +168,9 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
               alignItems: 'flex-start',
               marginBottom: '8px'
             }}>
-              
+
               {/* Photo Area with Staple effect */}
-              <div 
+              <div
                 onClick={() => fileInputRef.current && fileInputRef.current.click()}
                 onMouseEnter={() => setIsHoveredPhoto(true)}
                 onMouseLeave={() => setIsHoveredPhoto(false)}
@@ -183,12 +191,12 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
                   transform: 'rotate(-4deg)',
                   zIndex: 3
                 }}></div>
-                
+
                 {/* Image */}
                 <div style={{
                   width: '96px',
                   height: '112px',
-                  border: '1.5px solid #d5cebf',
+                  border: '1.5px solid var(--library-card-border)',
                   background: '#eae6d9',
                   padding: '4px',
                   borderRadius: '2px',
@@ -230,7 +238,7 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
                     width: '100%',
                     height: '100%',
                     background: 'rgba(179, 57, 51, 0.85)',
-                    color: '#fcfaf2',
+                    color: 'var(--library-card-bg)',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'center',
@@ -259,14 +267,14 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
 
               {/* Input Fields sitting on Ruled Notebook lines */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                
+
                 {/* Name */}
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <label style={{
                     fontFamily: 'monospace',
                     fontSize: '11px',
                     fontWeight: '600',
-                    color: '#8a826f',
+                    color: 'var(--brass)',
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em'
                   }}>Borrower Name</label>
@@ -296,10 +304,10 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
                     fontFamily: 'monospace',
                     fontSize: '11px',
                     fontWeight: '600',
-                    color: '#8a826f',
+                    color: 'var(--brass)',
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em'
-                  }}>Unique Username *</label>
+                  }}>Username</label>
                   <input
                     type="text"
                     style={{
@@ -326,7 +334,7 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
                     fontFamily: 'monospace',
                     fontSize: '11px',
                     fontWeight: '600',
-                    color: '#8a826f',
+                    color: 'var(--brass)',
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em'
                   }}>Digital Mail Address</label>
@@ -355,8 +363,8 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
             {errorMessage && (
               <div style={{
                 background: 'rgba(232, 93, 86, .08)',
-                borderLeft: '3px solid #e85d56',
-                color: '#e85d56',
+                borderLeft: '3px solid var(--danger-color)',
+                color: 'var(--danger-color)',
                 padding: '10px 14px',
                 fontSize: '13px',
                 fontWeight: '600',
@@ -372,8 +380,8 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
             {saveSuccess && (
               <div style={{
                 background: 'rgba(179, 57, 51, .06)',
-                borderLeft: '3px solid #b33933',
-                color: '#b33933',
+                borderLeft: '3px solid var(--rust)',
+                color: 'var(--rust)',
                 padding: '10px 14px',
                 fontSize: '13px',
                 fontWeight: '600',
@@ -394,8 +402,8 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
                 fontWeight: '600',
                 fontSize: '15px',
                 letterSpacing: '0.02em',
-                background: '#b33933',
-                color: '#fcfaf2',
+                background: 'var(--rust)',
+                color: 'var(--library-card-bg)',
                 border: 'none',
                 borderRadius: '3px',
                 cursor: 'pointer',
@@ -436,15 +444,16 @@ function App() {
   const [newProfileAccEmail, setNewProfileAccEmail] = useState('');
   const [newProfileAccAvatar, setNewProfileAccAvatar] = useState('');
 
-  // Persist profile accounts
+  // Persist profile accounts (preserving auth tokens for multi-account login persistence)
   useEffect(() => {
     localStorage.setItem('profile_accounts', JSON.stringify(profileAccounts));
   }, [profileAccounts]);
 
   useEffect(() => {
     const savedThemeKey = localStorage.getItem('shelf_theme_key') || DEFAULT_THEME_KEY;
-    applyTheme(savedThemeKey);
-    const savedMode = localStorage.getItem('shelf_theme_mode') || 'black';
+    const savedTextTone = localStorage.getItem('shelf_text_tone') || 'standard';
+    applyTheme(savedThemeKey, savedTextTone);
+    const savedMode = localStorage.getItem('shelf_theme_mode') || 'light';
     document.documentElement.dataset.theme = savedMode;
   }, []);
 
@@ -522,6 +531,11 @@ function App() {
   // Update active profile details
   const updateActiveProfile = async (name, username, email, avatar) => {
     const token = localStorage.getItem('shelf_auth_token');
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+    const cleanAvatar = avatar ? avatar.trim() : '';
+
     if (token) {
       try {
         const res = await fetch('/api/users/profile', {
@@ -531,10 +545,10 @@ function App() {
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
-            name: name.trim(),
-            username: username.trim(),
-            email: email.trim(),
-            avatar_url: avatar.trim()
+            name: cleanName,
+            username: cleanUsername,
+            email: cleanEmail,
+            avatar_url: cleanAvatar
           })
         });
         const data = await res.json();
@@ -547,18 +561,35 @@ function App() {
       }
     }
 
-    setProfileAccounts(prevAccounts => prevAccounts.map(acc => {
-      if (acc.active) {
-        return {
-          ...acc,
-          name: name.trim(),
-          username: username.trim(),
-          email: email.trim(),
-          avatar: avatar.trim()
-        };
-      }
-      return acc;
+    setProfileAccounts(prevAccounts => {
+      const updated = prevAccounts.map(acc => {
+        if (acc.id === activeProfile.id) {
+          return {
+            ...acc,
+            name: cleanName,
+            username: cleanUsername,
+            email: cleanEmail,
+            avatar: cleanAvatar
+          };
+        }
+        return acc;
+      });
+      return updated;
+    });
+
+    // Sync shelf_current_user in localStorage
+    localStorage.setItem('shelf_current_user', JSON.stringify({
+      id: activeProfile.id,
+      name: cleanName,
+      username: cleanUsername,
+      email: cleanEmail,
+      avatar_url: cleanAvatar,
+      avatar: cleanAvatar
     }));
+
+    // Dispatch events to update all open tabs and components
+    window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new Event('user-switched'));
 
     return { success: true };
   };
@@ -566,6 +597,20 @@ function App() {
   // Handle popup window login success
   useEffect(() => {
     const handleLoginSuccess = (userData) => {
+      // ── Immediately persist auth to localStorage so all components can read it ──
+      if (userData.token) {
+        localStorage.setItem('shelf_auth_token', userData.token);
+      }
+      localStorage.setItem('shelf_current_user', JSON.stringify({
+        id: userData.id,
+        name: userData.name,
+        username: userData.username || '',
+        email: userData.email || '',
+        phone: userData.phone || '',
+        avatar_url: userData.avatar_url || userData.avatar || '',
+        avatar: userData.avatar_url || userData.avatar || '',
+      }));
+
       setProfileAccounts(prevAccounts => {
         const existing = prevAccounts.find(acc =>
           (userData.email && acc.email === userData.email) ||
@@ -603,6 +648,11 @@ function App() {
           return prevAccounts.map(acc => ({ ...acc, active: false })).concat(newAcc);
         }
       });
+
+      // Notify all components that the user context changed
+      window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new Event('reader-activity-updated'));
+      window.dispatchEvent(new Event('user-switched'));
       setIsProfileDropdownOpen(false);
     };
 
@@ -642,7 +692,7 @@ function App() {
         const data = await cachedFetch('/api/notes', {
           headers: { 'Authorization': `Bearer ${token}` }
         }, 15000);
-        
+
         // Convert array to grouped object
         const grouped = {};
         if (data.notes && Array.isArray(data.notes)) {
@@ -811,7 +861,7 @@ function App() {
     };
 
     const textStyle = {
-      color: '#8a826f',
+      color: 'var(--text-secondary)',
       fontSize: '15px',
       maxWidth: '400px',
       lineHeight: '1.6'

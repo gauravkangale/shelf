@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, Shield, Palette, Bell, Lock, HardDrive, Trash2, ChevronRight, Settings as SettingsIcon } from 'lucide-react';
-import { THEME_LIST, applyTheme, DEFAULT_THEME_KEY } from '../utils/themePresets';
+import { LogOut, Shield, Palette, Bell, Lock, Trash2, ChevronRight, Settings as SettingsIcon, Pipette } from 'lucide-react';
+import { THEME_LIST, THEME_COLOR_ROLES, applyTheme, DEFAULT_THEME_KEY, getSavedThemeOverrides } from '../utils/themePresets';
 
 export default function SettingsPage({ activeProfile, updateActiveProfile, profileAccounts, deleteProfileAccount, switchProfileAccount }) {
   const [settingSection, setSettingSection] = useState('profile');
@@ -19,10 +19,13 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
   const [themeMode, setThemeMode] = useState(localStorage.getItem('shelf_theme_mode') || 'light');
   const [themeKey, setThemeKey] = useState(localStorage.getItem('shelf_theme_key') || DEFAULT_THEME_KEY);
   const [textTone, setTextTone] = useState(localStorage.getItem('shelf_text_tone') || 'standard');
+  const [themeOverrides, setThemeOverrides] = useState(() => getSavedThemeOverrides());
   const [notifications, setNotifications] = useState(JSON.parse(localStorage.getItem('shelf_notifications') || '{"enabled": true, "sound": true, "desktop": true}'));
   const [privacy, setPrivacy] = useState(JSON.parse(localStorage.getItem('shelf_privacy') || '{"profilePublic": true, "allowFriendRequests": true}'));
 
   const fileInputRef = React.useRef(null);
+  const [isHoveredAvatar, setIsHoveredAvatar] = useState(false);
+  const [activeColorPickerKey, setActiveColorPickerKey] = useState(null);
 
   useEffect(() => {
     setName(activeProfile?.name || '');
@@ -34,10 +37,11 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
   }, [activeProfile]);
 
   useEffect(() => {
-    applyTheme(themeKey, textTone);
+    applyTheme(themeKey, textTone, themeOverrides);
     localStorage.setItem('shelf_theme_key', themeKey);
     localStorage.setItem('shelf_text_tone', textTone);
-  }, [themeKey, textTone]);
+    localStorage.setItem('shelf_theme_overrides', JSON.stringify(themeOverrides));
+  }, [themeKey, textTone, themeOverrides]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = themeMode;
@@ -94,6 +98,17 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
     setTimeout(() => setFeedback(''), 3000);
   };
 
+  const updateThemeOverride = (key, value) => {
+    setThemeOverrides(prev => ({ ...prev, [key]: value }));
+  };
+
+  const resetThemeOverrides = () => {
+    setThemeOverrides({});
+    localStorage.removeItem('shelf_theme_overrides');
+    setFeedback('success: Custom colors reset');
+    setTimeout(() => setFeedback(''), 3000);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('shelf_auth_token');
     localStorage.removeItem('shelf_current_user');
@@ -105,7 +120,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
 
   const handleDeleteAccount = () => {
     if (window.confirm('Are you absolutely sure? This action cannot be undone.')) {
-      deleteProfileAccount({ stopPropagation: () => {} }, activeProfile.id);
+      deleteProfileAccount({ stopPropagation: () => { } }, activeProfile.id);
       if (profileAccounts.length > 1) {
         const remaining = profileAccounts.filter(p => p.id !== activeProfile.id);
         switchProfileAccount(remaining[0].id);
@@ -121,6 +136,8 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
       <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
         <div
           onClick={() => fileInputRef.current?.click()}
+          onMouseEnter={() => setIsHoveredAvatar(true)}
+          onMouseLeave={() => setIsHoveredAvatar(false)}
           style={{
             width: '100px',
             height: '100px',
@@ -148,12 +165,11 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#fff',
+            color: 'var(--button-text)',
             fontSize: '12px',
             fontWeight: 700,
-            opacity: 0,
-            transition: 'opacity 0.2s',
-            ':hover': { opacity: 1 }
+            opacity: isHoveredAvatar ? 1 : 0,
+            transition: 'opacity 0.2s'
           }}>
             Upload
           </div>
@@ -274,7 +290,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
         style={{
           padding: '12px 24px',
           background: 'var(--accent-color)',
-          color: '#fff',
+          color: 'var(--button-text)',
           border: 'none',
           borderRadius: '8px',
           fontWeight: 700,
@@ -296,12 +312,21 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
         <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '12px', textTransform: 'uppercase' }}>
           Color Theme
         </label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateRows: 'repeat(3, auto)',
+            gap: '10px',
+          }}
+        >
           {THEME_LIST.map(color => (
             <button
               key={color.key}
               onClick={() => {
                 setThemeKey(color.key);
+                setThemeOverrides({});
+                localStorage.removeItem('shelf_theme_overrides');
                 setFeedback(`success: Theme changed to ${color.name}`);
                 setTimeout(() => setFeedback(''), 3000);
               }}
@@ -406,6 +431,245 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
           ))}
         </div>
       </div>
+
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+            Fine Tune Colors
+          </label>
+          <button
+            type="button"
+            onClick={resetThemeOverrides}
+            style={{
+              padding: '7px 12px',
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              background: 'var(--surface-bg)',
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 700
+            }}
+          >
+            Reset
+          </button>
+        </div>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: '10px',
+          maxHeight: '360px',
+          overflowY: 'auto',
+          paddingRight: '4px'
+        }}>
+          {Object.entries(THEME_COLOR_ROLES).map(([key, role]) => {
+            const preset = THEME_LIST.find(theme => theme.key === themeKey) || THEME_LIST[0];
+            const value = themeOverrides[key] || preset[key];
+            return (
+              <div
+                key={key}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '10px',
+                  padding: '10px 12px',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  background: 'var(--surface-bg)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  position: 'relative'
+                }}
+              >
+                <span style={{ userSelect: 'none' }}>{role.label}</span>
+                
+                {/* Visual Swatch Color Selector Box */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setActiveColorPickerKey(activeColorPickerKey === key ? null : key);
+                  }}
+                  style={{
+                    width: '36px',
+                    height: '28px',
+                    border: '2px solid var(--surface-bg)',
+                    outline: '1.5px solid var(--border-color)',
+                    borderRadius: '6px',
+                    background: value,
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
+                    padding: 0
+                  }}
+                  aria-label={`Configure color for ${role.label}`}
+                />
+
+                {/* Custom Color Picker Popover */}
+                {activeColorPickerKey === key && (
+                  <>
+                    {/* Fixed overlay to capture outside clicks and close popover */}
+                    <div 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveColorPickerKey(null);
+                      }}
+                      style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 99,
+                        background: 'transparent',
+                        cursor: 'default'
+                      }}
+                    />
+
+                    {/* Popover Panel */}
+                    <div 
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        position: 'absolute',
+                        top: '36px',
+                        right: '12px',
+                        width: '180px',
+                        background: 'var(--panel-bg, #ffffff)',
+                        border: '1.5px solid var(--border-color)',
+                        borderRadius: '12px',
+                        padding: '12px',
+                        boxShadow: 'var(--shadow-md, 0 8px 24px rgba(0,0,0,0.08))',
+                        zIndex: 100,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        animation: 'fadeInScale 0.12s ease-out'
+                      }}
+                    >
+                      {/* Sub-label */}
+                      <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.05em', fontWeight: 700 }}>
+                        Preset Swatches
+                      </div>
+
+                      {/* Presets Swatches Grid */}
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(6, 1fr)',
+                        gap: '5px'
+                      }}>
+                        {[
+                          '#B33933', '#C74B68', '#2F6DB2', '#2D8F83', '#A56B2C', '#2E3A2E',
+                          '#1E2022', '#5F6267', '#FCFAF2', '#EDF5FE', '#DDF4EF', '#FFFFFF'
+                        ].map((swatchColor) => {
+                          const isSwatchSelected = value.toLowerCase() === swatchColor.toLowerCase();
+                          return (
+                            <button
+                              key={swatchColor}
+                              type="button"
+                              onClick={() => {
+                                updateThemeOverride(key, swatchColor);
+                              }}
+                              style={{
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '50%',
+                                background: swatchColor,
+                                border: isSwatchSelected ? '2px solid var(--text-primary)' : '1px solid rgba(0,0,0,0.15)',
+                                cursor: 'pointer',
+                                padding: 0,
+                                boxShadow: isSwatchSelected ? '0 0 0 2px var(--surface-bg)' : 'none',
+                                transform: isSwatchSelected ? 'scale(1.1)' : 'none',
+                                transition: 'all 0.1s'
+                              }}
+                              title={swatchColor}
+                            />
+                          );
+                        })}
+                      </div>
+
+                      {/* Divider */}
+                      <div style={{ height: '1px', background: 'var(--border-color)' }} />
+
+                      {/* Inputs row */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {/* HEX input */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700 }}>HEX</span>
+                          <input
+                            type="text"
+                            value={value}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val.startsWith('#') || val.length <= 7) {
+                                updateThemeOverride(key, val);
+                              }
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '4px 6px',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '5px',
+                              fontSize: '11px',
+                              fontFamily: 'monospace',
+                              background: 'var(--surface-bg)',
+                              color: 'var(--text-primary)',
+                              outline: 'none',
+                              textAlign: 'center'
+                            }}
+                          />
+                        </div>
+
+                        {/* Custom Button Triggering Native Color Picker */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            document.getElementById(`hidden-picker-${key}`)?.click();
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px',
+                            padding: '5px 8px',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '6px',
+                            background: 'var(--surface-bg)',
+                            color: 'var(--text-primary)',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'var(--option-bg)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'var(--surface-bg)'}
+                        >
+                          <Pipette size={11} />
+                          <span>Advanced Picker</span>
+                        </button>
+
+                        {/* Hidden native input color picker */}
+                        <input
+                          id={`hidden-picker-${key}`}
+                          type="color"
+                          value={value.startsWith('#') && (value.length === 4 || value.length === 7) ? value : '#ffffff'}
+                          onChange={e => updateThemeOverride(key, e.target.value)}
+                          style={{
+                            position: 'absolute',
+                            width: 0,
+                            height: 0,
+                            opacity: 0,
+                            border: 'none',
+                            pointerEvents: 'none'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 
@@ -461,7 +725,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
         <button style={{
           padding: '8px 16px',
           background: 'var(--accent-color)',
-          color: '#fff',
+          color: 'var(--button-text)',
           border: 'none',
           borderRadius: '6px',
           cursor: 'pointer',
@@ -494,8 +758,8 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
           onClick={handleLogout}
           style={{
             padding: '8px 16px',
-            background: '#e85d56',
-            color: '#fff',
+            background: 'var(--danger-color)',
+            color: 'var(--button-text)',
             border: 'none',
             borderRadius: '6px',
             cursor: 'pointer',
@@ -507,31 +771,6 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
           }}
         >
           <LogOut size={14} /> Logout
-        </button>
-      </div>
-
-      <div style={{ padding: '16px', background: 'var(--option-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-        <div style={{ fontSize: '12px', color: 'var(--accent-color)', marginBottom: '12px', fontWeight: 700 }}>⚠️ Danger Zone</div>
-        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-          Permanently delete your account and all associated data. This action cannot be undone.
-        </div>
-        <button
-          onClick={handleDeleteAccount}
-          style={{
-            padding: '8px 16px',
-            background: '#e85d56',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '12px',
-            fontWeight: 700,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <Trash2 size={14} /> Delete Account
         </button>
       </div>
     </div>
@@ -555,6 +794,18 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
       background: 'var(--bg-color)',
       boxSizing: 'border-box'
     }}>
+      <style>{`
+        @keyframes fadeInScale {
+          from {
+            opacity: 0;
+            transform: scale(0.95) translateY(-5px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+      `}</style>
       {/* Sidebar Navigation */}
       <div style={{
         width: '220px',
@@ -601,7 +852,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
         border: '1px solid var(--border-color)',
         borderRadius: '12px',
         padding: '32px',
-        maxWidth: '680px'
+        width: '1000px'
       }}>
         {feedback && (
           <div style={{

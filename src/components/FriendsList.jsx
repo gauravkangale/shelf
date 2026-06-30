@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { MoreHorizontal, MessageSquare, Send, X, Users } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { MoreHorizontal, MessageSquare, Send, X, Users, UserPlus, Search } from 'lucide-react';
 import { userKey } from '../utils/userKey';
 import { cachedFetch, invalidateCache, getCached } from '../utils/apiCache';
 
@@ -37,7 +37,7 @@ function Avatar({ user, size = 28 }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: color, color: '#fff', display: 'flex',
+      background: color, color: 'var(--button-text)', display: 'flex',
       alignItems: 'center', justifyContent: 'center',
       fontSize: size * 0.38, fontWeight: '700',
       fontFamily: 'var(--font-serif, Georgia, serif)', userSelect: 'none'
@@ -71,18 +71,30 @@ const WingIcon = ({ isLeft, color }) => (
 );
 
 export default function FriendsList() {
-  // ── Instant cache-first state ─────────────────────────────────────────────
-  const [joinedGroups, setJoinedGroups] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(userKey(GRP_CACHE)) || '[]'); } catch { return []; }
+  // ── Unified chats & teammates state ───────────────────────────────────────
+  const [recentChats, setRecentChats] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(userKey('shelf_recent_chats')) || '[]'); } catch { return []; }
   });
   const [teammates, setTeammates] = useState(() => {
     try { return JSON.parse(localStorage.getItem(userKey(TM_CACHE)) || '[]'); } catch { return []; }
   });
-  const [loading, setLoading] = useState(false); // false: cache already shown
-  const [activeGroupChat, setActiveGroupChat] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [activeChat, setActiveChat] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [newMessageText, setNewMessageText] = useState('');
   const chatEndRef = useRef(null);
+
+  // Quick reply and dismiss state
+  const [replyingChatId, setReplyingChatId] = useState(null);
+  const [quickReplyText, setQuickReplyText] = useState('');
+
+  // ── Suggest Users state ───────────────────────────────────────────────────
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestQuery, setSuggestQuery] = useState('');
+  const [suggestResults, setSuggestResults] = useState([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [sentRequests, setSentRequests] = useState(new Set());
+  const suggestRef = useRef(null);
 
   // ── Token state (reactive) ────────────────────────────────────────────────
   const [token, setToken] = useState(() => localStorage.getItem('shelf_auth_token'));
@@ -102,11 +114,14 @@ export default function FriendsList() {
         setToken(localStorage.getItem('shelf_auth_token'));
       } catch {}
     };
+    const handleOpenSuggest = () => setSuggestOpen(true);
     window.addEventListener('storage', handleSync);
     window.addEventListener('reader-activity-updated', handleSync);
+    window.addEventListener('open-suggest-users', handleOpenSuggest);
     return () => {
       window.removeEventListener('storage', handleSync);
       window.removeEventListener('reader-activity-updated', handleSync);
+      window.removeEventListener('open-suggest-users', handleOpenSuggest);
     };
   }, []);
 
@@ -117,24 +132,23 @@ export default function FriendsList() {
     const headers = { 'Authorization': `Bearer ${authToken}` };
 
     // Instant hydrate from memory cache while network refreshes
-    const cachedGroups = getCached('/api/groups', { headers });
+    const cachedChats = getCached('/api/chats/recent', { headers });
     const cachedTeammates = getCached('/api/teammates/mutual', { headers });
-    if (cachedGroups) {
-      const joined = (cachedGroups.groups || []).filter(g => g.isMember);
-      setJoinedGroups(joined);
+    if (cachedChats) {
+      setRecentChats(cachedChats.chats || []);
     }
     if (cachedTeammates) {
       setTeammates(cachedTeammates.teammates || []);
     }
 
     try {
-      const [groupsData, teammatesData] = await Promise.all([
-        cachedFetch('/api/groups', { headers }, 25000, signal),
+      const [chatsData, teammatesData] = await Promise.all([
+        cachedFetch('/api/chats/recent', { headers }, 25000, signal),
         cachedFetch('/api/teammates/mutual', { headers }, 25000, signal)
       ]);
-      const joined = (groupsData.groups || []).filter(g => g.isMember);
-      setJoinedGroups(joined);
-      localStorage.setItem(userKey(GRP_CACHE), JSON.stringify(joined));
+      const filteredChats = (chatsData.chats || []).filter(c => c.type !== 'cohort');
+      setRecentChats(filteredChats);
+      localStorage.setItem(userKey('shelf_recent_chats'), JSON.stringify(filteredChats));
 
       const tm = teammatesData.teammates || [];
       setTeammates(tm);
@@ -155,43 +169,42 @@ export default function FriendsList() {
     const controller = new AbortController();
     fetchTeammateData(token, controller.signal);
 
-    const handleOpenGroupChat = (e) => setActiveGroupChat(e.detail);
     const handleActivityUpdate = () => {
       const tk = localStorage.getItem('shelf_auth_token');
       if (tk) fetchTeammateData(tk);
     };
     const handleUserSwitched = () => {
       try {
-        setJoinedGroups(JSON.parse(localStorage.getItem(userKey(GRP_CACHE)) || '[]'));
+        setRecentChats(JSON.parse(localStorage.getItem(userKey('shelf_recent_chats')) || '[]'));
         setTeammates(JSON.parse(localStorage.getItem(userKey(TM_CACHE)) || '[]'));
       } catch {}
-      invalidateCache('/api/groups');
       invalidateCache('/api/teammates');
       handleActivityUpdate();
     };
 
-    window.addEventListener('open-group-chat', handleOpenGroupChat);
     window.addEventListener('reader-activity-updated', handleActivityUpdate);
     window.addEventListener('user-switched', handleUserSwitched);
 
-    // Poll every 60s — was 30s, halved to reduce server load
+    // Poll every 60s
     const interval = setInterval(handleActivityUpdate, 60000);
 
     return () => {
       controller.abort();
       clearInterval(interval);
-      window.removeEventListener('open-group-chat', handleOpenGroupChat);
       window.removeEventListener('reader-activity-updated', handleActivityUpdate);
       window.removeEventListener('user-switched', handleUserSwitched);
     };
   }, [token]);
 
-  // ── Group chat messages ───────────────────────────────────────────────────
-  const fetchGroupMessages = async (groupId) => {
+  // ── Chat Messages (unified) ────────────────────────────────────────────────
+  const fetchChatMessages = async (chat) => {
     try {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
-      const res = await fetch(`/api/chat/group/${groupId}`, {
+      const endpoint = chat.type === 'cohort'
+        ? `/api/chat/cohort/${chat.id}`
+        : `/api/chat/${chat.id}`;
+      const res = await fetch(endpoint, {
         headers: { 'Authorization': `Bearer ${tk}` }
       });
       if (res.ok) {
@@ -199,22 +212,22 @@ export default function FriendsList() {
         setChatMessages(data.messages || []);
       }
     } catch (err) {
-      console.error('Error fetching group messages:', err);
+      console.error('Error fetching chat messages:', err);
     }
   };
 
   useEffect(() => {
-    if (!activeGroupChat) return;
-    fetchGroupMessages(activeGroupChat.id);
-    const interval = setInterval(() => fetchGroupMessages(activeGroupChat.id), 8000);
+    if (!activeChat) return;
+    fetchChatMessages(activeChat);
+    const interval = setInterval(() => fetchChatMessages(activeChat), 8000);
     return () => clearInterval(interval);
-  }, [activeGroupChat]);
+  }, [activeChat]);
 
   useEffect(() => {
-    if (activeGroupChat) {
-      localStorage.setItem(userKey(`last_viewed_group_${activeGroupChat.id}`), new Date().toISOString());
+    if (activeChat) {
+      localStorage.setItem(userKey(`last_viewed_${activeChat.type}_${activeChat.id}`), new Date().toISOString());
     }
-  }, [activeGroupChat, chatMessages.length]);
+  }, [activeChat, chatMessages.length]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -223,49 +236,158 @@ export default function FriendsList() {
   // ── Send message ──────────────────────────────────────────────────────────
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessageText.trim() || !activeGroupChat) return;
+    if (!newMessageText.trim() || !activeChat) return;
     const text = newMessageText.trim();
     setNewMessageText('');
     try {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
-      const res = await fetch('/api/chat/group', {
+      const endpoint = activeChat.type === 'cohort'
+        ? '/api/chat/cohort'
+        : '/api/chat';
+      const body = activeChat.type === 'cohort'
+        ? { groupId: activeChat.id, messageText: text }
+        : { receiverId: activeChat.id, messageText: text };
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tk}` },
-        body: JSON.stringify({ groupId: activeGroupChat.id, messageText: text })
+        body: JSON.stringify(body)
       });
       if (res.ok) {
         const data = await res.json();
         if (data.message) setChatMessages(prev => [...prev, data.message]);
       }
     } catch (err) {
-      console.error('Error sending group message:', err);
+      console.error('Error sending message:', err);
     }
   };
 
-  const hasNewMessages = (group) => {
-    if (!group.lastMessageAt) return false;
-    if (activeGroupChat?.id === group.id) return false;
-    const lastViewed = localStorage.getItem(userKey(`last_viewed_group_${group.id}`));
+  const hasNewMessages = (chat) => {
+    if (!chat.lastMessageAt) return false;
+
+    // Check if dismissed
+    const dismissedTime = localStorage.getItem(userKey(`dismissed_chat_${chat.id}`));
+    if (dismissedTime && new Date(chat.lastMessageAt) <= new Date(dismissedTime)) {
+      return false;
+    }
+
+    if (activeChat?.id === chat.id) return false;
+    const lastViewed = localStorage.getItem(userKey(`last_viewed_${chat.type}_${chat.id}`));
     if (!lastViewed) return true;
-    return new Date(group.lastMessageAt) > new Date(lastViewed);
+    return new Date(chat.lastMessageAt) > new Date(lastViewed);
+  };
+
+  // ── Suggest users search ──────────────────────────────────────────────────
+  const handleSuggestSearch = useCallback(async (q) => {
+    if (!q.trim()) { setSuggestResults([]); return; }
+    setSuggestLoading(true);
+    try {
+      const tk = localStorage.getItem('shelf_auth_token');
+      const headers = tk ? { 'Authorization': `Bearer ${tk}` } : {};
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}&limit=8`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setSuggestResults(data.users || []);
+      } else {
+        // Fallback demo suggestions when not authenticated
+        setSuggestResults([
+          { id: 'demo1', name: 'Priya Sharma', username: 'priya_reads', avatar_url: null },
+          { id: 'demo2', name: 'Arjun Mehta', username: 'arjunbooks', avatar_url: null },
+          { id: 'demo3', name: 'Rohan Verma', username: 'rohan_v', avatar_url: null },
+        ].filter(u => u.name.toLowerCase().includes(q.toLowerCase()) || u.username.toLowerCase().includes(q.toLowerCase())));
+      }
+    } catch {
+      setSuggestResults([]);
+    } finally {
+      setSuggestLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => handleSuggestSearch(suggestQuery), 350);
+    return () => clearTimeout(t);
+  }, [suggestQuery, handleSuggestSearch]);
+
+  const handleSendFriendRequest = async (userId) => {
+    try {
+      const tk = localStorage.getItem('shelf_auth_token');
+      if (!tk) { setSentRequests(p => new Set([...p, userId])); return; }
+      await fetch('/api/friends/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tk}` },
+        body: JSON.stringify({ friendId: userId }),
+      });
+      setSentRequests(p => new Set([...p, userId]));
+    } catch {
+      setSentRequests(p => new Set([...p, userId]));
+    }
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
   const noToken = !token;
 
-  const sortedGroups = [...joinedGroups].sort((a, b) => {
+  const isChatDismissed = (chat) => {
+    const dismissedTime = localStorage.getItem(userKey(`dismissed_chat_${chat.id}`));
+    if (!dismissedTime || !chat.lastMessageAt) return false;
+    return new Date(chat.lastMessageAt) <= new Date(dismissedTime);
+  };
+
+  const handleQuickReply = async (e, chat) => {
+    e.preventDefault();
+    if (!quickReplyText.trim()) return;
+    const text = quickReplyText.trim();
+    setQuickReplyText('');
+    setReplyingChatId(null);
+    try {
+      const tk = localStorage.getItem('shelf_auth_token');
+      if (!tk) return;
+      const endpoint = chat.type === 'cohort'
+        ? '/api/chat/cohort'
+        : '/api/chat';
+      const body = chat.type === 'cohort'
+        ? { groupId: chat.id, messageText: text }
+        : { receiverId: chat.id, messageText: text };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tk}` },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        // Update local preview immediately
+        setRecentChats(prev => prev.map(c => {
+          if (c.id === chat.id) {
+            return {
+              ...c,
+              lastMessageText: text,
+              lastMessageAt: new Date().toISOString(),
+              lastMessageSenderName: 'You'
+            };
+          }
+          return c;
+        }));
+        // Mark as read
+        localStorage.setItem(userKey(`last_viewed_${chat.type}_${chat.id}`), new Date().toISOString());
+      }
+    } catch (err) {
+      console.error('Error sending quick reply:', err);
+    }
+  };
+
+  const sortedChats = [...recentChats].filter(c => !isChatDismissed(c)).sort((a, b) => {
     const aNew = hasNewMessages(a);
     const bNew = hasNewMessages(b);
     if (aNew !== bNew) return aNew ? -1 : 1;
     if (a.lastMessageAt && b.lastMessageAt) return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
-    return (b.members?.length || 0) - (a.members?.length || 0);
+    return 0;
   });
 
   return (
-    <section className="friends-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <>
+      <section className="friends-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-      {/* 1. Group Chats Section */}
+      {/* 1. Chats / Messages Section */}
       <div>
         <div className="section-header" style={{ marginBottom: '8px' }}>
           <h2 className="calendar-title" style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--brass)' }}>
@@ -280,60 +402,139 @@ export default function FriendsList() {
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '4px 0', lineHeight: '1.4' }}>
             Sign in to see your messages.
           </p>
-        ) : joinedGroups.length === 0 ? (
+        ) : recentChats.length === 0 ? (
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '4px 0', lineHeight: '1.4' }}>
-            {loading ? 'Updating...' : "You haven't joined any groups yet. Open the Bookshelf tab to join group shelves."}
+            {loading ? 'Updating...' : "No messages yet. Open Cohorts and connect with teammates."}
+          </p>
+        ) : sortedChats.length === 0 ? (
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '4px 0', lineHeight: '1.4' }}>
+            No active un-dismissed notifications.
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {sortedGroups.map(group => {
-              const previewText = group.lastMessageText || group.description || `Chat with ${group.members.length} ${group.members.length === 1 ? 'member' : 'members'}`;
-              const previewSender = group.lastMessageSenderName || group.lastMessageSenderUsername || 'Someone';
-              const previewSenderAvatar = group.lastMessageSenderAvatarUrl ? { avatar_url: group.lastMessageSenderAvatarUrl, name: previewSender } : { name: previewSender };
+            {sortedChats.map(chat => {
+              const previewText = chat.lastMessageText || chat.description || (chat.type === 'cohort' ? 'Cohort Workspace Chat' : 'Direct Conversation');
+              const previewSender = chat.lastMessageSenderName || chat.lastMessageSenderUsername || chat.name || 'Someone';
+              const previewSenderAvatar = chat.lastMessageSenderAvatarUrl ? { avatar_url: chat.lastMessageSenderAvatarUrl, name: previewSender } : { name: previewSender };
               const shortPreview = previewText.length > 72 ? `${previewText.slice(0, 72)}...` : previewText;
               return (
-                <button
-                  key={group.id}
-                  type="button"
-                  onClick={() => setActiveGroupChat(group)}
+                <div
+                  key={chat.id}
+                  onClick={() => setActiveChat(chat)}
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
+                    flexDirection: 'column',
+                    gap: '8px',
                     width: '100%',
                     padding: '10px 12px',
-                    background: '#fff',
+                    background: 'var(--surface-bg)',
                     border: '1px solid #e4e3da',
                     borderRadius: '14px',
                     cursor: 'pointer',
                     textAlign: 'left',
-                    boxShadow: hasNewMessages(group) ? '0 8px 20px rgba(179,57,51,0.14)' : '0 2px 8px rgba(0,0,0,0.05)',
+                    boxShadow: hasNewMessages(chat) ? '0 8px 20px rgba(179,57,51,0.14)' : '0 2px 8px rgba(0,0,0,0.05)',
                     transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                    borderColor: hasNewMessages(group) ? '#b33933' : '#e4e3da'
+                    borderColor: hasNewMessages(chat) ? 'var(--rust)' : '#e4e3da'
                   }}
-                  title="Open message"
+                  title="Click to view chat"
                 >
-                  <Avatar user={previewSenderAvatar} size={38} />
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                      <div style={{ fontWeight: '700', fontSize: '13px', color: '#2b2927' }}>{previewSender}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', color: '#8a826f' }}>{formatRelativeTime(group.lastMessageAt)}</span>
-                        {hasNewMessages(group) && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '10px', height: '10px', borderRadius: '999px', background: '#b33933', flexShrink: 0 }} />
-                        )}
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', width: '100%' }}>
+                    <Avatar user={previewSenderAvatar} size={38} />
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                        <div style={{ fontWeight: '700', fontSize: '13px', color: 'var(--message-other-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {chat.type === 'cohort' ? `[Cohort] ${chat.name}` : previewSender}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                          <span style={{ fontSize: '10px', color: 'var(--brass)' }}>{formatRelativeTime(chat.lastMessageAt)}</span>
+                          {hasNewMessages(chat) && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--rust)', flexShrink: 0 }} />
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {chat.type === 'cohort' ? `${previewSender}: ` : ''}{shortPreview}
                       </div>
                     </div>
-                    <div style={{
-                      padding: '8px 10px', borderRadius: '12px',
-                      background: '#fcfaf2', color: '#2b2927', fontSize: '12px',
-                      lineHeight: '1.4', border: '1px solid #f0ece4',
-                      display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
-                    }}>
-                      {shortPreview}
-                    </div>
                   </div>
-                </button>
+
+                  {/* Actions & Inline Reply Row */}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', borderTop: '1px dashed #eae6d9', paddingTop: '6px' }} onClick={e => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (replyingChatId === chat.id) {
+                          setReplyingChatId(null);
+                        } else {
+                          setReplyingChatId(chat.id);
+                          setQuickReplyText('');
+                        }
+                      }}
+                      style={{
+                        background: replyingChatId === chat.id ? 'var(--brass)' : 'transparent',
+                        border: '1.5px solid var(--accent-color)', cursor: 'pointer',
+                        padding: '4px 10px', borderRadius: '12px', fontSize: '11px',
+                        fontWeight: '700', color: replyingChatId === chat.id ? '#fff' : 'var(--accent-color)',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {replyingChatId === chat.id ? 'Cancel' : 'Reply'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        localStorage.setItem(userKey(`dismissed_chat_${chat.id}`), chat.lastMessageAt || new Date().toISOString());
+                        setRecentChats(prev => prev.filter(c => c.id !== chat.id));
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: '1.5px solid var(--text-secondary)', cursor: 'pointer',
+                        padding: '4px 10px', borderRadius: '12px', fontSize: '11px',
+                        fontWeight: '600', color: 'var(--text-secondary)',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+
+                  {/* Inline Quick Reply Form */}
+                  {replyingChatId === chat.id && (
+                    <form
+                      onSubmit={(e) => handleQuickReply(e, chat)}
+                      style={{
+                        display: 'flex', gap: '8px', width: '100%',
+                        padding: '6px 10px', background: 'var(--option-bg)', borderRadius: '12px',
+                        boxSizing: 'border-box', border: '1px solid var(--library-card-border)', marginTop: '4px'
+                      }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <input
+                        type="text"
+                        value={quickReplyText}
+                        onChange={(e) => setQuickReplyText(e.target.value)}
+                        placeholder="Type a quick reply..."
+                        autoFocus
+                        style={{
+                          flex: 1, border: 'none', background: 'transparent',
+                          fontSize: '12px', outline: 'none', color: 'var(--ink)',
+                          minWidth: 0
+                        }}
+                      />
+                      <button
+                        type="submit"
+                        disabled={!quickReplyText.trim()}
+                        style={{
+                          border: 'none', background: 'none', cursor: 'pointer',
+                          color: quickReplyText.trim() ? 'var(--accent-color)' : '#9a9a94',
+                          display: 'flex', alignItems: 'center', flexShrink: 0
+                        }}
+                      >
+                        <Send size={14} />
+                      </button>
+                    </form>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -346,6 +547,27 @@ export default function FriendsList() {
           <h2 className="calendar-title" style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--brass)' }}>
             Mutual Teammates
           </h2>
+          <button
+            title="Find & suggest readers"
+            onClick={() => setSuggestOpen(v => !v)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--brass)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '12px',
+              padding: '2px 6px',
+              borderRadius: '6px',
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--ui-hover-bg)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            <UserPlus size={14} />
+          </button>
         </div>
 
         {noToken ? (
@@ -354,7 +576,7 @@ export default function FriendsList() {
           </p>
         ) : teammates.length === 0 ? (
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '4px 0', lineHeight: '1.4' }}>
-            {loading ? 'Updating...' : 'No mutual work teammates. Join groups to connect with other active readers.'}
+            {loading ? 'Updating...' : 'No mutual work teammates. Join cohorts to connect with other active readers.'}
           </p>
         ) : (
           teammates.map((mate) => {
@@ -364,14 +586,25 @@ export default function FriendsList() {
             const relativeTime = formatRelativeTime(mate.lastActive);
 
             return (
-              <div className="friend-item" key={mate.id} style={{ display: 'flex', alignItems: 'flex-start', padding: '8px 0', borderBottom: '1px dashed #eae6d9' }}>
+              <div
+                className="friend-item"
+                key={mate.id}
+                onClick={() => setActiveChat({ id: mate.id, type: 'private', name: displayName, avatarUrl })}
+                style={{
+                  display: 'flex', alignItems: 'flex-start', padding: '8px 10px',
+                  borderBottom: '1px dashed #eae6d9', cursor: 'pointer', borderRadius: '8px',
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.03)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
                 <Avatar user={mate} size={32} />
                 <div style={{ flex: 1, minWidth: 0, marginLeft: '10px' }}>
-                  <div style={{ fontWeight: '600', fontSize: '13px', color: '#2b2927' }}>{displayName}</div>
+                  <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--message-other-text)' }}>{displayName}</div>
                   <p style={{ fontSize: '12px', color: '#6b6457', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {commentText}
                   </p>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#8a826f', marginTop: '2px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--brass)', marginTop: '2px' }}>
                     <span>Teammate</span>
                     <span>{relativeTime}</span>
                   </div>
@@ -382,35 +615,35 @@ export default function FriendsList() {
         )}
       </div>
 
-      {/* Floating Group Chat Box */}
-      {activeGroupChat && (
+      {/* Floating Chat Box Overlay */}
+      {activeChat && (
         <div style={{
           position: 'fixed', bottom: '20px', right: '20px',
           width: '320px', height: '400px',
-          background: '#fcfaf2', border: '1px solid #d5cebf',
+          background: 'var(--library-card-bg)', border: '1px solid var(--library-card-border)',
           borderRadius: '8px', boxShadow: '0 8px 30px rgba(110, 90, 70, 0.25)',
           display: 'flex', flexDirection: 'column', zIndex: 9999,
           fontFamily: 'var(--sans)'
         }}>
           {/* Header */}
           <div style={{
-            padding: '12px 16px', borderBottom: '1px solid #d5cebf',
+            padding: '12px 16px', borderBottom: '1px solid var(--library-card-border)',
             background: 'var(--paper)', borderTopLeftRadius: '8px', borderTopRightRadius: '8px',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{
                 width: '28px', height: '28px', borderRadius: '50%',
-                background: '#b33933', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
+                background: 'var(--rust)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--button-text)'
               }}>
-                <Users size={14} />
+                <MessageSquare size={14} />
               </div>
               <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--ink)' }}>
-                {activeGroupChat.name}
+                {activeChat.name}
               </span>
             </div>
             <button
-              onClick={() => setActiveGroupChat(null)}
+              onClick={() => setActiveChat(null)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--brass)' }}
             >
               <X size={16} />
@@ -424,7 +657,7 @@ export default function FriendsList() {
           }}>
             {chatMessages.length === 0 ? (
               <p style={{ textAlign: 'center', color: 'var(--brass)', fontSize: '12px', fontStyle: 'italic', marginTop: '40px' }}>
-                No messages yet. Start group discussion!
+                No messages yet. Send a note to connect!
               </p>
             ) : (
               chatMessages.map((m, i) => {
@@ -447,29 +680,29 @@ export default function FriendsList() {
                     )}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isSelf ? 'flex-end' : 'flex-start' }}>
                       {showLabel && (
-                        <span style={{ fontSize: '10px', color: '#8a826f', marginBottom: '2px', marginLeft: '4px' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--brass)', marginBottom: '2px', marginLeft: '4px' }}>
                           {senderName}
                         </span>
                       )}
                       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                        <WingIcon isLeft={true} color={isSelf ? '#b33933' : '#8a826f'} />
+                        <WingIcon isLeft={true} color={isSelf ? 'var(--rust)' : 'var(--brass)'} />
                         <div style={{
                           padding: '10px 16px', borderRadius: '20px',
-                          background: isSelf ? '#b33933' : '#fcfaf2',
-                          color: isSelf ? '#ffffff' : '#2b2927',
+                          background: isSelf ? 'var(--rust)' : 'var(--library-card-bg)',
+                          color: isSelf ? 'var(--surface-bg)' : 'var(--message-other-text)',
                           fontSize: '13px', lineHeight: '1.4',
-                          border: isSelf ? '1px solid #b33933' : '1px solid #d5cebf',
+                          border: isSelf ? '1px solid var(--rust)' : '1px solid var(--library-card-border)',
                           boxShadow: isSelf
-                            ? '0 0 0 1.5px #fcfaf2, 0 0 0 2.5px #b33933, 0 2px 5px rgba(0,0,0,0.05)'
-                            : '0 0 0 1.5px #fcfaf2, 0 0 0 2.5px #d5cebf, 0 2px 5px rgba(0,0,0,0.03)',
+                            ? '0 0 0 1.5px var(--library-card-bg), 0 0 0 2.5px var(--rust), 0 2px 5px rgba(0,0,0,0.05)'
+                            : '0 0 0 1.5px var(--library-card-bg), 0 0 0 2.5px var(--library-card-border), 0 2px 5px rgba(0,0,0,0.03)',
                           wordBreak: 'break-word', position: 'relative', minWidth: '50px'
                         }}>
                           <div style={{
                             position: 'absolute', top: '-8px',
                             ...(isSelf ? { right: '12px' } : { left: '12px' }),
-                            background: isSelf ? '#b33933' : '#fcfaf2',
-                            color: isSelf ? '#ffffff' : '#b33933',
-                            border: isSelf ? '1px solid #ffffff' : '1px solid #d5cebf',
+                            background: isSelf ? 'var(--rust)' : 'var(--library-card-bg)',
+                            color: isSelf ? 'var(--surface-bg)' : 'var(--rust)',
+                            border: isSelf ? '1px solid var(--surface-bg)' : '1px solid var(--library-card-border)',
                             borderRadius: '8px', padding: '0px 6px',
                             fontSize: '7px', fontFamily: 'monospace', fontWeight: '700',
                             textTransform: 'uppercase', letterSpacing: '0.05em', zIndex: 2
@@ -478,7 +711,7 @@ export default function FriendsList() {
                           </div>
                           {m.text}
                         </div>
-                        <WingIcon isLeft={false} color={isSelf ? '#b33933' : '#8a826f'} />
+                        <WingIcon isLeft={false} color={isSelf ? 'var(--rust)' : 'var(--brass)'} />
                       </div>
                     </div>
                   </div>
@@ -490,7 +723,7 @@ export default function FriendsList() {
 
           {/* Input Footer */}
           <form onSubmit={handleSendMessage} style={{
-            padding: '12px', borderTop: '1px solid #d5cebf',
+            padding: '12px', borderTop: '1px solid var(--library-card-border)',
             background: 'var(--paper)', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px',
             display: 'flex', gap: '8px', alignItems: 'center'
           }}>
@@ -498,18 +731,18 @@ export default function FriendsList() {
               type="text"
               value={newMessageText}
               onChange={(e) => setNewMessageText(e.target.value)}
-              placeholder="Message group..."
+              placeholder="Message teammate..."
               style={{
                 flex: 1, padding: '8px 12px', borderRadius: '20px',
-                border: '1px solid #d5cebf', background: '#ffffff',
+                border: '1px solid var(--library-card-border)', background: 'var(--surface-bg)',
                 fontSize: '13px', outline: 'none'
               }}
             />
             <button type="submit" style={{
-              background: '#b33933', border: 'none', borderRadius: '50%',
+              background: 'var(--rust)', border: 'none', borderRadius: '50%',
               width: '32px', height: '32px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#ffffff', cursor: 'pointer'
+              color: 'var(--button-text)', cursor: 'pointer'
             }}>
               <Send size={14} />
             </button>
@@ -517,5 +750,139 @@ export default function FriendsList() {
         </div>
       )}
     </section>
+
+    {/* ── Suggest Users Floating Panel ──────────────────────────────────────── */}
+    {suggestOpen && (
+      <div
+        ref={suggestRef}
+        style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          width: '300px',
+          background: 'var(--library-card-bg)',
+          border: '1px solid var(--library-card-border)',
+          borderRadius: '14px',
+          boxShadow: '0 12px 40px rgba(110,90,70,0.22)',
+          zIndex: 9998,
+          fontFamily: 'var(--font-sans)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Panel Header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 16px',
+          borderBottom: '1px solid var(--library-card-border)',
+          background: 'var(--panel-bg)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              width: '28px', height: '28px', borderRadius: '50%',
+              background: 'var(--accent-color)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', color: '#fff'
+            }}>
+              <UserPlus size={14} />
+            </div>
+            <span style={{ fontWeight: '700', fontSize: '14px', color: 'var(--ink)' }}>
+              Find Readers
+            </span>
+          </div>
+          <button
+            onClick={() => { setSuggestOpen(false); setSuggestQuery(''); setSuggestResults([]); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--brass)', fontSize: '20px', lineHeight: 1 }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Search Input */}
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--library-card-border)' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            background: 'var(--surface-bg)', borderRadius: '20px',
+            padding: '8px 14px', border: '1px solid var(--border-color)',
+          }}>
+            <Search size={14} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+            <input
+              autoFocus
+              type="text"
+              value={suggestQuery}
+              onChange={(e) => setSuggestQuery(e.target.value)}
+              placeholder="Search by name or username..."
+              style={{
+                flex: 1, border: 'none', outline: 'none', background: 'transparent',
+                fontSize: '13px', color: 'var(--ink)',
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Results */}
+        <div style={{ maxHeight: '260px', overflowY: 'auto', padding: '8px 0' }}>
+          {suggestLoading && (
+            <p style={{ textAlign: 'center', padding: '16px', color: 'var(--brass)', fontSize: '12px' }}>
+              Searching...
+            </p>
+          )}
+          {!suggestLoading && suggestQuery.trim() && suggestResults.length === 0 && (
+            <p style={{ textAlign: 'center', padding: '16px', color: 'var(--brass)', fontSize: '12px', fontStyle: 'italic' }}>
+              No readers found for "{suggestQuery}"
+            </p>
+          )}
+          {!suggestLoading && !suggestQuery.trim() && (
+            <p style={{ textAlign: 'center', padding: '16px', color: 'var(--text-secondary)', fontSize: '12px' }}>
+              Start typing to search for readers to connect with.
+            </p>
+          )}
+          {suggestResults.map((user) => {
+            const sent = sentRequests.has(user.id);
+            return (
+              <div
+                key={user.id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '8px 16px', transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--ui-hover-bg)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <Avatar user={user} size={34} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {user.name || user.username}
+                  </div>
+                  {user.username && (
+                    <div style={{ fontSize: '11px', color: 'var(--brass)' }}>@{user.username}</div>
+                  )}
+                </div>
+                <button
+                  onClick={() => !sent && handleSendFriendRequest(user.id)}
+                  disabled={sent}
+                  style={{
+                    background: sent ? 'var(--ui-hover-bg)' : 'var(--accent-color)',
+                    color: sent ? 'var(--text-secondary)' : '#fff',
+                    border: 'none',
+                    borderRadius: '20px',
+                    padding: '5px 12px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    cursor: sent ? 'default' : 'pointer',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.2s',
+                    flexShrink: 0,
+                  }}
+                >
+                  {sent ? '✓ Sent' : 'Add'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    )}
+    </>
   );
 }

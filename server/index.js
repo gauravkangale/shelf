@@ -13,6 +13,36 @@ const PORT = process.env.PORT || 3001;
 
 const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
 
+const fs = require('fs');
+const path = require('path');
+const dbFilePath = path.join(__dirname, 'db_persisted.json');
+
+function saveDb() {
+  if (isInMemory) {
+    try {
+      fs.writeFileSync(dbFilePath, JSON.stringify(inMemoryStore, null, 2), 'utf8');
+    } catch (e) {
+      console.error('Failed to write local database file:', e);
+    }
+  }
+}
+
+function loadDb() {
+  if (isInMemory && fs.existsSync(dbFilePath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(dbFilePath, 'utf8'));
+      Object.keys(inMemoryStore).forEach(key => {
+        if (Array.isArray(data[key])) {
+          inMemoryStore[key] = data[key];
+        }
+      });
+      console.log('📦 Loaded persisted local database from', dbFilePath);
+    } catch (e) {
+      console.error('Failed to read local database file:', e);
+    }
+  }
+}
+
 // ─── DB & Email clients ───────────────────────────────────────────────────────
 let isInMemory = false;
 const inMemoryStore = {
@@ -20,13 +50,13 @@ const inMemoryStore = {
   otp_tokens: [],
   sessions: [],
   messages: [],
-  groups: [
+  cohorts: [
     { id: 'g1', name: 'Design Systems', description: 'Visual design, layout components, and branding aesthetics.' },
     { id: 'g2', name: 'Engineering Core', description: 'Database performance, API endpoints, and system architecture.' },
     { id: 'g3', name: 'Product Planning', description: 'Roadmaps, feature specifications, and timeline coordination.' },
     { id: 'g4', name: 'General Assembly', description: 'All-hands discussion, general announcements, and casual chats.' }
   ],
-  group_members: [],
+  cohort_members: [],
   friendships: []
 };
 
@@ -55,26 +85,36 @@ async function sql(strings, ...values) {
     }
   }
 
+  const result = simulateSqlInMemory(strings, values);
+  const query = strings.reduce((acc, str, i) => acc + str + (values[i] !== undefined ? `__VAL_${i}__` : ''), '').trim();
+  const isMutation = query.startsWith('INSERT') || query.startsWith('UPDATE') || query.startsWith('DELETE') || query.startsWith('CREATE') || query.startsWith('ALTER');
+  if (isMutation) {
+    saveDb();
+  }
+  return result;
+}
+
+function simulateSqlInMemory(strings, values) {
   const query = strings.reduce((acc, str, i) => acc + str + (values[i] !== undefined ? `__VAL_${i}__` : ''), '').trim();
 
   if (query.startsWith('CREATE') || query.startsWith('ALTER')) {
     return [];
   }
 
-  // SELECT FROM groups
-  if (query.includes('SELECT') && query.includes('FROM groups')) {
-    if (query.includes('JOIN group_members')) {
+  // SELECT FROM cohorts
+  if (query.includes('SELECT') && query.includes('FROM cohorts')) {
+    if (query.includes('JOIN cohort_members')) {
       const userId = values[0];
-      const myGroupIds = new Set(
-        inMemoryStore.group_members
+      const myCohortIds = new Set(
+        inMemoryStore.cohort_members
           .filter(gm => gm.user_id === userId)
-          .map(gm => gm.group_id)
+          .map(gm => gm.cohort_id)
       );
-      return inMemoryStore.groups
-        .filter(g => myGroupIds.has(g.id))
+      return inMemoryStore.cohorts
+        .filter(g => myCohortIds.has(g.id))
         .sort((a, b) => a.name.localeCompare(b.name));
     }
-    return inMemoryStore.groups;
+    return inMemoryStore.cohorts;
   }
 
   // SELECT FROM users for search (ILIKE / LIKE)
@@ -86,40 +126,40 @@ async function sql(strings, ...values) {
     return inMemoryStore.users.filter(u =>
       u.id !== excludeId &&
       ((u.username && u.username.toLowerCase().includes(pattern)) ||
-       (u.name && u.name.toLowerCase().includes(pattern)))
+      (u.name && u.name.toLowerCase().includes(pattern)))
     ).slice(0, 15).map(u => ({
       id: u.id, name: u.name, username: u.username, avatar_url: u.avatar_url
     }));
   }
 
-  // INSERT INTO groups
-  if (query.includes('INSERT INTO groups')) {
+  // INSERT INTO cohorts
+  if (query.includes('INSERT INTO cohorts')) {
     const name = values[0];
     const description = values[1];
-    let grp = inMemoryStore.groups.find(g => g.name === name);
+    let grp = inMemoryStore.cohorts.find(g => g.name === name);
     if (!grp) {
       grp = { id: crypto.randomUUID(), name, description, created_at: new Date() };
-      inMemoryStore.groups.push(grp);
+      inMemoryStore.cohorts.push(grp);
     }
     return [grp];
   }
 
-  // SELECT FROM group_members
-  if (query.includes('SELECT') && query.includes('group_members')) {
+  // SELECT FROM cohort_members
+  if (query.includes('SELECT') && query.includes('cohort_members')) {
     if (query.includes('JOIN users') && query.includes('IN (')) {
       const userId = values[0];
-      const myGroupIds = new Set(
-        inMemoryStore.group_members
+      const myCohortIds = new Set(
+        inMemoryStore.cohort_members
           .filter(gm => gm.user_id === userId)
-          .map(gm => gm.group_id)
+          .map(gm => gm.cohort_id)
       );
-      return inMemoryStore.group_members
-        .filter(gm => myGroupIds.has(gm.group_id))
+      return inMemoryStore.cohort_members
+        .filter(gm => myCohortIds.has(gm.cohort_id))
         .map(gm => {
           const u = inMemoryStore.users.find(usr => usr.id === gm.user_id);
           if (!u) return null;
           return {
-            group_id: gm.group_id,
+            cohort_id: gm.cohort_id,
             id: u.id,
             name: u.name,
             username: u.username,
@@ -131,45 +171,45 @@ async function sql(strings, ...values) {
         .filter(Boolean)
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     }
-    // Membership check: WHERE group_id = X AND user_id = Y
-    if (query.includes('group_id =') && query.includes('user_id =')) {
-      const groupId = values[0];
+    // Membership check: WHERE cohort_id = X AND user_id = Y
+    if (query.includes('cohort_id =') && query.includes('user_id =')) {
+      const cohortId = values[0];
       const userId = values[1];
-      return inMemoryStore.group_members.filter(gm => gm.group_id === groupId && gm.user_id === userId);
+      return inMemoryStore.cohort_members.filter(gm => gm.cohort_id === cohortId && gm.user_id === userId);
     }
     if (query.includes('user_id =')) {
       const userId = values[0];
-      return inMemoryStore.group_members.filter(gm => gm.user_id === userId);
+      return inMemoryStore.cohort_members.filter(gm => gm.user_id === userId);
     }
-    if (query.includes('group_id =')) {
-      const groupId = values[0];
-      const matches = inMemoryStore.group_members.filter(gm => gm.group_id === groupId);
+    if (query.includes('cohort_id =')) {
+      const cohortId = values[0];
+      const matches = inMemoryStore.cohort_members.filter(gm => gm.cohort_id === cohortId);
       return matches.map(m => {
         const u = inMemoryStore.users.find(usr => usr.id === m.user_id);
         if (!u) return null;
         return { id: u.id, name: u.name, username: u.username, avatar_url: u.avatar_url, books: u.books, created_at: u.created_at };
       }).filter(Boolean);
     }
-    return inMemoryStore.group_members;
+    return inMemoryStore.cohort_members;
   }
 
-  // INSERT INTO group_members
-  if (query.includes('INSERT INTO group_members')) {
-    const groupId = values[0];
+  // INSERT INTO cohort_members
+  if (query.includes('INSERT INTO cohort_members')) {
+    const cohortId = values[0];
     const userId = values[1];
-    const exists = inMemoryStore.group_members.some(gm => gm.group_id === groupId && gm.user_id === userId);
+    const exists = inMemoryStore.cohort_members.some(gm => gm.cohort_id === cohortId && gm.user_id === userId);
     if (!exists) {
-      inMemoryStore.group_members.push({ group_id: groupId, user_id: userId });
+      inMemoryStore.cohort_members.push({ cohort_id: cohortId, user_id: userId });
     }
     return [];
   }
 
-  // DELETE FROM group_members
-  if (query.includes('DELETE FROM group_members')) {
-    const groupId = values[0];
+  // DELETE FROM cohort_members
+  if (query.includes('DELETE FROM cohort_members')) {
+    const cohortId = values[0];
     const userId = values[1];
-    inMemoryStore.group_members = inMemoryStore.group_members.filter(
-      gm => !(gm.group_id === groupId && gm.user_id === userId)
+    inMemoryStore.cohort_members = inMemoryStore.cohort_members.filter(
+      gm => !(gm.cohort_id === cohortId && gm.user_id === userId)
     );
     return [];
   }
@@ -337,6 +377,61 @@ async function sql(strings, ...values) {
 
   // UPDATE users
   if (query.includes('UPDATE users')) {
+    if (query.includes('SET otp_code =') && query.includes('otp_expires_at =')) {
+      const otp = values[0];
+      const expiresAt = values[1];
+      const purpose = values[2];
+      const userId = values[3];
+      const user = inMemoryStore.users.find(u => u.id === userId);
+      if (user) {
+        user.otp_code = otp;
+        user.otp_expires_at = expiresAt;
+        user.otp_purpose = purpose;
+        user.updated_at = new Date();
+        return [user];
+      }
+      return [];
+    }
+    if (query.includes('SET otp_code = NULL')) {
+      const nameUpdate = values[0];
+      const userId = values[1];
+      const user = inMemoryStore.users.find(u => u.id === userId);
+      if (user) {
+        user.otp_code = null;
+        user.otp_expires_at = null;
+        user.otp_purpose = null;
+        user.is_verified = true;
+        if (nameUpdate) {
+          user.name = nameUpdate;
+          user.username = nameUpdate.toLowerCase().replace(/\s+/g, '');
+        }
+        user.updated_at = new Date();
+        return [user];
+      }
+      return [];
+    }
+    if (query.includes('SET books =')) {
+      const booksJson = values[0];
+      const userId = values[1];
+      const user = inMemoryStore.users.find(u => u.id === userId);
+      if (user) {
+        user.books = booksJson ? JSON.parse(booksJson) : null;
+        user.updated_at = new Date();
+        return [user];
+      }
+      return [];
+    }
+    if (query.includes('SET daily_notes =')) {
+      const notesJson = values[0];
+      const userId = values[1];
+      const user = inMemoryStore.users.find(u => u.id === userId);
+      if (user) {
+        user.daily_notes = notesJson ? JSON.parse(notesJson) : [];
+        user.updated_at = new Date();
+        return [user];
+      }
+      return [];
+    }
     // values will be: name, username, email, avatar_url, userId
     const name = values[0];
     const username = values[1];
@@ -409,6 +504,7 @@ async function sql(strings, ...values) {
   // INSERT INTO users
   if (query.includes('INSERT INTO users')) {
     const isEmail = query.includes('email');
+    const isGoogle = query.includes('google_id');
     const identifier = values[0];
     const name = values[1];
     let user = inMemoryStore.users.find(u => isEmail ? u.email === identifier : u.phone === identifier);
@@ -418,8 +514,9 @@ async function sql(strings, ...values) {
         email: isEmail ? identifier : null,
         phone: !isEmail ? identifier : null,
         name: name || null,
-        username: name ? name.toLowerCase().replace(/\s+/g, '') : null,
-        avatar_url: '',
+        username: name ? name.toLowerCase().replace(/\s+/g, '') : (identifier ? identifier.split('@')[0] : 'user'),
+        avatar_url: isGoogle ? values[2] : '',
+        google_id: isGoogle ? values[3] : null,
         is_verified: true,
         created_at: new Date(),
         updated_at: new Date()
@@ -428,6 +525,10 @@ async function sql(strings, ...values) {
     } else {
       user.is_verified = true;
       if (name) user.name = name;
+      if (isGoogle) {
+        user.avatar_url = values[2] || user.avatar_url;
+        user.google_id = values[3];
+      }
     }
     return [user];
   }
@@ -456,29 +557,29 @@ async function sql(strings, ...values) {
   if (query.includes('SELECT') && query.includes('messages')) {
     if (query.includes('MAX(created_at)')) {
       const userId = values[0];
-      const myGroupIds = new Set(
-        inMemoryStore.group_members
+      const myCohortIds = new Set(
+        inMemoryStore.cohort_members
           .filter(gm => gm.user_id === userId)
-          .map(gm => gm.group_id)
+          .map(gm => gm.cohort_id)
       );
-      const latestByGroup = new Map();
+      const latestByCohort = new Map();
       inMemoryStore.messages
-        .filter(m => m.group_id && myGroupIds.has(m.group_id))
+        .filter(m => m.cohort_id && myCohortIds.has(m.cohort_id))
         .forEach(m => {
-          const current = latestByGroup.get(m.group_id);
+          const current = latestByCohort.get(m.cohort_id);
           if (!current || new Date(m.created_at) > new Date(current)) {
-            latestByGroup.set(m.group_id, m.created_at);
+            latestByCohort.set(m.cohort_id, m.created_at);
           }
         });
-      return Array.from(latestByGroup, ([group_id, last_message_at]) => ({
-        group_id,
+      return Array.from(latestByCohort, ([cohort_id, last_message_at]) => ({
+        cohort_id,
         last_message_at
       }));
     }
-    if (query.includes('group_id =')) {
-      const groupId = values[0];
+    if (query.includes('cohort_id =')) {
+      const cohortId = values[0];
       const msgs = inMemoryStore.messages
-        .filter(m => m.group_id === groupId)
+        .filter(m => m.cohort_id === cohortId)
         .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       // Enrich with user info
       return msgs.map(m => {
@@ -486,7 +587,7 @@ async function sql(strings, ...values) {
         return {
           id: m.id,
           senderId: m.sender_id,
-          groupId: m.group_id,
+          cohortId: m.cohort_id,
           text: m.message_text,
           createdAt: m.created_at,
           name: u.name || null,
@@ -511,14 +612,14 @@ async function sql(strings, ...values) {
 
   // INSERT INTO messages — return aliased fields matching SQL RETURNING clause
   if (query.includes('INSERT INTO messages')) {
-    if (query.includes('group_id')) {
+    if (query.includes('cohort_id')) {
       const sender_id = values[0];
-      const group_id = values[1];
+      const cohort_id = values[1];
       const message_text = values[2];
       const rawMsg = {
         id: crypto.randomUUID(),
         sender_id,
-        group_id,
+        cohort_id,
         message_text,
         created_at: new Date()
       };
@@ -527,7 +628,7 @@ async function sql(strings, ...values) {
       return [{
         id: rawMsg.id,
         senderId: rawMsg.sender_id,
-        groupId: rawMsg.group_id,
+        cohortId: rawMsg.cohort_id,
         text: rawMsg.message_text,
         createdAt: rawMsg.created_at
       }];
@@ -560,7 +661,8 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function generateOtp() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  // Use cryptographically secure random number instead of Math.random()
+  return String(crypto.randomInt(100000, 999999));
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'shelf_dev_secret_key_do_not_use_in_prod';
@@ -589,19 +691,26 @@ function verifyToken(req, res, next) {
   }
 }
 
-async function isGroupMember(groupId, userId) {
+async function isCohortMember(cohortId, userId) {
   const rows = await sql`
-    SELECT 1 FROM group_members WHERE group_id = ${groupId} AND user_id = ${userId}
+    SELECT 1 FROM cohort_members WHERE cohort_id = ${cohortId} AND user_id = ${userId}
   `;
   return rows.length > 0;
 }
 
 async function areAcceptedFriends(userId, friendId) {
-  const id1 = userId < friendId ? userId : friendId;
-  const id2 = userId < friendId ? friendId : userId;
+  if (isInMemory) {
+    const myCohorts = new Set(
+      inMemoryStore.cohort_members.filter(gm => gm.user_id === userId).map(gm => gm.cohort_id)
+    );
+    return inMemoryStore.cohort_members.some(gm => gm.user_id === friendId && myCohorts.has(gm.cohort_id));
+  }
+
   const rows = await sql`
-    SELECT 1 FROM friendships
-    WHERE user_id_1 = ${id1} AND user_id_2 = ${id2} AND status = 'accepted'
+    SELECT 1 FROM cohort_members gm1
+    JOIN cohort_members gm2 ON gm1.cohort_id = gm2.cohort_id
+    WHERE gm1.user_id = ${userId} AND gm2.user_id = ${friendId}
+    LIMIT 1
   `;
   return rows.length > 0;
 }
@@ -655,6 +764,30 @@ async function initDb() {
     try {
       const tables = await sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`;
       const tableNames = tables.map(t => t.table_name);
+      
+      // Rename groups -> cohorts
+      if (tableNames.includes('groups') && !tableNames.includes('cohorts')) {
+        console.log('🔄 Migrating groups table to cohorts...');
+        await sql`ALTER TABLE groups RENAME TO cohorts`;
+      }
+      // Rename group_members -> cohort_members
+      if (tableNames.includes('group_members') && !tableNames.includes('cohort_members')) {
+        console.log('🔄 Migrating group_members table to cohort_members...');
+        await sql`ALTER TABLE group_members RENAME TO cohort_members`;
+        await sql`ALTER TABLE cohort_members RENAME COLUMN group_id TO cohort_id`;
+      }
+      
+      // Rename group_id column to cohort_id in messages table
+      const messagesCols = await sql`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'group_id'
+      `;
+      if (messagesCols.length > 0) {
+        console.log('🔄 Migrating messages.group_id to messages.cohort_id...');
+        await sql`ALTER TABLE messages RENAME COLUMN group_id TO cohort_id`;
+      }
+
+      // Check for cleanups
       if (tableNames.includes('shortcuts') || tableNames.includes('daily_notes') || tableNames.includes('books') || tableNames.includes('sessions') || tableNames.includes('otp_tokens')) {
         console.log('🔄 Old table structure detected. Migrating database to unified schema...');
         await sql`DROP TABLE IF EXISTS friendships CASCADE`;
@@ -664,13 +797,6 @@ async function initDb() {
         await sql`DROP TABLE IF EXISTS sessions CASCADE`;
         await sql`DROP TABLE IF EXISTS otp_tokens CASCADE`;
         await sql`DROP TABLE IF EXISTS users CASCADE`;
-      }
-      if (!tableNames.includes('groups') && tableNames.includes('users')) {
-        console.log('🔄 Migrating schema for Bookshelf groups and Group Chats...');
-        await sql`DROP TABLE IF EXISTS messages CASCADE`;
-        await sql`DROP TABLE IF EXISTS friendships CASCADE`;
-        await sql`DROP TABLE IF EXISTS groups CASCADE`;
-        await sql`DROP TABLE IF EXISTS group_members CASCADE`;
       }
     } catch (e) {
       console.warn('⚠️ Migration check failed, continuing with table creation:', e.message);
@@ -701,7 +827,7 @@ async function initDb() {
     )
   `;
   await sql`
-    CREATE TABLE IF NOT EXISTS groups (
+    CREATE TABLE IF NOT EXISTS cohorts (
       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name          TEXT UNIQUE NOT NULL,
       description   TEXT,
@@ -709,10 +835,10 @@ async function initDb() {
     )
   `;
   await sql`
-    CREATE TABLE IF NOT EXISTS group_members (
-      group_id      UUID REFERENCES groups(id) ON DELETE CASCADE,
+    CREATE TABLE IF NOT EXISTS cohort_members (
+      cohort_id     UUID REFERENCES cohorts(id) ON DELETE CASCADE,
       user_id       UUID REFERENCES users(id) ON DELETE CASCADE,
-      PRIMARY KEY (group_id, user_id)
+      PRIMARY KEY (cohort_id, user_id)
     )
   `;
   await sql`
@@ -732,32 +858,33 @@ async function initDb() {
       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       sender_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       receiver_id   UUID REFERENCES users(id) ON DELETE CASCADE,
-      group_id      UUID REFERENCES groups(id) ON DELETE CASCADE,
+      cohort_id     UUID REFERENCES cohorts(id) ON DELETE CASCADE,
       message_text  TEXT NOT NULL,
       created_at    TIMESTAMPTZ DEFAULT NOW()
     )
   `;
   console.log('✅ DB tables ready');
 
-  // Seed default groups
+  // Seed default cohorts
   try {
-    const seedGroups = [
+    const seedCohorts = [
       { name: 'Design Systems', description: 'Visual design, layout components, and branding aesthetics.' },
       { name: 'Engineering Core', description: 'Database performance, API endpoints, and system architecture.' },
       { name: 'Product Planning', description: 'Roadmaps, feature specifications, and timeline coordination.' },
       { name: 'General Assembly', description: 'All-hands discussion, general announcements, and casual chats.' }
     ];
-    for (const g of seedGroups) {
+    for (const g of seedCohorts) {
       await sql`
-        INSERT INTO groups (name, description)
+        INSERT INTO cohorts (name, description)
         VALUES (${g.name}, ${g.description})
         ON CONFLICT (name) DO NOTHING
       `;
     }
-    console.log('✅ Seed groups populated');
+    console.log('✅ Seed cohorts populated');
   } catch (seedErr) {
-    console.error('⚠️ Seeding groups failed:', seedErr.message);
+    console.error('⚠️ Seeding cohorts failed:', seedErr.message);
   }
+  loadDb();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -959,10 +1086,9 @@ app.post('/api/auth/google', async (req, res) => {
         return res.status(401).json({ error: 'Invalid Google token. Verification failed.' });
       }
     } else {
-      console.warn('⚠️ GOOGLE_CLIENT_ID is not configured. Falling back to simple token decode.');
-      // Decode Google JWT (verify with Google in production)
-      const [, payloadB64] = credential.split('.');
-      payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString('utf8'));
+      // SECURITY: Do not decode without verification in production
+      console.error('⚠️ GOOGLE_CLIENT_ID is not configured. Cannot verify Google token.');
+      return res.status(500).json({ error: 'Google sign-in is not configured on this server.' });
     }
 
     if (!payload || !payload.email) return res.status(400).json({ error: 'Invalid Google token' });
@@ -1618,27 +1744,27 @@ app.get('/api/users/search', verifyToken, async (req, res) => {
   }
 });
 
-// ── POST /api/groups/create ───────────────────────────────────────────────────
-app.post('/api/groups/create', verifyToken, async (req, res) => {
+// ── POST /api/cohorts/create ───────────────────────────────────────────────────
+app.post('/api/cohorts/create', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
     const { name, description, memberIds } = req.body;
     if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Group name is required.' });
+      return res.status(400).json({ error: 'Cohort name is required.' });
     }
 
-    // Create group
-    const [group] = await sql`
-      INSERT INTO groups (name, description)
+    // Create cohort
+    const [cohort] = await sql`
+      INSERT INTO cohorts (name, description)
       VALUES (${name.trim()}, ${description || null})
       RETURNING id, name, description, created_at
     `;
 
     // Add creator as member
     await sql`
-      INSERT INTO group_members (group_id, user_id)
-      VALUES (${group.id}, ${userId})
-      ON CONFLICT (group_id, user_id) DO NOTHING
+      INSERT INTO cohort_members (cohort_id, user_id)
+      VALUES (${cohort.id}, ${userId})
+      ON CONFLICT (cohort_id, user_id) DO NOTHING
     `;
 
     // Add invited members
@@ -1646,48 +1772,48 @@ app.post('/api/groups/create', verifyToken, async (req, res) => {
       for (const memberId of memberIds) {
         if (memberId !== userId) {
           await sql`
-            INSERT INTO group_members (group_id, user_id)
-            VALUES (${group.id}, ${memberId})
-            ON CONFLICT (group_id, user_id) DO NOTHING
+            INSERT INTO cohort_members (cohort_id, user_id)
+            VALUES (${cohort.id}, ${memberId})
+            ON CONFLICT (cohort_id, user_id) DO NOTHING
           `;
         }
       }
     }
 
-    res.json({ success: true, group });
+    res.json({ success: true, group: cohort }); // map cohort to group for frontend compatibility
   } catch (err) {
-    console.error('Create group error:', err);
-    res.status(500).json({ error: 'Failed to create group.' });
+    console.error('Create cohort error:', err);
+    res.status(500).json({ error: 'Failed to create cohort.' });
   }
 });
 
-// ── GET /api/groups ──────────────────────────────────────────────────────────
-app.get('/api/groups', verifyToken, async (req, res) => {
+// ── GET /api/cohorts ──────────────────────────────────────────────────────────
+app.get('/api/cohorts', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
 
-    const groups = await sql`
+    const cohorts = await sql`
       SELECT g.id, g.name, g.description
-      FROM groups g
-      JOIN group_members mine ON mine.group_id = g.id
+      FROM cohorts g
+      JOIN cohort_members mine ON mine.cohort_id = g.id
       WHERE mine.user_id = ${userId}
       ORDER BY g.name ASC
     `;
 
-    if (groups.length === 0) return res.json({ groups: [] });
+    if (cohorts.length === 0) return res.json({ groups: [] }); // map to groups for compatibility
 
     const members = await sql`
-      SELECT gm.group_id, u.id, u.name, u.username, u.avatar_url, u.books, u.created_at
-      FROM group_members gm
+      SELECT gm.cohort_id, u.id, u.name, u.username, u.avatar_url, u.books, u.created_at
+      FROM cohort_members gm
       JOIN users u ON u.id = gm.user_id
-      WHERE gm.group_id IN (
-        SELECT group_id FROM group_members WHERE user_id = ${userId}
+      WHERE gm.cohort_id IN (
+        SELECT cohort_id FROM cohort_members WHERE user_id = ${userId}
       )
       ORDER BY u.name ASC
     `;
 
     const lastMessages = await sql`
-      SELECT m.group_id,
+      SELECT m.cohort_id,
              m.message_text AS last_message_text,
              u.name AS last_message_sender_name,
              u.username AS last_message_sender_username,
@@ -1695,32 +1821,32 @@ app.get('/api/groups', verifyToken, async (req, res) => {
              m.created_at AS last_message_at
       FROM messages m
       JOIN users u ON u.id = m.sender_id
-      WHERE m.group_id IN (
-        SELECT group_id FROM group_members WHERE user_id = ${userId}
+      WHERE m.cohort_id IN (
+        SELECT cohort_id FROM cohort_members WHERE user_id = ${userId}
       )
       AND m.created_at = (
-        SELECT MAX(created_at) FROM messages WHERE group_id = m.group_id
+        SELECT MAX(created_at) FROM messages WHERE cohort_id = m.cohort_id
       )
     `;
 
-    const membersByGroup = new Map();
-    members.forEach(({ group_id, ...member }) => {
-      if (!membersByGroup.has(group_id)) membersByGroup.set(group_id, []);
-      membersByGroup.get(group_id).push(member);
+    const membersByCohort = new Map();
+    members.forEach(({ cohort_id, ...member }) => {
+      if (!membersByCohort.has(cohort_id)) membersByCohort.set(cohort_id, []);
+      membersByCohort.get(cohort_id).push(member);
     });
 
-    const lastMessageByGroup = new Map(
-      lastMessages.map(row => [row.group_id, row])
+    const lastMessageByCohort = new Map(
+      lastMessages.map(row => [row.cohort_id, row])
     );
 
-    const enrichedGroups = groups.map((g) => {
-      const messageInfo = lastMessageByGroup.get(g.id);
+    const enrichedCohorts = cohorts.map((g) => {
+      const messageInfo = lastMessageByCohort.get(g.id);
       return {
         id: g.id,
         name: g.name,
         description: g.description,
         isMember: true,
-        members: membersByGroup.get(g.id) || [],
+        members: membersByCohort.get(g.id) || [],
         lastMessageAt: messageInfo?.last_message_at || null,
         lastMessageText: messageInfo?.last_message_text || null,
         lastMessageSenderName: messageInfo?.last_message_sender_name || null,
@@ -1729,100 +1855,100 @@ app.get('/api/groups', verifyToken, async (req, res) => {
       };
     });
 
-    res.json({ groups: enrichedGroups });
+    res.json({ groups: enrichedCohorts }); // map to groups key for frontend compatibility
   } catch (err) {
-    console.error('Fetch groups error:', err);
-    res.status(500).json({ error: 'Failed to fetch groups.' });
+    console.error('Fetch cohorts error:', err);
+    res.status(500).json({ error: 'Failed to fetch cohorts.' });
   }
 });
 
-// ── POST /api/groups/:groupId/members ───────────────────────────────────────
-app.post('/api/groups/:groupId/members', verifyToken, async (req, res) => {
+// ── POST /api/cohorts/:cohortId/members ───────────────────────────────────────
+app.post('/api/cohorts/:cohortId/members', verifyToken, async (req, res) => {
   try {
-    const { groupId } = req.params;
+    const { cohortId } = req.params;
     const { userId: targetUserId } = req.body;
     if (!targetUserId) return res.status(400).json({ error: 'userId is required.' });
 
-    // Verify requester is a member of this group
+    // Verify requester is a member of this cohort
     const membership = await sql`
-      SELECT 1 FROM group_members WHERE group_id = ${groupId} AND user_id = ${req.user.sub}
+      SELECT 1 FROM cohort_members WHERE cohort_id = ${cohortId} AND user_id = ${req.user.sub}
     `;
     if (!membership.length) {
-      return res.status(403).json({ error: 'You must be a group member to invite others.' });
+      return res.status(403).json({ error: 'You must be a cohort member to invite others.' });
     }
 
     await sql`
-      INSERT INTO group_members (group_id, user_id)
-      VALUES (${groupId}, ${targetUserId})
-      ON CONFLICT (group_id, user_id) DO NOTHING
+      INSERT INTO cohort_members (cohort_id, user_id)
+      VALUES (${cohortId}, ${targetUserId})
+      ON CONFLICT (cohort_id, user_id) DO NOTHING
     `;
     res.json({ success: true });
   } catch (err) {
-    console.error('Add group member error:', err);
+    console.error('Add cohort member error:', err);
     res.status(500).json({ error: 'Failed to add member.' });
   }
 });
 
-// ── POST /api/groups/join ────────────────────────────────────────────────────
-app.post('/api/groups/join', verifyToken, async (req, res) => {
+// ── POST /api/cohorts/join ────────────────────────────────────────────────────
+app.post('/api/cohorts/join', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const { groupId } = req.body;
-    if (!groupId) return res.status(400).json({ error: 'groupId is required.' });
+    const { groupId: cohortId } = req.body; // accept groupId for compatibility
+    if (!cohortId) return res.status(400).json({ error: 'cohortId is required.' });
 
     await sql`
-      INSERT INTO group_members (group_id, user_id)
-      VALUES (${groupId}, ${userId})
-      ON CONFLICT (group_id, user_id) DO NOTHING
+      INSERT INTO cohort_members (cohort_id, user_id)
+      VALUES (${cohortId}, ${userId})
+      ON CONFLICT (cohort_id, user_id) DO NOTHING
     `;
     res.json({ success: true });
   } catch (err) {
-    console.error('Join group error:', err);
-    res.status(500).json({ error: 'Failed to join group.' });
+    console.error('Join cohort error:', err);
+    res.status(500).json({ error: 'Failed to join cohort.' });
   }
 });
 
-// ── GET /api/chat/group/:groupId ─────────────────────────────────────────────
-app.get('/api/chat/group/:groupId', verifyToken, async (req, res) => {
+// ── GET /api/chat/cohort/:cohortId ─────────────────────────────────────────────
+app.get('/api/chat/cohort/:cohortId', verifyToken, async (req, res) => {
   try {
-    const groupId = req.params.groupId;
+    const cohortId = req.params.cohortId;
     const userId = req.user.sub;
 
-    if (!(await isGroupMember(groupId, userId))) {
-      return res.status(403).json({ error: 'You are not a member of this group.' });
+    if (!(await isCohortMember(cohortId, userId))) {
+      return res.status(403).json({ error: 'You are not a member of this cohort.' });
     }
 
     const messages = await sql`
       SELECT m.id, m.sender_id as "senderId", m.message_text as "text", m.created_at as "createdAt", u.name, u.username, u.avatar_url
       FROM messages m
       JOIN users u ON u.id = m.sender_id
-      WHERE m.group_id = ${groupId}
+      WHERE m.cohort_id = ${cohortId}
       ORDER BY m.created_at ASC
     `;
     res.json({ messages });
   } catch (err) {
-    console.error('Fetch group chat history error:', err);
-    res.status(500).json({ error: 'Failed to fetch group chat history.' });
+    console.error('Fetch cohort chat history error:', err);
+    res.status(500).json({ error: 'Failed to fetch cohort chat history.' });
   }
 });
 
-// ── POST /api/chat/group ─────────────────────────────────────────────────────
-app.post('/api/chat/group', verifyToken, async (req, res) => {
+// ── POST /api/chat/cohort ─────────────────────────────────────────────────────
+app.post('/api/chat/cohort', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const { groupId, messageText } = req.body;
-    if (!groupId || !messageText) {
-      return res.status(400).json({ error: 'groupId and messageText are required.' });
+    const { groupId: cohortId, messageText } = req.body; // accept groupId for compatibility
+    if (!cohortId || !messageText) {
+      return res.status(400).json({ error: 'cohortId and messageText are required.' });
     }
 
-    if (!(await isGroupMember(groupId, userId))) {
-      return res.status(403).json({ error: 'You are not a member of this group.' });
+    if (!(await isCohortMember(cohortId, userId))) {
+      return res.status(403).json({ error: 'You are not a member of this cohort.' });
     }
 
     const [msg] = await sql`
-      INSERT INTO messages (sender_id, group_id, message_text)
-      VALUES (${userId}, ${groupId}, ${messageText})
-      RETURNING id, sender_id as "senderId", group_id as "groupId", message_text as "text", created_at as "createdAt"
+      INSERT INTO messages (sender_id, cohort_id, message_text)
+      VALUES (${userId}, ${cohortId}, ${messageText})
+      RETURNING id, sender_id as "senderId", cohort_id as "cohortId", message_text as "text", created_at as "createdAt"
     `;
 
     const [user] = await sql`SELECT name, username, avatar_url FROM users WHERE id = ${userId}`;
@@ -1835,8 +1961,8 @@ app.post('/api/chat/group', verifyToken, async (req, res) => {
 
     res.json({ success: true, message: enrichedMsg });
   } catch (err) {
-    console.error('Send group message error:', err);
-    res.status(500).json({ error: 'Failed to send group message.' });
+    console.error('Send cohort message error:', err);
+    res.status(500).json({ error: 'Failed to send message.' });
   }
 });
 
@@ -1844,10 +1970,44 @@ app.post('/api/chat/group', verifyToken, async (req, res) => {
 app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
+    
+    // In-memory mode mock helper
+    if (isInMemory) {
+      // Find other users who share at least one cohort membership with this user
+      const myCohortIds = new Set(
+        inMemoryStore.cohort_members.filter(gm => gm.user_id === userId).map(gm => gm.cohort_id)
+      );
+      const teammateIds = new Set(
+        inMemoryStore.cohort_members
+          .filter(gm => myCohortIds.has(gm.cohort_id) && gm.user_id !== userId)
+          .map(gm => gm.user_id)
+      );
+      const teammates = inMemoryStore.users.filter(u => teammateIds.has(u.id));
+      
+      const activities = teammates.map(u => {
+        const book = u.books && u.books.title ? u.books : null;
+        return {
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          avatar_url: u.avatar_url,
+          currentBook: book ? {
+            title: book.title,
+            author: book.author,
+            currentPage: book.currentPage || book.current_page || 0,
+            totalPages: book.totalPages || book.total_pages || 100
+          } : null,
+          latestNote: null,
+          lastActive: new Date().toISOString()
+        };
+      });
+      return res.json({ teammates: activities });
+    }
+
     const teammates = await sql`
       SELECT DISTINCT u.id, u.name, u.username, u.avatar_url, u.updated_at, u.books, u.daily_notes
-      FROM group_members gm1
-      JOIN group_members gm2 ON gm1.group_id = gm2.group_id
+      FROM cohort_members gm1
+      JOIN cohort_members gm2 ON gm1.cohort_id = gm2.cohort_id
       JOIN users u ON u.id = gm2.user_id
       WHERE gm1.user_id = ${userId} AND gm2.user_id != ${userId}
     `;
@@ -1893,6 +2053,190 @@ app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
   }
 });
 
+// ── GET /api/chats/recent ───────────────────────────────────────────────────
+app.get('/api/chats/recent', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+
+    if (isInMemory) {
+      // 1. Get Cohorts user has joined
+      const myCohortIds = new Set(
+        inMemoryStore.cohort_members
+          .filter(gm => gm.user_id === userId)
+          .map(gm => gm.cohort_id)
+      );
+      const cohorts = inMemoryStore.cohorts.filter(c => myCohortIds.has(c.id));
+
+      const enrichCohorts = cohorts.map(c => {
+        const cMsgs = inMemoryStore.messages
+          .filter(m => m.cohort_id === c.id)
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        const lm = cMsgs[0];
+        const sender = lm ? (inMemoryStore.users.find(u => u.id === lm.sender_id) || {}) : {};
+        return {
+          id: c.id,
+          type: 'cohort',
+          name: c.name,
+          description: c.description,
+          lastMessageText: lm ? lm.message_text : null,
+          lastMessageAt: lm ? lm.created_at : null,
+          lastMessageSenderName: lm ? (sender.name || sender.username || 'Someone') : null,
+          lastMessageSenderAvatarUrl: lm ? sender.avatar_url : null,
+        };
+      });
+
+      // 2. Get DMs
+      const dmUsers = inMemoryStore.users.filter(u => {
+        if (u.id === userId) return false;
+        return inMemoryStore.messages.some(m =>
+          (m.sender_id === userId && m.receiver_id === u.id) ||
+          (m.sender_id === u.id && m.receiver_id === userId)
+        );
+      });
+
+      const enrichDMs = dmUsers.map(u => {
+        const uMsgs = inMemoryStore.messages
+          .filter(m =>
+            (m.sender_id === userId && m.receiver_id === u.id) ||
+            (m.sender_id === u.id && m.receiver_id === userId)
+          )
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        const lm = uMsgs[0];
+        return {
+          id: u.id,
+          type: 'private',
+          name: u.name || u.username,
+          username: u.username,
+          avatarUrl: u.avatar_url,
+          lastMessageText: lm ? lm.message_text : null,
+          lastMessageAt: lm ? lm.created_at : null,
+          lastMessageSenderName: lm ? (lm.sender_id === userId ? 'You' : (u.name || u.username)) : null,
+          lastMessageSenderAvatarUrl: u.avatar_url,
+        };
+      });
+
+      const allChats = [...enrichCohorts, ...enrichDMs];
+      allChats.sort((a, b) => {
+        if (!a.lastMessageAt) return 1;
+        if (!b.lastMessageAt) return -1;
+        return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
+      });
+
+      return res.json({ chats: allChats });
+    }
+
+    // Neon DB queries
+    const cohorts = await sql`
+      SELECT c.id, c.name, c.description
+      FROM cohorts c
+      JOIN cohort_members mine ON mine.cohort_id = c.id
+      WHERE mine.user_id = ${userId}
+    `;
+
+    const cohortLastMessages = await sql`
+      SELECT m.cohort_id, m.message_text, m.created_at, u.name as sender_name, u.username as sender_username, u.avatar_url as sender_avatar
+      FROM messages m
+      JOIN users u ON u.id = m.sender_id
+      WHERE m.cohort_id IN (
+        SELECT cohort_id FROM cohort_members WHERE user_id = ${userId}
+      )
+      AND m.created_at = (
+        SELECT MAX(created_at) FROM messages WHERE cohort_id = m.cohort_id
+      )
+    `;
+
+    const dmUsers = await sql`
+      SELECT DISTINCT u.id, u.name, u.username, u.avatar_url
+      FROM users u
+      JOIN messages m ON (m.sender_id = u.id AND m.receiver_id = ${userId})
+                      OR (m.receiver_id = u.id AND m.sender_id = ${userId})
+      WHERE u.id != ${userId}
+    `;
+
+    const dmLastMessages = await sql`
+      SELECT DISTINCT ON (partner_id)
+             CASE WHEN sender_id = ${userId} THEN receiver_id ELSE sender_id END as partner_id,
+             message_text, created_at, sender_id
+      FROM messages
+      WHERE (sender_id = ${userId} AND receiver_id IS NOT NULL)
+         OR (receiver_id = ${userId} AND sender_id IS NOT NULL)
+      ORDER BY partner_id, created_at DESC
+    `;
+
+    const cohortMsgMap = new Map(cohortLastMessages.map(m => [m.cohort_id, m]));
+    const enrichCohorts = cohorts.map(c => {
+      const lm = cohortMsgMap.get(c.id);
+      return {
+        id: c.id,
+        type: 'cohort',
+        name: c.name,
+        description: c.description,
+        lastMessageText: lm ? lm.message_text : null,
+        lastMessageAt: lm ? lm.created_at : null,
+        lastMessageSenderName: lm ? lm.sender_name : null,
+        lastMessageSenderAvatarUrl: lm ? lm.sender_avatar : null,
+      };
+    });
+
+    const dmMsgMap = new Map(dmLastMessages.map(m => [m.partner_id, m]));
+    const enrichDMs = dmUsers.map(u => {
+      const lm = dmMsgMap.get(u.id);
+      return {
+        id: u.id,
+        type: 'private',
+        name: u.name || u.username,
+        username: u.username,
+        avatarUrl: u.avatar_url,
+        lastMessageText: lm ? lm.message_text : null,
+        lastMessageAt: lm ? lm.created_at : null,
+        lastMessageSenderName: lm ? (lm.sender_id === userId ? 'You' : (u.name || u.username)) : null,
+        lastMessageSenderAvatarUrl: u.avatar_url,
+      };
+    });
+
+    const allChats = [...enrichCohorts, ...enrichDMs];
+    allChats.sort((a, b) => {
+      if (!a.lastMessageAt) return 1;
+      if (!b.lastMessageAt) return -1;
+      return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
+    });
+
+    res.json({ chats: allChats });
+});
+
+// ── DELETE /api/chat/message/:id ──────────────────────────────────────────────
+app.delete('/api/chat/message/:id', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const messageId = req.params.id;
+
+    if (isInMemory) {
+      const msgIndex = inMemoryStore.messages.findIndex(m => m.id === messageId || String(m.id) === String(messageId));
+      if (msgIndex === -1) {
+        return res.status(404).json({ error: 'Message not found.' });
+      }
+      if (inMemoryStore.messages[msgIndex].sender_id !== userId) {
+        return res.status(403).json({ error: 'You are not authorized to delete this message.' });
+      }
+      inMemoryStore.messages.splice(msgIndex, 1);
+    } else {
+      const [msg] = await sql`SELECT sender_id FROM messages WHERE id = ${messageId}`;
+      if (!msg) {
+        return res.status(404).json({ error: 'Message not found.' });
+      }
+      if (msg.sender_id !== userId) {
+        return res.status(403).json({ error: 'You are not authorized to delete this message.' });
+      }
+      await sql`DELETE FROM messages WHERE id = ${messageId}`;
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete message error:', err);
+    res.status(500).json({ error: 'Failed to delete message.' });
+  }
+});
+
 // ── GET /api/users/search ─────────────────────────────────────────────────────
 app.get('/api/users/search', verifyToken, async (req, res) => {
   try {
@@ -1916,95 +2260,66 @@ app.get('/api/users/search', verifyToken, async (req, res) => {
   }
 });
 
-// ── POST /api/groups/create ───────────────────────────────────────────────────
-app.post('/api/groups/create', verifyToken, async (req, res) => {
+// ── POST /api/cohorts/members/add ─────────────────────────────────────────────
+app.post('/api/cohorts/members/add', verifyToken, async (req, res) => {
   try {
-    const userId = req.user.sub;
-    const { name, description } = req.body;
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Group name is required.' });
+    const { groupId: cohortId, userId: targetUserId } = req.body;
+    if (!cohortId || !targetUserId) {
+      return res.status(400).json({ error: 'cohortId and userId are required.' });
     }
 
-    const [group] = await sql`
-      INSERT INTO groups (name, description, created_by)
-      VALUES (${name.trim()}, ${description ? description.trim() : null}, ${userId})
-      RETURNING id, name, description
-    `;
-
-    // Auto-add creator as member
-    await sql`
-      INSERT INTO group_members (group_id, user_id)
-      VALUES (${group.id}, ${userId})
-      ON CONFLICT (group_id, user_id) DO NOTHING
-    `;
-
-    res.json({ success: true, group });
-  } catch (err) {
-    console.error('Create group error:', err);
-    res.status(500).json({ error: 'Failed to create group.' });
-  }
-});
-
-// ── POST /api/groups/members/add ─────────────────────────────────────────────
-app.post('/api/groups/members/add', verifyToken, async (req, res) => {
-  try {
-    const { groupId, userId: targetUserId } = req.body;
-    if (!groupId || !targetUserId) {
-      return res.status(400).json({ error: 'groupId and userId are required.' });
-    }
-
-    if (!(await isGroupMember(groupId, req.user.sub))) {
-      return res.status(403).json({ error: 'You must be a group member to invite others.' });
+    if (!(await isCohortMember(cohortId, req.user.sub))) {
+      return res.status(403).json({ error: 'You must be a cohort member to invite others.' });
     }
 
     await sql`
-      INSERT INTO group_members (group_id, user_id)
-      VALUES (${groupId}, ${targetUserId})
-      ON CONFLICT (group_id, user_id) DO NOTHING
+      INSERT INTO cohort_members (cohort_id, user_id)
+      VALUES (${cohortId}, ${targetUserId})
+      ON CONFLICT (cohort_id, user_id) DO NOTHING
     `;
     res.json({ success: true });
   } catch (err) {
-    console.error('Add group member error:', err);
+    console.error('Add cohort member error:', err);
     res.status(500).json({ error: 'Failed to add member.' });
   }
 });
 
-// ── DELETE /api/groups/members/remove ────────────────────────────────────────
-app.delete('/api/groups/members/remove', verifyToken, async (req, res) => {
+// ── DELETE /api/cohorts/members/remove ────────────────────────────────────────
+app.delete('/api/cohorts/members/remove', verifyToken, async (req, res) => {
   try {
-    const { groupId, userId: targetUserId } = req.body;
-    if (!groupId || !targetUserId) {
-      return res.status(400).json({ error: 'groupId and userId are required.' });
+    const { groupId: cohortId, userId: targetUserId } = req.body;
+    if (!cohortId || !targetUserId) {
+      return res.status(400).json({ error: 'cohortId and userId are required.' });
     }
 
-    if (!(await isGroupMember(groupId, req.user.sub))) {
-      return res.status(403).json({ error: 'You must be a group member to remove members.' });
+    if (!(await isCohortMember(cohortId, req.user.sub))) {
+      return res.status(403).json({ error: 'You must be a cohort member to remove members.' });
     }
 
     await sql`
-      DELETE FROM group_members
-      WHERE group_id = ${groupId} AND user_id = ${targetUserId}
+      DELETE FROM cohort_members
+      WHERE cohort_id = ${cohortId} AND user_id = ${targetUserId}
     `;
     res.json({ success: true });
   } catch (err) {
-    console.error('Remove group member error:', err);
+    console.error('Remove cohort member error:', err);
     res.status(500).json({ error: 'Failed to remove member.' });
   }
 });
 
-// ── POST /api/groups/:groupId/leave ──────────────────────────────────────────
-app.post('/api/groups/:groupId/leave', verifyToken, async (req, res) => {
+// ── POST /api/cohorts/:cohortId/leave ──────────────────────────────────────────
+app.post('/api/cohorts/:cohortId/leave', verifyToken, async (req, res) => {
   try {
-    const { groupId } = req.params;
+    const { cohortId } = req.params;
     const userId = req.user.sub;
     await sql`
-      DELETE FROM group_members
-      WHERE group_id = ${groupId} AND user_id = ${userId}
+      DELETE FROM cohort_members
+      WHERE cohort_id = ${cohortId} AND user_id = ${userId}
     `;
     res.json({ success: true });
   } catch (err) {
-    console.error('Leave group error:', err);
-    res.status(500).json({ error: 'Failed to leave group.' });
+    console.error('Leave cohort error:', err);
+    res.status(500).json({ error: 'Failed to leave cohort.' });
   }
 });
 
@@ -2041,6 +2356,7 @@ initDb().then(() => {
 }).catch(err => {
   console.error('⚠️ DB init failed:', err.message);
   isInMemory = true;
+  loadDb();
   app.listen(PORT, () => {
     console.log(`🚀 Shelf Auth API running on http://localhost:${PORT} (Fallback Mode)`);
   });
