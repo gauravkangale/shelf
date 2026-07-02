@@ -370,6 +370,21 @@ function simulateSqlInMemory(strings, values) {
         u.username && u.username.toLowerCase() === username.toLowerCase() && (!excludeId || u.id !== excludeId)
       );
     }
+    
+    // OTP verification check
+    if (query.includes('otp_code =') && query.includes('otp_expires_at > NOW()')) {
+      const identifier = values[0]; // email or phone
+      const otp = values[1];
+      const purpose = values[2];
+      const isEmail = query.includes('email =');
+      return inMemoryStore.users.filter(u => 
+        (isEmail ? u.email === identifier : u.phone === identifier) &&
+        u.otp_code === otp &&
+        (u.otp_purpose === purpose || u.otp_purpose === 'login' || u.otp_purpose === 'signup') &&
+        new Date(u.otp_expires_at) > new Date()
+      );
+    }
+
     if (query.includes('LOWER(email) =') || query.includes('email =')) {
       const email = values[0];
       const excludeId = values[1];
@@ -1030,9 +1045,14 @@ app.post('/api/auth/send-otp', async (req, res) => {
     if (purpose === 'signup') {
       if (name) {
         const cleanName = name.trim();
-        const existingName = await sql`SELECT id FROM users WHERE LOWER(name) = LOWER(${cleanName})`;
-        if (existingName.length > 0) {
-          return res.status(409).json({ error: 'The username is already taken.' });
+        // Assume username will be based on name or provided by user later.
+        // Let's check if the generated username is taken.
+        let generatedUsername = cleanName.toLowerCase().replace(/\\s+/g, '');
+        if (generatedUsername) {
+            const existingName = await sql`SELECT id FROM users WHERE LOWER(username) = LOWER(${generatedUsername})`;
+            if (existingName.length > 0) {
+              return res.status(409).json({ error: 'The generated username is already taken. Please try a different name or login.' });
+            }
         }
       }
     }
@@ -1057,10 +1077,13 @@ app.post('/api/auth/send-otp', async (req, res) => {
         WHERE id = ${existing[0].id}
       `;
     } else {
+      // Generate initial username from name or email
+      let initialUsername = name ? name.trim().toLowerCase().replace(/\\s+/g, '') : (isEmail ? cleanId.split('@')[0] : 'user');
+      
       if (isEmail) {
         await sql`
-          INSERT INTO users (email, name, otp_code, otp_expires_at, otp_purpose, is_verified)
-          VALUES (${cleanId}, ${name || null}, ${otp}, ${expiresAt}, ${purpose}, false)
+          INSERT INTO users (email, username, name, otp_code, otp_expires_at, otp_purpose, is_verified)
+          VALUES (${cleanId}, ${initialUsername}, ${name || null}, ${otp}, ${expiresAt}, ${purpose}, false)
           ON CONFLICT (email) DO UPDATE
             SET otp_code = EXCLUDED.otp_code,
                 otp_expires_at = EXCLUDED.otp_expires_at,
@@ -1068,8 +1091,8 @@ app.post('/api/auth/send-otp', async (req, res) => {
         `;
       } else {
         await sql`
-          INSERT INTO users (phone, name, otp_code, otp_expires_at, otp_purpose, is_verified)
-          VALUES (${cleanId}, ${name || null}, ${otp}, ${expiresAt}, ${purpose}, false)
+          INSERT INTO users (phone, username, name, otp_code, otp_expires_at, otp_purpose, is_verified)
+          VALUES (${cleanId}, ${initialUsername}, ${name || null}, ${otp}, ${expiresAt}, ${purpose}, false)
           ON CONFLICT (phone) DO UPDATE
             SET otp_code = EXCLUDED.otp_code,
                 otp_expires_at = EXCLUDED.otp_expires_at,
@@ -1142,7 +1165,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
           otp_expires_at = NULL,
           otp_purpose = NULL,
           is_verified = true,
-          name = ${nameUpdate}
+          name = COALESCE(${nameUpdate}, name)
       WHERE id = ${user.id}
       RETURNING *
     `;
@@ -1203,10 +1226,12 @@ app.post('/api/auth/google', async (req, res) => {
 
     if (!payload || !payload.email) return res.status(400).json({ error: 'Invalid Google token' });
 
+    let initialUsername = payload.name ? payload.name.trim().toLowerCase().replace(/\\s+/g, '') : payload.email.split('@')[0];
+
     // Upsert user
     const [user] = await sql`
-      INSERT INTO users (email, name, avatar_url, google_id, is_verified)
-      VALUES (${payload.email}, ${payload.name}, ${payload.picture}, ${payload.sub}, true)
+      INSERT INTO users (email, username, name, avatar_url, google_id, is_verified)
+      VALUES (${payload.email}, ${initialUsername}, ${payload.name}, ${payload.picture}, ${payload.sub}, true)
       ON CONFLICT (email) DO UPDATE
         SET google_id   = EXCLUDED.google_id,
             avatar_url  = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
@@ -1949,6 +1974,32 @@ app.get('/api/chat/:friendId', verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'You are not friends with this user.' });
     }
 
+    if (isInMemory) {
+      // Mark all unread incoming messages from this friend as read
+      inMemoryStore.messages
+        .filter(m => m.sender_id === friendId && m.receiver_id === userId && !m.read)
+        .forEach(m => { m.read = true; });
+      saveDb();
+
+      const messages = inMemoryStore.messages
+        .filter(m =>
+          (m.sender_id === userId && m.receiver_id === friendId) ||
+          (m.sender_id === friendId && m.receiver_id === userId)
+        )
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        .map(m => ({
+          id: m.id,
+          senderId: m.sender_id,
+          receiverId: m.receiver_id,
+          text: m.message_text,
+          imageUrl: m.image_url,
+          read: m.read,
+          createdAt: m.created_at
+        }));
+
+      return res.json({ messages });
+    }
+
     // Mark all unread incoming messages from this friend as read
     await sql`
       UPDATE messages
@@ -1987,6 +2038,49 @@ app.post('/api/chat', verifyToken, async (req, res) => {
 
     if (!(await areAcceptedFriends(userId, receiverId))) {
       return res.status(403).json({ error: 'You are not friends with this user.' });
+    }
+
+    if (isInMemory) {
+      const msg = {
+        id: crypto.randomUUID(),
+        sender_id: userId,
+        receiver_id: receiverId,
+        cohort_id: null,
+        message_text: messageText || null,
+        image_url: imageUrl || null,
+        read: false,
+        created_at: new Date().toISOString()
+      };
+      inMemoryStore.messages.push(msg);
+      saveDb();
+
+      // Create notification
+      try {
+        const sender = inMemoryStore.users.find(u => u.id === userId) || {};
+        const senderName = sender.name || sender.username || 'Someone';
+        await createNotification({
+          recipientId: receiverId,
+          type: 'private_message',
+          title: `Message from ${senderName}`,
+          body: messageText ? (messageText.slice(0, 80) + (messageText.length > 80 ? '…' : '')) : 'Sent an attachment',
+          senderId: userId
+        });
+      } catch (notifErr) {
+        console.error('Notification error:', notifErr.message);
+      }
+
+      return res.json({
+        success: true,
+        message: {
+          id: msg.id,
+          senderId: msg.sender_id,
+          receiverId: msg.receiver_id,
+          text: msg.message_text,
+          imageUrl: msg.image_url,
+          read: msg.read,
+          createdAt: msg.created_at
+        }
+      });
     }
 
     const [msg] = await sql`
@@ -2354,6 +2448,14 @@ app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
           .filter(gm => myCohortIds.has(gm.cohort_id) && gm.user_id !== userId)
           .map(gm => gm.user_id)
       );
+      // Include accepted friends
+      inMemoryStore.friendships
+        .filter(f => f.status === 'accepted' && (f.user_id_1 === userId || f.user_id_2 === userId))
+        .forEach(f => {
+          const friendId = f.user_id_1 === userId ? f.user_id_2 : f.user_id_1;
+          teammateIds.add(friendId);
+        });
+
       const teammates = inMemoryStore.users.filter(u => teammateIds.has(u.id));
 
       const activities = teammates.map(u => {
@@ -2387,10 +2489,13 @@ app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
                FROM messages m 
                WHERE m.sender_id = u.id AND m.receiver_id = ${userId} AND m.read = false
              ), 0) as "unreadCount"
-      FROM cohort_members gm1
-      JOIN cohort_members gm2 ON gm1.cohort_id = gm2.cohort_id
-      JOIN users u ON u.id = gm2.user_id
-      WHERE gm1.user_id = ${userId} AND gm2.user_id != ${userId}
+      FROM users u
+      LEFT JOIN cohort_members gm2 ON gm2.user_id = u.id
+      LEFT JOIN cohort_members gm1 ON gm1.cohort_id = gm2.cohort_id AND gm1.user_id = ${userId}
+      LEFT JOIN friendships f ON (f.user_id_1 = u.id AND f.user_id_2 = ${userId})
+                              OR (f.user_id_2 = u.id AND f.user_id_1 = ${userId})
+      WHERE u.id != ${userId}
+        AND (gm1.user_id IS NOT NULL OR f.status = 'accepted')
     `;
 
     const activities = [];
@@ -2467,14 +2572,28 @@ app.get('/api/chats/recent', verifyToken, async (req, res) => {
         };
       });
 
-      // 2. Get DMs
-      const dmUsers = inMemoryStore.users.filter(u => {
+      // 2. Get DMs — include friends even without messages
+      const friendIds = new Set();
+      inMemoryStore.friendships
+        .filter(f => f.status === 'accepted' && (f.user_id_1 === userId || f.user_id_2 === userId))
+        .forEach(f => {
+          const otherId = f.user_id_1 === userId ? f.user_id_2 : f.user_id_1;
+          friendIds.add(otherId);
+        });
+
+      const dmUserIds = new Set();
+      // Users with existing messages
+      inMemoryStore.users.filter(u => {
         if (u.id === userId) return false;
         return inMemoryStore.messages.some(m =>
           (m.sender_id === userId && m.receiver_id === u.id) ||
           (m.sender_id === u.id && m.receiver_id === userId)
         );
-      });
+      }).forEach(u => dmUserIds.add(u.id));
+      // Also include all accepted friends
+      friendIds.forEach(fid => dmUserIds.add(fid));
+
+      const dmUsers = inMemoryStore.users.filter(u => dmUserIds.has(u.id));
 
       const enrichDMs = dmUsers.map(u => {
         const uMsgs = inMemoryStore.messages
@@ -2526,6 +2645,17 @@ app.get('/api/chats/recent', verifyToken, async (req, res) => {
       )
     `;
 
+    // Get all accepted friends (regardless of messages)
+    const acceptedFriends = await sql`
+      SELECT u.id, u.name, u.username, u.avatar_url
+      FROM friendships f
+      JOIN users u ON (u.id = f.user_id_1 OR u.id = f.user_id_2)
+      WHERE (f.user_id_1 = ${userId} OR f.user_id_2 = ${userId})
+        AND f.status = 'accepted'
+        AND u.id != ${userId}
+    `;
+
+    // Get DM users who have exchanged messages (may overlap with friends)
     const dmUsers = await sql`
       SELECT DISTINCT u.id, u.name, u.username, u.avatar_url
       FROM users u
@@ -2533,6 +2663,12 @@ app.get('/api/chats/recent', verifyToken, async (req, res) => {
                       OR (m.receiver_id = u.id AND m.sender_id = ${userId})
       WHERE u.id != ${userId}
     `;
+
+    // Merge friends + DM users (deduplicated by ID)
+    const allDmUserMap = new Map();
+    for (const u of acceptedFriends) allDmUserMap.set(u.id, u);
+    for (const u of dmUsers) if (!allDmUserMap.has(u.id)) allDmUserMap.set(u.id, u);
+    const allDmUsers = Array.from(allDmUserMap.values());
 
     const dmLastMessages = await sql`
       SELECT DISTINCT ON (partner_id)
@@ -2561,7 +2697,7 @@ app.get('/api/chats/recent', verifyToken, async (req, res) => {
     });
 
     const dmMsgMap = new Map(dmLastMessages.map(m => [m.partner_id, m]));
-    const enrichDMs = dmUsers.map(u => {
+    const enrichDMs = allDmUsers.map(u => {
       const lm = dmMsgMap.get(u.id);
       return {
         id: u.id,

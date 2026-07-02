@@ -1,99 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  Search, MessageSquare, X, Send, Check, Trash2, ArrowLeft, Bell, BookOpen
-} from 'lucide-react';
-import { LibraryCardModal } from './Header';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Search, Send, ArrowLeft, BookOpen, Trash2, Users, MessageSquare, Image, X, MoreVertical, BookUser, MessageCircle } from 'lucide-react';
 
-// ── Decorative SVG Icons ──────────────────────────────────────────────────────
-const WingIcon = ({ isLeft = true, color = 'currentColor', size = 18 }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke={color}
-    strokeWidth="2.2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{ transform: isLeft ? 'none' : 'scaleX(-1)', flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}
-  >
-    <path d="M22 6c-3.5 0-7 2-9 5-1-1.5-3-2.5-5-2.5-3.5 0-6 2.5-6 6 0 2 1.5 3.5 3 4 2.5.5 5.5-1.5 7-4 .5 1.5 1.5 2.5 3 2.5 2 0 3-1.5 3.5-3 .5 1 1.5 1.5 2.5 1.5 1.5 0 2-1 2-2.5 0-3.5-1-6-4-6z" />
-    <path d="M13 11c-1.5 2-3.5 3-5.5 3" />
-    <path d="M16 12.5c-1 1.5-2.5 2-4 2" />
-  </svg>
-);
 
-const ButterflyIcon = ({ color = 'currentColor', size = 14, style = {} }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke={color}
-    strokeWidth="2.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{ fill: 'currentColor', color, ...style }}
-  >
-    <path d="M12 12C9 7 4 5 3 8C2 10 4 13 8 13C5 14 3 16 3 18C3 20 6 20 9 16C10 18 11 20 12 20" />
-    <path d="M12 12C15 7 20 5 21 8C22 10 20 13 16 13C19 14 21 16 21 18C21 20 18 20 15 16C14 18 13 20 12 20" />
-    <line x1="12" y1="6" x2="12" y2="20" strokeWidth="2.5" />
-    <path d="M10 4c0-1 1-2 2-2s2 1 2 2" strokeWidth="1.5" fill="none" />
-  </svg>
-);
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function formatTime(dateVal) {
+  if (!dateVal) return '';
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (diff < 604800000) return d.toLocaleDateString([], { weekday: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
 
-const SparkleIcon = ({ color = 'currentColor', size = 14, style = {} }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    style={{ color, ...style }}
-  >
-    <path d="M12 2 Q12 12 22 12 Q12 12 12 22 Q12 12 2 12 Q12 12 12 2 Z" />
-  </svg>
-);
-
-const BowIcon = ({ color = 'currentColor', size = 14, style = {} }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke={color}
-    strokeWidth="2.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{ fill: 'currentColor', color, ...style }}
-  >
-    <path d="M12 12 C9 6, 4 6, 4 12 C 4 18, 9 18, 12 12" />
-    <path d="M12 12 C15 6, 20 6, 20 12 C 20 18, 15 18, 12 12" />
-    <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" />
-    <path d="M10 14 L7 20" />
-    <path d="M14 14 L17 20" />
-  </svg>
-);
-
-const ShieldIcon = ({ size = 11, color = 'currentColor' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-  </svg>
-);
-
-const HeartIcon = ({ size = 11, color = 'currentColor' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>
-    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-  </svg>
-);
-
-const CameraIcon = ({ size = 11, color = 'currentColor' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>
-    <path d="M23 7l-7 5 7 5V7z"/>
-    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-  </svg>
-);
-
-// ── Debounce ──────────────────────────────────────────────────────────────────
 function useDebounce(value, delay) {
   const [dv, setDv] = useState(value);
   useEffect(() => {
@@ -103,28 +25,53 @@ function useDebounce(value, delay) {
   return dv;
 }
 
-// ── Format time ───────────────────────────────────────────────────────────────
-function formatTime(dateVal) {
-  if (!dateVal) return '';
-  const d = new Date(dateVal);
-  if (isNaN(d.getTime())) return '';
-  const now = new Date();
-  const diff = now - d;
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+// Fetch with timeout
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(id);
   }
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
-    ' · ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// ── Avatar ────────────────────────────────────────────────────────────────────
+// Compress image before sending to avoid payload limits and speed up transfers
+function compressImage(base64Str, maxWidth = 1000, maxHeight = 1000) {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.src = base64Str;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.onerror = () => resolve(base64Str);
+  });
+}
+
+// ─── Avatar ───────────────────────────────────────────────────────────────────
 function Avatar({ user, size = 36 }) {
   const initial = (user?.name || user?.username || '?').charAt(0).toUpperCase();
   const palettes = ['#c41e3a', '#1b3d2f', '#1e355c', '#61461b', '#4a1a5c', '#1a3d4f'];
-  const color = palettes[(initial.charCodeAt(0) || 0) % palettes.length];
-
+  const bg = palettes[(initial.charCodeAt(0) || 0) % palettes.length];
   if (user?.avatar_url || user?.avatar) {
     return (
       <img src={user.avatar_url || user.avatar} alt={user.name || ''}
@@ -134,9 +81,9 @@ function Avatar({ user, size = 36 }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: color, color: '#fff', display: 'flex',
+      background: bg, color: '#fff', display: 'flex',
       alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.38, fontWeight: '700',
+      fontSize: size * 0.4, fontWeight: '700',
       fontFamily: 'var(--font-serif, Georgia, serif)', userSelect: 'none'
     }}>
       {initial}
@@ -144,986 +91,1190 @@ function Avatar({ user, size = 36 }) {
   );
 }
 
-// ── Top Search Bar (shared) ───────────────────────────────────────────────────
-function TopBar({ searchQuery, onSearchChange, searchPlaceholder, currentUser, rightAction, inputRef, onProfileClick, onBellClick }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '16px 48px', borderBottom: '1px solid rgba(0,0,0,0.06)',
-      background: 'var(--bg-color, #f5f4ee)',
-      position: 'sticky', top: 0, zIndex: 30,
-      backdropFilter: 'blur(12px)'
-    }}>
-      <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
-        <Search size={14} style={{
-          position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)',
-          color: '#9a9a94', pointerEvents: 'none'
-        }} />
-        <input
-          ref={inputRef}
-          type="text" value={searchQuery}
-          onChange={e => onSearchChange(e.target.value)}
-          placeholder={searchPlaceholder || 'Search...'}
-          style={{
-            width: '100%', boxSizing: 'border-box',
-            padding: '10px 16px 10px 40px',
-            border: '1.5px solid transparent', borderRadius: '24px',
-            background: 'rgba(0,0,0,0.05)',
-            fontFamily: 'var(--font-sans)', fontSize: '14px',
-            color: 'var(--ink)', outline: 'none', transition: 'border-color 0.2s, background 0.2s'
-          }}
-          onFocus={e => { e.target.style.borderColor = 'var(--ink)'; e.target.style.background = 'var(--surface-bg)'; }}
-          onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.background = 'rgba(0,0,0,0.05)'; }}
-        />
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-        {currentUser && (
-          <button
-            type="button"
-            style={{
-              display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
-              background: 'transparent', border: 'none', padding: 0, fontFamily: 'var(--font-sans)'
-            }}
-            onClick={onProfileClick}
-            aria-label="Open profile settings"
-          >
-            <Avatar user={currentUser} size={36} />
-            <span style={{ fontSize: '14px', fontWeight: '500', color: 'var(--ink)' }}>
-              {currentUser.name || currentUser.username}
-            </span>
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onBellClick}
-          aria-label="Open activity notifications"
-          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex' }}
-        >
-          <Bell size={18} style={{ color: 'var(--text-secondary)' }} />
-        </button>
-        {rightAction}
-      </div>
-    </div>
-  );
-}
+// ─── Chat Conversation View ───────────────────────────────────────────────────
+function ChatView({ friend, currentUser, token, onBack }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
-// ── Main Component ────────────────────────────────────────────────────────────
-export default function FriendsSection({ setActiveTab }) {
-  const [shelfSearch, setShelfSearch] = useState('');
-  const [teammates, setTeammates] = useState([]);
-  const [selectedTeammate, setSelectedTeammate] = useState(null);
-  const [privateMessages, setPrivateMessages] = useState([]);
-  const [activeProfileCard, setActiveProfileCard] = useState(null);
-
-  useEffect(() => {
-    const handleOpenProfile = (e) => {
-      if (e.detail?.user) {
-        setActiveProfileCard(e.detail.user);
-      }
-    };
-    window.addEventListener('open-profile-card', handleOpenProfile);
-    return () => window.removeEventListener('open-profile-card', handleOpenProfile);
-  }, []);
-
-  const [dmInput, setDmInput] = useState('');
-  const [dmSendLoading, setDmSendLoading] = useState(false);
-  const [selectedMsgIds, setSelectedMsgIds] = useState([]);
+  // Message selection states
   const [isSelectMode, setIsSelectMode] = useState(false);
-  const [token, setToken] = useState(() => localStorage.getItem('shelf_auth_token'));
-  const [currentUser, setCurrentUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('shelf_current_user') || 'null'); } catch { return null; }
-  });
-  const currentUserId = currentUser?.id;
+  const [selectedMsgIds, setSelectedMsgIds] = useState([]);
+  const [showMenu, setShowMenu] = useState(false);
 
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const endRef = useRef(null);
+  const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const pollRef = useRef(null);
+  const menuRef = useRef(null);
 
-  const chatEndRef = useRef(null);
-  const debouncedSearch = useDebounce(shelfSearch, 350);
-
-  // Sync user token
-  useEffect(() => {
-    const handleSync = () => {
-      setToken(localStorage.getItem('shelf_auth_token'));
-      try {
-        setCurrentUser(JSON.parse(localStorage.getItem('shelf_current_user') || 'null'));
-      } catch {}
-    };
-    window.addEventListener('storage', handleSync);
-    window.addEventListener('user-switched', handleSync);
-    return () => {
-      window.removeEventListener('storage', handleSync);
-      window.removeEventListener('user-switched', handleSync);
-    };
-  }, []);
-
-  // Fetch classmates (teammates)
-  const fetchTeammates = async () => {
-    if (!token) return;
-    try {
-      const res = await fetch('/api/teammates/mutual', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTeammates(data.teammates || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch teammates:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchTeammates();
-    const interval = setInterval(fetchTeammates, 20000);
-    return () => clearInterval(interval);
-  }, [token]);
-
-  // General user search
-  useEffect(() => {
-    if (debouncedSearch.length < 2) {
-      setSearchResults([]);
+  const fetchMessages = useCallback(async (isInitial = false) => {
+    if (!token || !friend?.id) {
+      setLoading(false);
       return;
     }
-    const runSearch = async () => {
-      setSearchLoading(true);
-      try {
-        const res = await fetch(`/api/users/search?q=${encodeURIComponent(debouncedSearch)}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          // Filter out self from search results
-          setSearchResults((data.users || []).filter(u => u.id !== currentUserId));
-        }
-      } catch (err) {
-        console.error('User search failed:', err);
-      } finally {
-        setSearchLoading(false);
+    try {
+      const res = await fetchWithTimeout(`/api/chat/${friend.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }, 10000);
+
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data.messages || []);
+        setError(null);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        if (isInitial) setError(errData.error || 'Could not load messages.');
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        if (isInitial) setError('Request timed out. Check your connection.');
+      } else if (isInitial) {
+        setError('Network error. Please try again.');
+      }
+    } finally {
+      if (isInitial) setLoading(false);
+    }
+  }, [token, friend?.id]);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    setMessages([]);
+    setImagePreview(null);
+    setIsSelectMode(false);
+    setSelectedMsgIds([]);
+    fetchMessages(true);
+
+    pollRef.current = setInterval(() => fetchMessages(false), 4000);
+    return () => clearInterval(pollRef.current);
+  }, [fetchMessages]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, [friend?.id]);
+
+  // Handle clicking outside 3-dot dropdown to close it
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (showMenu && menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowMenu(false);
       }
     };
-    runSearch();
-  }, [debouncedSearch, token, currentUserId]);
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showMenu]);
 
-  // Fetch DM messages
-  const fetchPrivateMessages = async (friendId) => {
-    if (!token) return;
-    try {
-      const res = await fetch(`/api/chat/${friendId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPrivateMessages(data.messages || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch DM messages:', err);
+  // Message context menu trigger hook
+  const [activeMsgMenuId, setActiveMsgMenuId] = useState(null);
+
+  useEffect(() => {
+    const closeMsgMenu = () => setActiveMsgMenuId(null);
+    document.addEventListener('click', closeMsgMenu);
+    return () => document.removeEventListener('click', closeMsgMenu);
+  }, []);
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file.');
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        // Compress image client side down to safe dimensions and size
+        const compressed = await compressImage(reader.result);
+        setImagePreview(compressed);
+      } catch (err) {
+        console.error('Image compression failed, using original:', err);
+        setImagePreview(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
-  useEffect(() => {
-    if (!selectedTeammate) return;
-    fetchPrivateMessages(selectedTeammate.id);
-    const interval = setInterval(() => fetchPrivateMessages(selectedTeammate.id), 3000);
-    return () => clearInterval(interval);
-  }, [selectedTeammate?.id, token]);
-
-  // Scroll to bottom
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [privateMessages]);
-
-  // Send Direct Message
-  const handleSendDm = async (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
-    if (!dmInput.trim() || !selectedTeammate || dmSendLoading) return;
+    const text = input.trim();
+    const image = imagePreview;
 
-    const text = dmInput.trim();
-    setDmInput('');
-    setDmSendLoading(true);
+    if ((!text && !image) || sending || !token) return;
+
+    setInput('');
+    setImagePreview(null);
+    setSending(true);
+
+    // Optimistic update
+    const tempId = `opt-${Date.now()}`;
+    const optimistic = {
+      id: tempId,
+      senderId: currentUser?.id,
+      text,
+      imageUrl: image,
+      createdAt: new Date().toISOString(),
+      optimistic: true
+    };
+    setMessages(prev => [...prev, optimistic]);
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetchWithTimeout('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          receiverId: selectedTeammate.id,
-          messageText: text
-        })
-      });
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ receiverId: friend.id, messageText: text, imageUrl: image })
+      }, 15000);
+
       if (res.ok) {
         const data = await res.json();
-        if (data.message) {
-          setPrivateMessages(prev => [...prev, data.message]);
-        }
+        setMessages(prev => prev.map(m => m.id === tempId ? (data.message || { ...m, optimistic: false }) : m));
+        setError(null);
       } else {
-        alert('Failed to send message.');
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        const errData = await res.json().catch(() => ({}));
+        setError(errData.error || 'Failed to send.');
+        setTimeout(() => setError(null), 4000);
       }
-    } catch (err) {
-      console.error('Failed to send message:', err);
+    } catch {
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setError('Send failed. Check your connection.');
+      setTimeout(() => setError(null), 4000);
     } finally {
-      setDmSendLoading(false);
+      setSending(false);
     }
   };
 
-  // Delete message handler (inline or bulk)
-  const handleDeleteMessages = async (msgIdsToDelete) => {
-    if (!msgIdsToDelete || msgIdsToDelete.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${msgIdsToDelete.length === 1 ? 'this message' : 'the selected messages'}?`)) return;
+  const handleDelete = async (msgId) => {
+    if (!window.confirm('Delete this message?')) return;
+    setMessages(prev => prev.filter(m => m.id !== msgId));
+    try {
+      await fetchWithTimeout(`/api/chat/message/${msgId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch { }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedMsgIds.length === 0) return;
+    if (!window.confirm(`Delete the ${selectedMsgIds.length} selected message(s)?`)) return;
+
+    setMessages(prev => prev.filter(m => !selectedMsgIds.includes(m.id)));
+    const ids = [...selectedMsgIds];
+    setSelectedMsgIds([]);
+    setIsSelectMode(false);
 
     try {
-      const deletePromises = msgIdsToDelete.map(id =>
-        fetch(`/api/chat/message/${id}`, {
+      await Promise.all(ids.map(id =>
+        fetchWithTimeout(`/api/chat/message/${id}`, {
           method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-      );
-
-      await Promise.all(deletePromises);
-
-      setPrivateMessages(prev => prev.filter(m => !msgIdsToDelete.includes(m.id)));
-      setSelectedMsgIds([]);
-      setIsSelectMode(false);
-    } catch (err) {
-      console.error('Failed to delete messages:', err);
-      alert('Failed to delete message(s).');
+          headers: { Authorization: `Bearer ${token}` }
+        }, 8000)
+      ));
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  const toggleSelectMessage = (id) => {
-    setSelectedMsgIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
+  const handleClearChat = async () => {
+    if (!window.confirm('Clear all messages in this conversation? This cannot be undone.')) return;
+    setMessages([]);
+    setShowMenu(false);
+    try {
+      const ids = messages.map(m => m.id);
+      await Promise.all(ids.map(id =>
+        fetchWithTimeout(`/api/chat/message/${id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        }, 8000)
+      ));
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const openNotifications = () => {
-    alert('Activity notifications list is coming soon!');
-  };
+  const friendName = friend?.name || friend?.username || 'Reader';
+  const currentBook = friend?.currentBook;
 
-  // ─── 1. Selected Teammate FULL PAGE DM Chat layout ───────────────────────
-  if (selectedTeammate) {
-    const teammateName = selectedTeammate.name || selectedTeammate.username || 'Teammate';
-    const book = selectedTeammate.currentBook;
-    const initial = teammateName.charAt(0).toUpperCase();
-    const palettes = ['#c41e3a', '#1b3d2f', '#1e355c', '#61461b', '#4a1a5c', '#1a3d4f'];
-    const avatarColor = palettes[(initial.charCodeAt(0) || 0) % palettes.length];
-
-    return (
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      background: 'var(--option-bg, #f7f3e9)',
+      position: 'relative'
+    }}>
+      {/* Chat Header */}
       <div style={{
-        marginLeft: '80px', height: '100vh', display: 'flex', flexDirection: 'column',
-        fontFamily: 'var(--font-sans)', background: 'var(--bg-color, #f5f4ee)', overflow: 'hidden'
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '16px 24px',
+        borderBottom: '1px solid var(--border-color)',
+        background: 'var(--surface-bg)',
+        flexShrink: 0,
+        boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+        zIndex: 10,
+        position: 'relative'
       }}>
-        {/* Chat Header top section */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '16px 28px', borderBottom: '1px solid rgba(0,0,0,0.06)',
-          background: 'var(--bg-color, #f5f4ee)', flexShrink: 0
-        }}>
-          {selectedMsgIds.length > 0 ? (
-            /* Bulk delete action header */
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--ink)' }}>
-                Selected {selectedMsgIds.length} {selectedMsgIds.length === 1 ? 'message' : 'messages'}
-              </span>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
-                  onClick={() => handleDeleteMessages(selectedMsgIds)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '8px 16px', background: 'var(--danger-color, #d94a43)',
-                    color: '#fff', border: 'none', borderRadius: '18px',
-                    fontSize: '13px', fontWeight: '600', cursor: 'pointer'
-                  }}
-                >
-                  <Trash2 size={14} /> Delete Selected
-                </button>
-                <button
-                  onClick={() => { setSelectedMsgIds([]); setIsSelectMode(false); }}
-                  style={{
-                    padding: '8px 16px', background: 'transparent',
-                    border: '1.5px solid var(--border-color)', borderRadius: '18px',
-                    fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer'
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* Standard info header */
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', width: '100%', position: 'relative' }}>
+        {isSelectMode ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--ink)' }}>
+              Selected {selectedMsgIds.length} {selectedMsgIds.length === 1 ? 'message' : 'messages'}
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
               <button
-                onClick={() => setSelectedTeammate(null)}
-                aria-label="Back to chat list"
+                onClick={handleDeleteSelected}
+                disabled={selectedMsgIds.length === 0}
                 style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  padding: '8px', borderRadius: '50%', color: 'var(--ink)',
-                  transition: 'background 0.2s'
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 16px', background: selectedMsgIds.length > 0 ? 'var(--danger-color, #d94a43)' : 'rgba(0,0,0,0.06)',
+                  color: selectedMsgIds.length > 0 ? '#fff' : 'var(--text-secondary)', border: 'none', borderRadius: '18px',
+                  fontSize: '12px', fontWeight: '700', cursor: selectedMsgIds.length > 0 ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.2s'
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <Trash2 size={13} /> Delete
+              </button>
+              <button
+                onClick={() => {
+                  setIsSelectMode(false);
+                  setSelectedMsgIds([]);
+                }}
+                style={{
+                  padding: '8px 16px', background: 'transparent',
+                  border: '1.5px solid var(--border-color)', borderRadius: '18px',
+                  fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+              {/* Back button for mobile view */}
+              <button
+                className="chat-back-btn"
+                onClick={onBack}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', padding: '8px',
+                  borderRadius: '50%', color: 'var(--ink)', display: 'none',
+                  alignItems: 'center', transition: 'background 0.2s', marginRight: '4px'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.06)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
               >
                 <ArrowLeft size={20} />
               </button>
 
-              <div 
-                style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', flex: 1, minWidth: 0 }}
-                onClick={() => {
-                  setActiveProfileCard(selectedTeammate);
-                }}
-              >
-                {selectedTeammate.avatar_url || selectedTeammate.avatar ? (
-                  <img src={selectedTeammate.avatar_url || selectedTeammate.avatar} alt={teammateName} style={{
-                    width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover',
-                    border: '2px solid var(--accent-color)', flexShrink: 0
-                  }} />
-                ) : (
-                  <div style={{
-                    width: '40px', height: '40px', borderRadius: '50%', background: avatarColor,
-                    color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: '700', fontSize: '16px', border: '2px solid var(--accent-color)', flexShrink: 0
-                  }}>
-                    {initial}
-                  </div>
-                )}
+              <Avatar user={friend} size={42} />
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--ink)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {teammateName}
-                    <span style={{ fontSize: '12px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>@{selectedTeammate.username}</span>
-                  </h3>
-                  {book ? (
-                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '2px 0 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <BookOpen size={12} style={{ color: 'var(--brass)' }} />
-                      Reading <strong>{book.title}</strong> by {book.author} · {Math.round((book.currentPage / book.totalPages) * 100)}% progress
-                    </p>
-                  ) : (
-                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
-                      Direct Conversations
-                    </p>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: '800', fontSize: '15px', color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {friendName}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--brass)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>@{friend.username}</span>
+                  {currentBook && (
+                    <>
+                      <span style={{ opacity: 0.5 }}>·</span>
+                      <span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <BookOpen size={10} style={{ color: 'var(--brass)' }} />
+                        Reading <strong>{currentBook.title}</strong>
+                      </span>
+                    </>
                   )}
                 </div>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Messages List Area */}
-        <div style={{
-          flex: 1, overflowY: 'auto', padding: '24px',
-          background: 'var(--option-bg, #f7f3e9)', borderRadius: '16px',
-          margin: '12px 24px', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.02)',
-          display: 'flex', flexDirection: 'column', gap: '16px'
-        }}>
-          {privateMessages.length === 0 ? (
-            <div style={{
-              margin: 'auto', textAlign: 'center', color: 'var(--text-secondary)',
-              fontSize: '13px', fontStyle: 'italic', maxWidth: '280px', lineHeight: '1.6'
-            }}>
-              No messages here yet. Send a friendly greeting to start a conversation!
-            </div>
-          ) : (
-            privateMessages.map((m) => {
-              const isSelf = m.senderId === currentUserId;
-              const msgDateLabel = formatTime(m.createdAt);
-              const isSelected = selectedMsgIds.includes(m.id);
+            {/* 3-dot dropdown menu trigger */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowMenu(v => !v)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', padding: '8px',
+                  borderRadius: '50%', color: 'var(--ink)', display: 'flex',
+                  alignItems: 'center', transition: 'background 0.2s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                title="Options"
+              >
+                <MoreVertical size={20} />
+              </button>
 
-              const textLower = (m.text || '').toLowerCase();
-              const isSystemNotification = textLower.includes('subscribed') || 
-                                           textLower.includes('cheered') || 
-                                           textLower.includes('tipped') || 
-                                           textLower.includes('bits') ||
-                                           textLower.includes('subscription');
-
-              if (isSystemNotification) {
-                return (
-                  <div
-                    key={m.id}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      width: '100%',
-                      margin: '16px 0',
-                      position: 'relative'
-                    }}
-                  >
-                    {/* The centered pill */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        padding: '10px 22px',
-                        background: 'var(--accent-light)',
-                        border: '2px solid var(--accent-color)',
-                        borderRadius: '24px',
-                        color: 'var(--accent-color)',
-                        fontSize: '13px',
-                        fontWeight: '600',
-                        fontFamily: 'var(--font-sans)',
-                        position: 'relative',
-                        boxShadow: '0 4px 10px rgba(0,0,0,0.03)',
-                        maxWidth: '80%',
-                        textAlign: 'center'
-                      }}
-                    >
-                      {/* Left wing */}
-                      <WingIcon isLeft={true} color="var(--accent-color)" size={16} />
-                      
-                      {/* Center sparkles */}
-                      <SparkleIcon color="var(--accent-color)" size={11} style={{ opacity: 0.8 }} />
-                      
-                      <span style={{ margin: '0 4px' }}>{m.text}</span>
-                      
-                      <SparkleIcon color="var(--accent-color)" size={11} style={{ opacity: 0.8 }} />
-                      
-                      {/* Right wing */}
-                      <WingIcon isLeft={false} color="var(--accent-color)" size={16} />
-
-                      {/* Sparkles flanking left/right outer */}
-                      <SparkleIcon color="var(--accent-color)" size={10} style={{ position: 'absolute', left: '-18px', top: '12px' }} />
-                      <SparkleIcon color="var(--accent-color)" size={10} style={{ position: 'absolute', right: '-18px', top: '12px' }} />
-
-                      {/* Bow centered at the bottom of border */}
-                      <BowIcon color="var(--accent-color)" size={13} style={{ position: 'absolute', bottom: '-7px', left: '50%', transform: 'translateX(-50%)' }} />
-                    </div>
-                    {msgDateLabel && (
-                      <span style={{ fontSize: '9px', color: 'var(--text-secondary)', marginTop: '6px' }}>
-                        {msgDateLabel}
-                      </span>
-                    )}
-                  </div>
-                );
-              }
-
-              const msgText = m.text || '';
-              const role = isSelf 
-                ? (msgText.length % 2 === 0 ? 'Streamer' : 'VIP')
-                : (msgText.length % 2 === 0 ? 'Moderator' : 'Just User');
-
-              let badgeStyle = {};
-              let badgeText = '';
-              let badgeIcon = null;
-              let bubbleStyle = {};
-              let decorators = [];
-
-              if (role === 'Moderator') {
-                badgeText = 'Moderator';
-                badgeIcon = <ShieldIcon color="#ffffff" size={11} />;
-                badgeStyle = {
-                  background: 'var(--accent-color)',
-                  color: '#ffffff',
-                  border: 'none'
-                };
-                bubbleStyle = {
-                  background: 'var(--surface-bg)',
-                  border: '2px solid var(--accent-color)',
-                  color: 'var(--text-primary)',
-                  borderRadius: '20px 20px 20px 4px',
-                  padding: '12px 18px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
-                };
-                // Decorators for Moderator: butterflies at top/bottom border, sparkles on left/right
-                decorators = [
-                  <ButterflyIcon key="m-b1" color="var(--accent-color)" size={12} style={{ position: 'absolute', top: '-7px', left: '45%' }} />,
-                  <ButterflyIcon key="m-b2" color="var(--accent-color)" size={12} style={{ position: 'absolute', bottom: '-7px', right: '35%' }} />,
-                  <SparkleIcon key="m-s1" color="var(--accent-color)" size={10} style={{ position: 'absolute', left: '-12px', top: '14px' }} />,
-                  <SparkleIcon key="m-s2" color="var(--accent-color)" size={10} style={{ position: 'absolute', right: '-12px', bottom: '14px' }} />
-                ];
-              } else if (role === 'VIP') {
-                badgeText = 'VIP';
-                badgeIcon = <HeartIcon color="var(--accent-color)" size={11} />;
-                badgeStyle = {
-                  background: 'var(--surface-bg)',
-                  border: '1.5px solid var(--accent-color)',
-                  color: 'var(--accent-color)'
-                };
-                bubbleStyle = {
-                  background: 'var(--accent-color)',
-                  border: '2px solid var(--accent-color)',
-                  color: '#ffffff',
-                  borderRadius: '20px 20px 4px 20px',
-                  padding: '12px 22px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
-                };
-                // Decorators: VIP text flanked by wings inside, and some border sparkles
-                decorators = [
-                  <SparkleIcon key="vip-s1" color="var(--accent-color)" size={10} style={{ position: 'absolute', left: '-12px', bottom: '6px' }} />,
-                  <SparkleIcon key="vip-s2" color="var(--accent-color)" size={10} style={{ position: 'absolute', right: '25%', bottom: '-7px' }} />
-                ];
-              } else if (role === 'Just User') {
-                badgeText = 'Just User';
-                badgeIcon = null;
-                badgeStyle = {
-                  background: 'var(--surface-bg)',
-                  border: '1.5px solid var(--accent-color)',
-                  color: 'var(--accent-color)'
-                };
-                bubbleStyle = {
-                  background: 'var(--accent-light)',
-                  border: '2px solid var(--accent-color)',
-                  color: 'var(--text-primary)',
-                  borderRadius: '20px 20px 20px 4px',
-                  padding: '12px 18px',
-                  boxShadow: '0 4px 10px rgba(0,0,0,0.02)'
-                };
-                decorators = [
-                  <ButterflyIcon key="ju-b1" color="var(--accent-color)" size={12} style={{ position: 'absolute', bottom: '-7px', left: '30%' }} />,
-                  <SparkleIcon key="ju-s1" color="var(--accent-color)" size={10} style={{ position: 'absolute', right: '-12px', top: '10px' }} />,
-                  <SparkleIcon key="ju-s2" color="var(--accent-color)" size={10} style={{ position: 'absolute', left: '-12px', bottom: '10px' }} />
-                ];
-              } else if (role === 'Streamer') {
-                badgeText = 'Streamer';
-                badgeIcon = <CameraIcon color="#ffffff" size={11} />;
-                badgeStyle = {
-                  background: 'var(--accent-color)',
-                  color: '#ffffff',
-                  border: 'none'
-                };
-                bubbleStyle = {
-                  background: 'var(--surface-bg)',
-                  border: '2px solid var(--accent-color)',
-                  color: 'var(--text-primary)',
-                  borderRadius: '20px 20px 4px 20px',
-                  padding: '12px 18px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
-                };
-                decorators = [
-                  <ButterflyIcon key="st-b1" color="var(--accent-color)" size={12} style={{ position: 'absolute', top: '-7px', right: '40%' }} />,
-                  <ButterflyIcon key="st-b2" color="var(--accent-color)" size={12} style={{ position: 'absolute', bottom: '-7px', left: '35%' }} />,
-                  <SparkleIcon key="st-s1" color="var(--accent-color)" size={10} style={{ position: 'absolute', left: '-12px', top: '8px' }} />,
-                  <SparkleIcon key="st-s2" color="var(--accent-color)" size={10} style={{ position: 'absolute', right: '-12px', bottom: '8px' }} />
-                ];
-              }
-
-              return (
+              {showMenu && (
                 <div
-                  key={m.id}
+                  ref={menuRef}
                   style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: isSelf ? 'flex-end' : 'flex-start',
-                    width: '100%',
-                    margin: '18px 0',
-                    position: 'relative'
+                    position: 'absolute', right: '0', top: '40px',
+                    background: 'var(--surface-bg)', border: '1px solid var(--border-color)',
+                    borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)',
+                    padding: '6px 0', zIndex: 100, minWidth: '150px'
                   }}
                 >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '12px',
-                      maxWidth: '85%',
-                      flexDirection: isSelf ? 'row-reverse' : 'row',
-                      position: 'relative'
+                  <button
+                    onClick={() => {
+                      setIsSelectMode(true);
+                      setShowMenu(false);
                     }}
-                    className="msg-bubble-row"
+                    style={{
+                      display: 'block', width: '100%', padding: '10px 16px',
+                      background: 'none', border: 'none', textAlign: 'left',
+                      fontSize: '13px', cursor: 'pointer', color: 'var(--ink)',
+                      fontFamily: 'var(--font-sans)', transition: 'background 0.15s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
                   >
-                    {/* Checkbox select square */}
-                    {(isSelectMode || isSelected) && (
-                      <div style={{ display: 'flex', alignItems: 'center', alignSelf: 'center', marginRight: isSelf ? 0 : '4px', marginLeft: isSelf ? '4px' : 0 }}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelectMessage(m.id)}
-                          style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent-color)' }}
-                        />
-                      </div>
-                    )}
-
-                    {/* Sender Profile Avatar image next to bubble */}
-                    <div 
-                      style={{ flexShrink: 0, marginTop: '14px', cursor: 'pointer' }}
-                      onClick={() => {
-                        window.dispatchEvent(new CustomEvent('open-profile-card', { detail: { user: isSelf ? currentUser : selectedTeammate } }));
-                      }}
-                    >
-                      {isSelf ? (
-                        <Avatar user={currentUser} size={30} />
-                      ) : (
-                        <Avatar user={selectedTeammate} size={30} />
-                      )}
-                    </div>
-
-                    {/* Message Bubble Container */}
-                    <div style={{ position: 'relative', marginTop: '12px' }}>
-                      {/* Badge Tab on Top of Bubble */}
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: '-12px',
-                          [isSelf ? 'right' : 'left']: '16px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          padding: '3px 10px',
-                          borderRadius: '10px 10px 0 0',
-                          fontSize: '10px',
-                          fontWeight: '700',
-                          letterSpacing: '0.02em',
-                          textTransform: 'uppercase',
-                          boxShadow: '0 -2px 5px rgba(0,0,0,0.03)',
-                          zIndex: 2,
-                          ...badgeStyle
-                        }}
-                      >
-                        <span>{badgeText}</span>
-                        {badgeIcon}
-                      </div>
-
-                      {/* Bubble itself */}
-                      <div
-                        onClick={() => {
-                          if (isSelectMode) {
-                            toggleSelectMessage(m.id);
-                          }
-                        }}
-                        style={{
-                          cursor: isSelectMode ? 'pointer' : 'default',
-                          userSelect: 'text',
-                          position: 'relative',
-                          fontSize: '13.5px',
-                          lineHeight: '1.5',
-                          ...bubbleStyle
-                        }}
-                      >
-                        {/* If VIP, flank with wings inside */}
-                        {role === 'VIP' ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-                            <WingIcon isLeft={true} color="#ffffff" size={16} />
-                            <span>{msgText}</span>
-                            <WingIcon isLeft={false} color="#ffffff" size={16} />
-                          </div>
-                        ) : (
-                          msgText
-                        )}
-                        {m.imageUrl && (
-                          <div style={{ marginTop: msgText ? '8px' : '0' }}>
-                            <img src={m.imageUrl} alt="Attachment" style={{ maxWidth: '100%', borderRadius: '8px', display: 'block' }} />
-                          </div>
-                        )}
-
-                        {/* Outer/border absolute-positioned decorations */}
-                        {decorators}
-                      </div>
-                    </div>
-
-                    {/* Hover controls (Trash icon & checkbox triggers) */}
-                    {!isSelectMode && (
-                      <div
-                        className="msg-hover-controls"
-                        style={{
-                          display: 'none',
-                          gap: '6px',
-                          alignItems: 'center',
-                          position: 'absolute',
-                          [isSelf ? 'left' : 'right']: '-42px',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          background: 'var(--surface-bg)',
-                          padding: '4px 8px',
-                          borderRadius: '12px',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                          border: '1.5px solid var(--border-color)',
-                          zIndex: 10
-                        }}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => { setIsSelectMode(true); toggleSelectMessage(m.id); }}
-                          title="Select message"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--brass)', padding: '2px', display: 'flex' }}
-                        >
-                          <Check size={13} />
-                        </button>
-                        {isSelf && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteMessages([m.id])}
-                            title="Delete message"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger-color)', padding: '2px', display: 'flex' }}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <span style={{
-                    fontSize: '10px',
-                    color: 'var(--text-secondary)',
-                    marginTop: '4px',
-                    marginLeft: isSelf ? '0' : '48px',
-                    marginRight: isSelf ? '48px' : '0'
-                  }}>
-                    {msgDateLabel}
-                  </span>
+                    Select Messages
+                  </button>
+                  <button
+                    onClick={handleClearChat}
+                    style={{
+                      display: 'block', width: '100%', padding: '10px 16px',
+                      background: 'none', border: 'none', textAlign: 'left',
+                      fontSize: '13px', cursor: 'pointer', color: 'var(--danger-color, #d94a43)',
+                      fontFamily: 'var(--font-sans)', transition: 'background 0.15s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(217,74,67,0.05)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                  >
+                    Clear Chat
+                  </button>
                 </div>
-              );
-            })
-          )}
-          <div ref={chatEndRef} />
-        </div>
-
-        {/* Message DM Input form at bottom */}
-        <form onSubmit={handleSendDm} style={{
-          display: 'flex', gap: '12px', padding: '16px 28px 24px 28px',
-          background: 'var(--bg-color, #f5f4ee)', flexShrink: 0
-        }}>
-          <input
-            type="text"
-            className="form-input"
-            placeholder={`Message ${teammateName}...`}
-            style={{
-              flex: 1,
-              fontSize: '13.5px',
-              padding: '12px 20px',
-              borderRadius: '24px',
-              border: '1px solid var(--border-color)',
-              background: 'var(--surface-bg)',
-              fontFamily: 'var(--font-sans)',
-              outline: 'none'
-            }}
-            value={dmInput}
-            onChange={(e) => setDmInput(e.target.value)}
-          />
-          <button
-            type="submit"
-            disabled={!dmInput.trim() || dmSendLoading}
-            style={{
-              width: '42px', height: '42px',
-              borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'var(--accent-color, var(--rust))',
-              border: 'none', color: '#fff',
-              cursor: dmInput.trim() ? 'pointer' : 'not-allowed',
-              opacity: dmInput.trim() ? 1 : 0.5,
-              transition: 'all 0.2s',
-              boxShadow: '0 4px 10px rgba(0,0,0,0.06)'
-            }}
-          >
-            <Send size={16} />
-          </button>
-        </form>
-
-        <style>{`
-          .msg-bubble-row:hover .msg-hover-controls {
-            display: flex !important;
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  // ─── 2. DEFAULT Chats List layout ──────────────────────────────────────────
-  const filteredTeammates = teammates.filter(mate => {
-    const term = shelfSearch.toLowerCase();
-    return (
-      (mate.name || '').toLowerCase().includes(term) ||
-      (mate.username || '').toLowerCase().includes(term) ||
-      (mate.currentBook?.title || '').toLowerCase().includes(term)
-    );
-  });
-
-  return (
-    <div style={{
-      marginLeft: '80px', minHeight: '100vh', overflowY: 'auto',
-      background: 'var(--bg-color, #f5f4ee)', fontFamily: 'var(--font-sans)',
-      display: 'flex', flexDirection: 'column'
-    }}>
-      <TopBar
-        searchQuery={shelfSearch}
-        onSearchChange={setShelfSearch}
-        searchPlaceholder="Search teammates, book name, or find users..."
-        currentUser={currentUser}
-        onProfileClick={() => setActiveTab?.('settings')}
-        onBellClick={openNotifications}
-      />
-
-      <div style={{ padding: '36px 60px' }}>
-        <h2 style={{
-          fontFamily: 'var(--font-serif)', fontSize: '24px', fontWeight: '700',
-          color: 'var(--ink)', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px'
-        }}>
-          Direct Conversations <span style={{ fontSize: '11px', color: 'var(--brass)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>· chats</span>
-        </h2>
-
-        {shelfSearch.length >= 2 ? (
-          /* Search results section */
-          <div>
-            <h3 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--brass)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '16px' }}>
-              Search Results
-            </h3>
-            {searchLoading ? (
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Searching for users...</p>
-            ) : searchResults.length === 0 ? (
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>No users match "{shelfSearch}"</p>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
-                {searchResults.map(u => (
-                  <div
-                    key={u.id}
-                    onClick={() => setSelectedTeammate(u)}
-                    style={{
-                      background: 'var(--library-card-bg)',
-                      border: '1.5px solid var(--library-card-border)',
-                      borderRadius: '16px',
-                      padding: '16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '14px',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 10px rgba(0,0,0,0.02)',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = 'var(--accent-color)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.borderColor = 'var(--library-card-border)'; }}
-                  >
-                    <Avatar user={u} size={40} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {u.name || u.username}
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        @{u.username}
-                      </div>
-                    </div>
-                    <MessageSquare size={16} style={{ color: 'var(--brass)', flexShrink: 0 }} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          /* Recent teammate conversations */
-          <div>
-            {filteredTeammates.length === 0 ? (
-              <div style={{
-                padding: '24px 30px', background: 'var(--option-bg)', borderRadius: '16px',
-                border: '1.5px dashed var(--library-card-border)', color: 'var(--text-secondary)',
-                fontSize: '13.5px', fontStyle: 'italic', maxWidth: '400px'
-              }}>
-                No active conversations. Use the search bar at the top to search for users in the library system and start a chat!
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                {filteredTeammates.map((mate) => {
-                  const displayName = mate.name || mate.username || 'Teammate';
-                  const initial = displayName.charAt(0).toUpperCase();
-                  const palettes = ['#c41e3a', '#1b3d2f', '#1e355c', '#61461b', '#4a1a5c', '#1a3d4f'];
-                  const avatarColor = palettes[(initial.charCodeAt(0) || 0) % palettes.length];
-                  const hasBook = !!mate.currentBook;
-
-                  return (
-                    <div
-                      key={mate.id}
-                      onClick={() => setSelectedTeammate(mate)}
-                      style={{
-                        background: 'var(--library-card-bg)',
-                        border: '1.5px solid var(--library-card-border)',
-                        borderRadius: '20px',
-                        padding: '20px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '14px',
-                        cursor: 'pointer',
-                        boxShadow: '0 6px 14px rgba(0,0,0,0.02)',
-                        transition: 'all 0.25s cubic-bezier(0.34,1.56,0.64,1)'
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.06)'; e.currentTarget.style.borderColor = 'var(--accent-color)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 6px 14px rgba(0,0,0,0.02)'; e.currentTarget.style.borderColor = 'var(--library-card-border)'; }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        {mate.avatar_url || mate.avatar ? (
-                          <img src={mate.avatar_url || mate.avatar} alt={displayName} style={{
-                            width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover',
-                            border: '2px solid var(--accent-color)'
-                          }} />
-                        ) : (
-                          <div style={{
-                            width: '44px', height: '44px', borderRadius: '50%', background: avatarColor,
-                            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontWeight: '700', fontSize: '17px', border: '2px solid var(--accent-color)'
-                          }}>
-                            {initial}
-                          </div>
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {displayName}
-                          </div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                            @{mate.username || 'teammate'}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ borderTop: '1px dashed rgba(0,0,0,0.06)', paddingTop: '12px' }}>
-                        {hasBook ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontSize: '10px', color: 'var(--brass)', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.05em' }}>Current Progress</span>
-                            <span style={{ fontSize: '12px', color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              📖 {mate.currentBook.title}
-                            </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                              <div style={{ flex: 1, height: '4px', background: 'rgba(0,0,0,0.06)', borderRadius: '2px', overflow: 'hidden' }}>
-                                <div style={{
-                                  width: `${Math.min(100, (mate.currentBook.currentPage / mate.currentBook.totalPages) * 100)}%`,
-                                  height: '100%',
-                                  background: 'var(--accent-color)'
-                                }} />
-                              </div>
-                              <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600' }}>
-                                {Math.round((mate.currentBook.currentPage / mate.currentBook.totalPages) * 100)}%
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                            No active reading details updated recently.
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          </>
         )}
       </div>
 
-      {/* Footer bar */}
+      {/* Messages Area */}
       <div style={{
-        marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '15px 60px', borderTop: '1px solid rgba(0,0,0,0.06)',
-        color: 'var(--text-secondary)', fontSize: '13px', background: 'var(--bg-color)'
+        flex: 1,
+        overflowY: 'auto',
+        padding: '24px 28px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px'
       }}>
-        <div>
-          ⓘ&nbsp; Search for other library accounts by username or name to start a Direct Conversation.
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ color: 'var(--danger-color)', fontWeight: '700', fontSize: '16px' }}>
-            {String(teammates.length).padStart(2, '0')}
-          </span>
-          <span>active conversations</span>
-        </div>
+        {loading && (
+          <div style={{ margin: 'auto', textAlign: 'center' }}>
+            <div style={{
+              width: '32px', height: '32px', border: '3px solid rgba(0,0,0,0.08)',
+              borderTopColor: 'var(--accent-color)', borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite', margin: '0 auto 10px'
+            }} />
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Loading messages...</div>
+          </div>
+        )}
+
+        {!loading && error && (
+          <div style={{
+            margin: 'auto', textAlign: 'center', padding: '24px 28px',
+            background: '#fff0f0', border: '1px solid #f5c6c6',
+            borderRadius: '20px', maxWidth: '340px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)'
+          }}>
+            <div style={{ fontSize: '28px', marginBottom: '10px' }}>⚠️</div>
+            <div style={{ fontSize: '13px', color: '#c0392b', fontWeight: '600', marginBottom: '12px' }}>{error}</div>
+            <button
+              onClick={() => { setError(null); setLoading(true); fetchMessages(true); }}
+              style={{
+                padding: '9px 20px', borderRadius: '20px', border: 'none',
+                background: 'var(--accent-color, #b33533)', color: '#fff',
+                fontSize: '13px', fontWeight: '700', cursor: 'pointer'
+              }}
+            >Try again</button>
+          </div>
+        )}
+
+        {!loading && !error && messages.length === 0 && (
+          <div style={{
+            margin: 'auto', textAlign: 'center', color: 'var(--text-secondary)',
+            fontSize: '13px', fontStyle: 'italic', maxWidth: '260px', lineHeight: 1.6
+          }}>
+            <div style={{ fontSize: '32px', marginBottom: '10px' }}><MessageCircle /></div>
+            <div style={{ fontWeight: '700', color: 'var(--ink)', fontSize: '14px', marginBottom: '4px' }}>No messages yet</div>
+            Start the conversation by sending a message or sharing an image!
+          </div>
+        )}
+
+        {messages.map((m, i) => {
+          const isSelf = m.senderId === currentUser?.id;
+          const showTime = i === 0 ||
+            new Date(m.createdAt) - new Date(messages[i - 1]?.createdAt) > 5 * 60 * 1000;
+          const isSelected = selectedMsgIds.includes(m.id);
+          const isMenuOpen = activeMsgMenuId === m.id;
+
+          return (
+            <React.Fragment key={m.id}>
+              {showTime && (
+                <div style={{
+                  textAlign: 'center', fontSize: '10px', color: 'var(--text-secondary)',
+                  margin: '12px 0 6px', fontWeight: '600', letterSpacing: '0.04em'
+                }}>
+                  {formatTime(m.createdAt)}
+                </div>
+              )}
+              <div style={{
+                display: 'flex',
+                flexDirection: isSelf ? 'row-reverse' : 'row',
+                alignItems: 'flex-end',
+                gap: '8px',
+                opacity: m.optimistic ? 0.65 : 1,
+                transition: 'opacity 0.3s',
+                position: 'relative'
+              }}>
+                {isSelectMode && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    alignSelf: 'center', [isSelf ? 'marginLeft' : 'marginRight']: '8px'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        setSelectedMsgIds(prev =>
+                          prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
+                        );
+                      }}
+                      style={{
+                        width: '16px', height: '16px', cursor: 'pointer',
+                        accentColor: 'var(--accent-color, #b33533)'
+                      }}
+                    />
+                  </div>
+                )}
+
+                {!isSelf && <Avatar user={friend} size={28} />}
+                <div style={{ maxWidth: '65%', position: 'relative' }} className="msg-wrap">
+                  <div
+                    onClick={() => {
+                      if (isSelectMode) {
+                        setSelectedMsgIds(prev =>
+                          prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
+                        );
+                      }
+                    }}
+                    style={{
+                      borderRadius: isSelf ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                      background: isSelf ? 'var(--accent-color, #b33533)' : 'var(--surface-bg)',
+                      color: isSelf ? '#fff' : 'var(--ink)',
+                      fontSize: '13.5px',
+                      lineHeight: 1.5,
+                      wordBreak: 'break-word',
+                      boxShadow: isSelf ? '0 3px 10px rgba(179, 53, 51, 0.12)' : '0 3px 10px rgba(0,0,0,0.03)',
+                      border: isSelected ? '2px solid var(--accent-color, #b33533)' : (isSelf ? 'none' : '1px solid rgba(0,0,0,0.06)'),
+                      cursor: isSelectMode ? 'pointer' : 'default',
+                      overflow: 'hidden',
+                      position: 'relative'
+                    }}
+                  >
+                    {m.imageUrl && (
+                      <div style={{ position: 'relative', overflow: 'hidden' }}>
+                        <a href={m.imageUrl} target="_blank" rel="noreferrer" style={{ display: 'block', outline: 'none' }} onClick={e => isSelectMode && e.preventDefault()}>
+                          <img
+                            src={m.imageUrl}
+                            alt="Shared media"
+                            style={{
+                              maxWidth: '100%',
+                              maxHeight: '280px',
+                              width: '100%',
+                              objectFit: 'cover',
+                              display: 'block',
+                              transition: 'transform 0.3s ease'
+                            }}
+                            className="chat-image"
+                          />
+                        </a>
+                      </div>
+                    )}
+                    {m.text && (
+                      <div style={{ padding: m.imageUrl ? '10px 14px' : '10px 16px' }}>
+                        {m.text}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Inline Options Menu Trigger next to bubble */}
+                  {!isSelectMode && !m.optimistic && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveMsgMenuId(isMenuOpen ? null : m.id);
+                      }}
+                      className="msg-menu-btn"
+                      style={{
+                        position: 'absolute',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        [isSelf ? 'left' : 'right']: '-28px',
+                        background: 'var(--surface-bg)',
+                        border: '1.5px solid var(--border-color)',
+                        borderRadius: '50%',
+                        width: '24px',
+                        height: '24px',
+                        display: 'none',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: 'var(--brass)',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+                        zIndex: 5
+                      }}
+                    >
+                      <MoreVertical size={12} />
+                    </button>
+                  )}
+
+                  {/* Bubble Options Dropdown Menu */}
+                  {isMenuOpen && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '50%',
+                        transform: 'translateY(12px)',
+                        [isSelf ? 'left' : 'right']: '0px',
+                        background: 'var(--surface-bg)',
+                        border: '1.5px solid var(--border-color)',
+                        borderRadius: '12px',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                        padding: '6px 0',
+                        zIndex: 20,
+                        minWidth: '120px'
+                      }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(m.text || '');
+                          setActiveMsgMenuId(null);
+                        }}
+                        style={{
+                          display: 'block', width: '100%', padding: '8px 16px',
+                          background: 'none', border: 'none', textAlign: 'left',
+                          fontSize: '12.5px', cursor: 'pointer', color: 'var(--ink)',
+                          fontFamily: 'var(--font-sans)', transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                      >
+                        Copy Text
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleDelete(m.id);
+                          setActiveMsgMenuId(null);
+                        }}
+                        style={{
+                          display: 'block', width: '100%', padding: '8px 16px',
+                          background: 'none', border: 'none', textAlign: 'left',
+                          fontSize: '12.5px', cursor: 'pointer', color: 'var(--danger-color, #d94a43)',
+                          fontFamily: 'var(--font-sans)', transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(217,74,67,0.05)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                      >
+                        Delete Message
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {isSelf && <Avatar user={currentUser} size={28} />}
+              </div>
+            </React.Fragment>
+          );
+        })}
+        <div ref={endRef} />
       </div>
-      {activeProfileCard && (
-        <LibraryCardModal
-          user={activeProfileCard}
-          currentUserId={currentUser?.id}
-          onClose={() => setActiveProfileCard(null)}
-        />
+
+      {/* Image Preview bar before sending */}
+      {imagePreview && (
+        <div style={{
+          padding: '12px 24px',
+          background: 'var(--surface-bg)',
+          borderTop: '1px solid var(--border-color)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          flexShrink: 0
+        }}>
+          <div style={{ position: 'relative', width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+            <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <button
+              onClick={() => setImagePreview(null)}
+              style={{
+                position: 'absolute', top: 2, right: 2,
+                background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%',
+                width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', cursor: 'pointer', padding: 0
+              }}
+            >
+              <X size={10} />
+            </button>
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            Image selected. Type a message or click send.
+          </div>
+        </div>
       )}
+
+      {/* Send Input Bar */}
+      <form onSubmit={handleSend} style={{
+        display: 'flex', gap: '8px', padding: '16px 24px 20px',
+        background: 'var(--surface-bg)', flexShrink: 0,
+        borderTop: '1px solid var(--border-color)',
+        alignItems: 'center'
+      }}>
+        {/* Attachment button */}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            width: '40px', height: '40px', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--brass)', transition: 'background 0.2s', flexShrink: 0
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          title="Share an image"
+        >
+          <Image size={18} />
+        </button>
+
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          accept="image/*"
+          style={{ display: 'none' }}
+        />
+
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder={imagePreview ? "Add a caption..." : `Message ${friendName}...`}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          style={{
+            flex: 1, padding: '11px 18px', borderRadius: '24px',
+            border: '1.5px solid var(--border-color)',
+            background: 'var(--bg-color)', color: 'var(--ink)',
+            fontFamily: 'var(--font-sans)', fontSize: '13.5px',
+            outline: 'none', transition: 'border-color 0.2s'
+          }}
+          onFocus={e => e.target.style.borderColor = 'var(--accent-color)'}
+          onBlur={e => e.target.style.borderColor = 'var(--border-color)'}
+        />
+
+        <button
+          type="submit"
+          disabled={(!input.trim() && !imagePreview) || sending}
+          style={{
+            width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
+            background: (input.trim() || imagePreview) && !sending ? 'var(--accent-color, #b33533)' : 'rgba(0,0,0,0.08)',
+            border: 'none', color: (input.trim() || imagePreview) && !sending ? '#fff' : 'rgba(0,0,0,0.25)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: (input.trim() || imagePreview) && !sending ? 'pointer' : 'not-allowed',
+            transition: 'all 0.2s',
+            boxShadow: (input.trim() || imagePreview) && !sending ? '0 4px 10px rgba(179,53,51,0.2)' : 'none'
+          }}
+        >
+          <Send size={15} />
+        </button>
+      </form>
+
+      <style>{`
+        .msg-wrap:hover .msg-delete-btn { display: flex !important; }
+      `}</style>
     </div>
   );
 }
 
+// ─── Friend Card (list item) ──────────────────────────────────────────────────
+function FriendCard({ friend, active, onClick }) {
+  const name = friend.name || friend.username || 'Reader';
+  const book = friend.currentBook;
+  const isUnseen = friend.unreadCount > 0;
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '12px 16px', borderRadius: '14px',
+        background: active ? 'rgba(0,0,0,0.04)' : 'var(--surface-bg)',
+        border: active ? '1.5px solid var(--accent-color)' : '1.5px solid var(--border-color)',
+        cursor: 'pointer', transition: 'all 0.2s',
+        boxShadow: active ? '0 4px 12px rgba(0,0,0,0.05)' : '0 2px 6px rgba(0,0,0,0.02)'
+      }}
+      onMouseEnter={e => {
+        if (!active) {
+          e.currentTarget.style.borderColor = 'var(--accent-color)';
+          e.currentTarget.style.transform = 'translateY(-1px)';
+        }
+      }}
+      onMouseLeave={e => {
+        if (!active) {
+          e.currentTarget.style.borderColor = 'var(--border-color)';
+          e.currentTarget.style.transform = '';
+        }
+      }}
+    >
+      <Avatar user={friend} size={42} />
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontWeight: isUnseen ? '800' : '700',
+          fontSize: '13.5px',
+          color: 'var(--ink)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px'
+        }}>
+          {name}
+          {isUnseen && (
+            <span style={{
+              width: '6px', height: '6px', borderRadius: '50%',
+              background: 'var(--accent-color, #b33533)', display: 'inline-block'
+            }} />
+          )}
+        </div>
+        <div style={{ fontSize: '11px', color: 'var(--brass)', marginBottom: '2px' }}>
+          @{friend.username || 'reader'}
+        </div>
+        {book ? (
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
+            <BookOpen size={10} style={{ flexShrink: 0, color: 'var(--brass)' }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Reading <strong>{book.title}</strong>
+            </span>
+          </div>
+        ) : (
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+            No active reading
+          </div>
+        )}
+      </div>
+
+      {/* Message action/badge count container */}
+      <div style={{ flexShrink: 0 }}>
+        {isUnseen ? (
+          <div style={{
+            minWidth: '22px', height: '22px', padding: '0 6px', borderRadius: '11px',
+            background: 'var(--accent-color, #b33533)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontSize: '10.5px', fontWeight: '800',
+            boxShadow: '0 3px 8px rgba(179,53,51,0.3)',
+            boxSizing: 'border-box'
+          }}>
+            {friend.unreadCount}
+          </div>
+        ) : (
+          <div style={{
+            width: '28px', height: '28px', borderRadius: '50%',
+            background: 'var(--accent-light, rgba(179,53,51,0.05))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <MessageSquare size={13} style={{ color: 'var(--accent-color)' }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main FriendsSection ─────────────────────────────────────────────────────
+export default function FriendsSection({ setActiveTab }) {
+  const [friends, setFriends] = useState([]);
+  const [teammates, setTeammates] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [selectedChat, setSelectedChat] = useState(null);
+
+  // Independent loading states
+  const [friendsLoading, setFriendsLoading] = useState(true);
+  const [teammatesLoading, setTeammatesLoading] = useState(true);
+
+  const [token, setToken] = useState(() => localStorage.getItem('shelf_auth_token'));
+  const [currentUser, setCurrentUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('shelf_current_user') || 'null'); } catch { return null; }
+  });
+
+  const debouncedSearch = useDebounce(searchQuery, 350);
+
+  // Sync auth on switches
+  useEffect(() => {
+    const sync = () => {
+      setToken(localStorage.getItem('shelf_auth_token'));
+      try { setCurrentUser(JSON.parse(localStorage.getItem('shelf_current_user') || 'null')); } catch { }
+    };
+    window.addEventListener('storage', sync);
+    window.addEventListener('user-switched', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('user-switched', sync);
+    };
+  }, []);
+
+  // Handle open-direct-chat events from app
+  useEffect(() => {
+    const handleOpenChat = (e) => {
+      if (e.detail?.user) {
+        setSelectedChat(e.detail.user);
+        localStorage.removeItem('shelf_pending_chat_target');
+      }
+    };
+    const pendingRaw = localStorage.getItem('shelf_pending_chat_target');
+    if (pendingRaw) {
+      try { setSelectedChat(JSON.parse(pendingRaw)); } catch { }
+      localStorage.removeItem('shelf_pending_chat_target');
+    }
+    window.addEventListener('open-direct-chat', handleOpenChat);
+    return () => window.removeEventListener('open-direct-chat', handleOpenChat);
+  }, []);
+
+  // Fetch accepted friends
+  const fetchFriends = useCallback(async () => {
+    if (!token) { setFriends([]); setFriendsLoading(false); return; }
+    try {
+      const res = await fetchWithTimeout('/api/friends', {
+        headers: { Authorization: `Bearer ${token}` }
+      }, 8000);
+      if (res.ok) {
+        const d = await res.json();
+        setFriends(d.friends || []);
+      }
+    } catch {
+    } finally {
+      setFriendsLoading(false);
+    }
+  }, [token]);
+
+  // Fetch cohort teammates
+  const fetchTeammates = useCallback(async () => {
+    if (!token) { setTeammates([]); setTeammatesLoading(false); return; }
+    try {
+      const res = await fetchWithTimeout('/api/teammates/mutual', {
+        headers: { Authorization: `Bearer ${token}` }
+      }, 8000);
+      if (res.ok) {
+        const d = await res.json();
+        setTeammates(d.teammates || []);
+      }
+    } catch {
+    } finally {
+      setTeammatesLoading(false);
+    }
+  }, [token]);
+
+  // Load and poll list data
+  useEffect(() => {
+    setFriendsLoading(true);
+    setTeammatesLoading(true);
+    fetchFriends();
+    fetchTeammates();
+
+    // Poll contacts list every 8 seconds to clear read badges rapidly
+    const interval = setInterval(() => {
+      fetchFriends();
+      fetchTeammates();
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [fetchFriends, fetchTeammates]);
+
+  // User search
+  useEffect(() => {
+    if (debouncedSearch.length < 2) { setSearchResults([]); return; }
+    let cancelled = false;
+    setSearchLoading(true);
+    fetchWithTimeout(`/api/users/search?q=${encodeURIComponent(debouncedSearch)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    }, 8000)
+      .then(r => r.ok ? r.json() : { users: [] })
+      .then(d => {
+        if (!cancelled) {
+          setSearchResults((d.users || []).filter(u => u.id !== currentUser?.id));
+        }
+      })
+      .catch(() => { if (!cancelled) setSearchResults([]); })
+      .finally(() => { if (!cancelled) setSearchLoading(false); });
+    return () => { cancelled = true; };
+  }, [debouncedSearch, token, currentUser?.id]);
+
+  // Merge contacts
+  const allChattable = useMemo(() => {
+    const selfId = currentUser?.id;
+    const seen = new Set();
+    const merged = [];
+    for (const f of friends) {
+      if (!seen.has(f.id) && f.id !== selfId) { seen.add(f.id); merged.push(f); }
+    }
+    for (const t of teammates) {
+      if (!seen.has(t.id) && t.id !== selfId) { seen.add(t.id); merged.push(t); }
+    }
+    return merged;
+  }, [friends, teammates, currentUser?.id]);
+
+  const sidebarLoading = friendsLoading || teammatesLoading;
+  const isSearchMode = searchQuery.length >= 2;
+
+  const filteredList = useMemo(() => {
+    if (isSearchMode) return [];
+    return allChattable;
+  }, [allChattable, isSearchMode]);
+
+  // Clear unreadCount locally when active chat changes
+  const handleSelectChat = (friend) => {
+    setSelectedChat(friend);
+    // Mark as read in local state immediately so badge clears instantly
+    setFriends(prev => prev.map(f => f.id === friend.id ? { ...f, unreadCount: 0 } : f));
+    setTeammates(prev => prev.map(t => t.id === friend.id ? { ...t, unreadCount: 0 } : t));
+  };
+
+  return (
+    <div style={{
+      marginLeft: '80px',
+      flex: 1,
+      width: 'calc(100% - 80px)',
+      height: '100vh',
+      background: 'var(--bg-color, #f5f4ee)',
+      fontFamily: 'var(--font-sans)',
+      display: 'flex',
+      overflow: 'hidden'
+    }} className="split-chat-container">
+
+      {/* LEFT SIDEBAR PANEL (Contacts/List) */}
+      <div style={{
+        width: '360px',
+        borderRight: '1px solid var(--border-color)',
+        background: 'var(--surface-bg)',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        flexShrink: 0
+      }} className={`chat-left-pane ${selectedChat ? 'chat-pane-hidden-mobile' : ''}`}>
+
+        {/* Sidebar Header */}
+        <div style={{
+          padding: '24px 20px 16px',
+          borderBottom: '1px solid var(--border-color)',
+          background: 'var(--surface-bg)',
+          flexShrink: 0
+        }}>
+          <h2 style={{
+            fontFamily: 'var(--font-serif)', fontSize: '20px', fontWeight: '700',
+            color: 'var(--ink)', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px'
+          }}>
+            <Users size={18} style={{ color: 'var(--brass)' }} />
+            Direct Conversations
+          </h2>
+
+          <div style={{ position: 'relative', width: '100%' }}>
+            <Search size={14} style={{
+              position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--brass)', pointerEvents: 'none'
+            }} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search or find new readers..."
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: '9px 12px 9px 36px', border: '1.5px solid transparent',
+                borderRadius: '20px', background: 'rgba(0,0,0,0.05)',
+                fontFamily: 'var(--font-sans)', fontSize: '13px',
+                color: 'var(--ink)', outline: 'none', transition: 'all 0.2s'
+              }}
+              onFocus={e => { e.target.style.borderColor = 'var(--accent-color)'; e.target.style.background = 'var(--surface-bg)'; }}
+              onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.background = 'rgba(0,0,0,0.05)'; }}
+            />
+          </div>
+        </div>
+
+        {/* Contacts List Body */}
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '16px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px'
+        }}>
+          {!token ? (
+            <div style={{
+              padding: '24px 20px', textAlign: 'center', background: 'rgba(0,0,0,0.02)', borderRadius: '16px', border: '1px dashed var(--border-color)'
+            }}>
+              <div style={{ fontSize: '20px', marginBottom: '8px' }}>🔐</div>
+              <div style={{ fontWeight: '700', fontSize: '13px', color: 'var(--ink)', marginBottom: '4px' }}>Sign in to chat</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Log in to talk with other readers.</div>
+            </div>
+          ) : isSearchMode ? (
+            // Search Mode Results
+            <>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--brass)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 4px 4px' }}>
+                Search Results
+              </div>
+              {searchLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', fontSize: '12px', padding: '0 6px' }}>
+                  <div style={{ width: '14px', height: '14px', border: '2px solid rgba(0,0,0,0.1)', borderTopColor: 'var(--accent-color)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                  Searching...
+                </div>
+              ) : searchResults.length === 0 ? (
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '0 6px' }}>
+                  No readers found matching "{searchQuery}"
+                </div>
+              ) : (
+                searchResults.map(u => (
+                  <FriendCard
+                    key={u.id}
+                    friend={u}
+                    active={selectedChat?.id === u.id}
+                    onClick={() => handleSelectChat(u)}
+                  />
+                ))
+              )}
+            </>
+          ) : sidebarLoading && filteredList.length === 0 ? (
+            // Loading Mode
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', fontSize: '12px', padding: '0 6px' }}>
+              <div style={{ width: '14px', height: '14px', border: '2px solid rgba(0,0,0,0.1)', borderTopColor: 'var(--brass)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              Loading contacts...
+            </div>
+          ) : filteredList.length === 0 ? (
+            // Empty State
+            <div style={{
+              padding: '24px 20px', textAlign: 'center', background: 'rgba(0,0,0,0.01)', borderRadius: '16px', border: '1px dashed var(--border-color)'
+            }}>
+              <div style={{ fontSize: '24px', marginBottom: '8px' }}><BookUser /></div>
+              <div style={{ fontWeight: '700', fontSize: '13px', color: 'var(--ink)', marginBottom: '4px' }}>No contacts yet</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                Search for readers by name above to start a conversation.
+              </div>
+            </div>
+          ) : (
+            // Render all list items
+            filteredList.map(u => (
+              <FriendCard
+                key={u.id}
+                friend={u}
+                active={selectedChat?.id === u.id}
+                onClick={() => handleSelectChat(u)}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* RIGHT CHAT CONTENT CONVERSATION PANEL */}
+      <div style={{
+        flex: 1,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column'
+      }} className={`chat-right-pane ${!selectedChat ? 'chat-pane-hidden-mobile' : ''}`}>
+        {selectedChat ? (
+          <ChatView
+            friend={selectedChat}
+            currentUser={currentUser}
+            token={token}
+            onBack={() => setSelectedChat(null)}
+          />
+        ) : (
+          /* Empty Chat State (No conversation active) */
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            background: 'var(--option-bg, #f7f3e9)',
+            padding: '40px',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              width: '120px', height: '120px', borderRadius: '50%',
+              background: 'var(--surface-bg)', border: '1.5px solid var(--border-color)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.04)', marginBottom: '24px',
+              animation: 'bounceSlow 4s ease-in-out infinite'
+            }}>
+              <MessageSquare size={48} style={{ color: 'var(--accent-color)', opacity: 0.8 }} />
+            </div>
+
+            <h3 style={{
+              fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: '22px', fontWeight: '700',
+              color: 'var(--ink)', margin: '0 0 10px 0'
+            }}>
+              Your Library Chatroom
+            </h3>
+
+            <p style={{
+              fontSize: '13.5px', color: 'var(--text-secondary)',
+              maxWidth: '360px', lineHeight: 1.6, margin: 0
+            }}>
+              Select a conversation from the sidebar to view messages, share ideas, and exchange book progress reports!
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Styled Responsive Rules and Animations */}
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes bounceSlow {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-8px); }
+        }
+
+        .msg-wrap:hover .msg-menu-btn {
+          display: flex !important;
+        }
+        .chat-image:hover {
+          transform: scale(1.02);
+        }
+
+        /* Mobile Responsive View overrides */
+        @media (max-width: 768px) {
+          .split-chat-container {
+            margin-left: 0 !important;
+            padding-bottom: 60px; /* Leave space for bottom nav bar if any */
+          }
+          .chat-left-pane {
+            width: 100% !important;
+          }
+          .chat-right-pane {
+            width: 100% !important;
+          }
+          .chat-pane-hidden-mobile {
+            display: none !important;
+          }
+          .chat-back-btn {
+            display: flex !important;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}

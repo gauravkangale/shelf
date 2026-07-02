@@ -47,28 +47,7 @@ function Avatar({ user, size = 28 }) {
   );
 }
 
-const WingIcon = ({ isLeft, color }) => (
-  <svg
-    width="12"
-    height="12"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke={color}
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{
-      transform: isLeft ? 'scaleX(1)' : 'scaleX(-1)',
-      opacity: 0.8,
-      margin: '0 2px',
-      alignSelf: 'center'
-    }}
-  >
-    <path d="M12 12c-2-3-6-4-10-2 1.5 3 4 5 7 5 3 0 5-1 5-3Z" fill={`${color}15`} />
-    <path d="M12 12c-1.5-2.5-4.5-3.5-7.5-2 1 2.5 3 4 5.5 4 2 0 3.5-.5 3.5-1.5Z" />
-    <path d="M12 12c-1-2-3-2.5-5-1.5.5 1.5 1.5 2.5 3.5 2.5 1.5 0 2-.5 2-1Z" />
-  </svg>
-);
+// WingIcon removed since it is no longer used in chat layout.
 
 export default function FriendsList() {
   // ── Unified chats & teammates state ───────────────────────────────────────
@@ -538,7 +517,7 @@ export default function FriendsList() {
                       </button>
                       <button
                         type="button"
-                        onClick={(e) => {
+                        onClick={() => {
                           localStorage.setItem(userKey(`dismissed_chat_${chat.id}`), chat.lastMessageAt || new Date().toISOString());
                           setRecentChats(prev => prev.filter(c => c.id !== chat.id));
                         }}
@@ -741,33 +720,17 @@ export default function FriendsList() {
                           </span>
                         )}
                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                          <WingIcon isLeft={true} color={isSelf ? 'var(--rust)' : 'var(--brass)'} />
                           <div style={{
-                            padding: '10px 16px', borderRadius: '20px',
-                            background: isSelf ? 'var(--rust)' : 'var(--library-card-bg)',
-                            color: isSelf ? 'var(--surface-bg)' : 'var(--message-other-text)',
+                            padding: '10px 16px', borderRadius: '18px',
+                            background: isSelf ? 'var(--message-self-bg)' : 'var(--message-other-bg)',
+                            color: isSelf ? 'var(--message-self-text)' : 'var(--message-other-text)',
                             fontSize: '13px', lineHeight: '1.4',
-                            border: isSelf ? '1px solid var(--rust)' : '1px solid var(--library-card-border)',
-                            boxShadow: isSelf
-                              ? '0 0 0 1.5px var(--library-card-bg), 0 0 0 2.5px var(--rust), 0 2px 5px rgba(0,0,0,0.05)'
-                              : '0 0 0 1.5px var(--library-card-bg), 0 0 0 2.5px var(--library-card-border), 0 2px 5px rgba(0,0,0,0.03)',
+                            border: isSelf ? '1px solid var(--message-self-bg)' : '1px solid var(--library-card-border)',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                             wordBreak: 'break-word', position: 'relative', minWidth: '50px'
                           }}>
-                            <div style={{
-                              position: 'absolute', top: '-8px',
-                              ...(isSelf ? { right: '12px' } : { left: '12px' }),
-                              background: isSelf ? 'var(--rust)' : 'var(--library-card-bg)',
-                              color: isSelf ? 'var(--surface-bg)' : 'var(--rust)',
-                              border: isSelf ? '1px solid var(--surface-bg)' : '1px solid var(--library-card-border)',
-                              borderRadius: '8px', padding: '0px 6px',
-                              fontSize: '7px', fontFamily: 'monospace', fontWeight: '700',
-                              textTransform: 'uppercase', letterSpacing: '0.05em', zIndex: 2
-                            }}>
-                              {isSelf ? 'You' : 'Reader'}
-                            </div>
                             {m.text}
                           </div>
-                          <WingIcon isLeft={false} color={isSelf ? 'var(--rust)' : 'var(--brass)'} />
                         </div>
                       </div>
                     </div>
