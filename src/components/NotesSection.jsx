@@ -1,18 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 
+import { uGet, uSet } from '../utils/userKey';
+
 export default function NotesSection({ selectedDate }) {
   const [allNotes, setAllNotes] = useState(() => {
-    const saved = localStorage.getItem('shelf_daily_notes');
-    return saved ? JSON.parse(saved) : {};
+    return uGet('shelf_daily_notes', {});
   });
 
   const [newNoteText, setNewNoteText] = useState('');
 
   useEffect(() => {
-    localStorage.setItem('shelf_daily_notes', JSON.stringify(allNotes));
+    uSet('shelf_daily_notes', allNotes);
     window.dispatchEvent(new Event('notes-updated'));
   }, [allNotes]);
+
+  // Listen for sync updates from App.jsx so data stays fresh when switching users
+  useEffect(() => {
+    const handleSync = () => setAllNotes(uGet('shelf_daily_notes', {}));
+    window.addEventListener('notes-updated', handleSync);
+    return () => window.removeEventListener('notes-updated', handleSync);
+  }, []);
 
   const dateKey = selectedDate ? new Date(selectedDate).toDateString() : new Date().toDateString();
   const currentNotes = allNotes[dateKey] || [];

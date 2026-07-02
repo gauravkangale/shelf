@@ -100,6 +100,13 @@ function ChatView({ friend, currentUser, token, onBack }) {
   const [error, setError] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
+  // Clear drafting state when switching users or friends
+  useEffect(() => {
+    setImagePreview(null);
+    setInput('');
+    setError(null);
+  }, [currentUser?.id, friend?.id]);
+
   // Message selection states
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedMsgIds, setSelectedMsgIds] = useState([]);

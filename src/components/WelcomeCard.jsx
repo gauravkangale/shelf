@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Pencil, FileText, Link, Image } from 'lucide-react';
+import { Pencil, FileText, Link, Image, Link2 } from 'lucide-react';
 import { uGet, uSet, uRemove } from '../utils/userKey';
 
 const STORAGE_KEY = 'welcome_decoration_index';
@@ -32,21 +32,77 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
   // Loaded from localStorage so it's private to the current user account
   const [uploadedResource, setUploadedResource] = useState(() => uGet(UPLOADED_RESOURCE_KEY) || null);
 
-  // When account switches, reload the resource scoped to the new user
-  useEffect(() => {
-    const handleUserSwitch = () => {
-      // Re-read the storage key now scoped to the newly active user
-      const saved = uGet(UPLOADED_RESOURCE_KEY);
-      setUploadedResource(saved || null);
+  const fetchPrefs = async (isUserSwitch = false) => {
+    // If triggered by a user switch, temporarily clear state
+    if (isUserSwitch) {
+      setDecoIndex(0);
+      setCustomImg(null);
+      setUploadedResource(null);
+    }
 
-      // Also reload decoration preferences
+    const token = localStorage.getItem('shelf_auth_token');
+    if (!token) {
+      // Fallback to local storage reading if not authed
+      setUploadedResource(uGet(UPLOADED_RESOURCE_KEY) || null);
       const savedDeco = uGet(STORAGE_KEY);
       setDecoIndex(savedDeco !== null ? parseInt(savedDeco, 10) : 0);
       setCustomImg(uGet(CUSTOM_IMG_KEY) || null);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/preferences', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const p = data.preferences || {};
+
+        if (p.decoIndex !== undefined) {
+          setDecoIndex(p.decoIndex);
+          uSet(STORAGE_KEY, String(p.decoIndex));
+        }
+        if (p.customImg !== undefined) {
+          setCustomImg(p.customImg);
+          uSet(CUSTOM_IMG_KEY, p.customImg);
+        }
+        if (p.uploadedResource !== undefined) {
+          setUploadedResource(p.uploadedResource);
+          uSet(UPLOADED_RESOURCE_KEY, p.uploadedResource);
+        }
+      }
+    } catch (err) { }
+  };
+
+  // When account switches, fetch from database for new user
+  useEffect(() => {
+    const handleUserSwitch = () => {
+      fetchPrefs(true);
     };
     window.addEventListener('user-switched', handleUserSwitch);
     return () => window.removeEventListener('user-switched', handleUserSwitch);
   }, []);
+
+  // Fetch from /api/preferences on mount
+  useEffect(() => {
+    fetchPrefs();
+  }, []);
+
+  // Helper to sync to backend
+  const syncPrefs = async (newPrefs) => {
+    const token = localStorage.getItem('shelf_auth_token');
+    if (!token) return;
+    try {
+      await fetch('/api/preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ preferences: newPrefs })
+      });
+    } catch (err) { }
+  };
 
   const menuItemStyle = {
     width: "100%",
@@ -85,6 +141,8 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
     uSet(STORAGE_KEY, String(idx));
     uRemove(CUSTOM_IMG_KEY);
     setShowPicker(false);
+
+    syncPrefs({ decoIndex: idx, customImg: null });
   };
 
   const handleUpload = (e) => {
@@ -96,6 +154,8 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
       setCustomImg(dataUrl);
       uSet(CUSTOM_IMG_KEY, dataUrl);
       setShowPicker(false);
+
+      syncPrefs({ customImg: dataUrl, decoIndex: 0 }); // Optionally reset decoIndex
     };
     reader.readAsDataURL(file);
   };
@@ -112,6 +172,7 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
   const saveResource = (resource) => {
     setUploadedResource(resource);
     uSet(UPLOADED_RESOURCE_KEY, resource);
+    syncPrefs({ uploadedResource: resource });
   };
 
   const handleFileChange = (e, type) => {
@@ -141,9 +202,11 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
     setShowUploadMenu(false);
   };
 
-  const handleClearResource = () => {
+  const handleClearResource = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
     setUploadedResource(null);
     uRemove(UPLOADED_RESOURCE_KEY);
+    syncPrefs({ uploadedResource: null });
   };
 
   const MenuButton = ({ icon, label, onClick, color }) => {
@@ -214,28 +277,6 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
           Get reading now!
         </p>
 
-        {/* Uploaded resource indicator */}
-        {uploadedResource && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '11px', color: 'var(--text-secondary)',
-            marginBottom: '6px', fontStyle: 'italic'
-          }}>
-            <span>📄</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
-              {uploadedResource.name || (uploadedResource.type === 'link' ? uploadedResource.value : 'Uploaded file')}
-            </span>
-            <button
-              onClick={handleClearResource}
-              title="Remove uploaded resource"
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--text-secondary)', fontSize: '12px', padding: '0 2px', flexShrink: 0
-              }}
-            >✕</button>
-          </div>
-        )}
-
         {/* Side-by-Side Flex Anchor Layer */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <button
@@ -254,7 +295,6 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
                 return;
               }
 
-              // Open the resource — data URLs and http links both work with window.open
               window.open(uploadedResource.value, "_blank");
             }}
           >
@@ -453,7 +493,7 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
               onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-color)'}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-color)'}
             >
-              <span style={{ fontSize: '18px' }}>📎</span>
+              <span style={{ fontSize: '18px' }}><Link2 /></span>
               Upload your own image
               <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '400' }}>
                 JPG, PNG, WebP

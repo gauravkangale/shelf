@@ -35,16 +35,32 @@ export default function Homepage({
 
   // Shortcuts/bookmarks shelf
   const [shortcuts, setShortcuts] = useState(() => {
+    // Quick fallback
     const saved = uGet('homepage_shortcuts');
-    if (saved) {
-      if (saved.some(s => s.title === 'The World of Ice and Fire' || s.title === 'Fantastic Beasts')) {
-        uSet('homepage_shortcuts', INITIAL_SHORTCUTS);
-        return INITIAL_SHORTCUTS;
-      }
-      return saved;
-    }
+    if (saved) return saved;
     return INITIAL_SHORTCUTS;
   });
+
+  // Fetch true shortcuts from server
+  useEffect(() => {
+    const fetchShortcuts = async () => {
+      const token = localStorage.getItem('shelf_auth_token');
+      if (!token) return;
+      try {
+        const res = await fetch('/api/shortcuts', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.shortcuts && Array.isArray(data.shortcuts)) {
+            setShortcuts(data.shortcuts);
+            uSet('homepage_shortcuts', data.shortcuts);
+          }
+        }
+      } catch (err) {}
+    };
+    fetchShortcuts();
+  }, []);
 
   // Modal open/close state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -62,6 +78,25 @@ export default function Homepage({
   // Persist shortcuts
   useEffect(() => {
     uSet('homepage_shortcuts', shortcuts);
+    
+    // Sync to backend
+    const syncShortcuts = async () => {
+      const token = localStorage.getItem('shelf_auth_token');
+      if (!token) return;
+      try {
+        await fetch('/api/shortcuts', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` 
+          },
+          body: JSON.stringify({ shortcuts })
+        });
+      } catch (err) {}
+    };
+    
+    // Only sync if they aren't the default INITIAL_SHORTCUTS exactly
+    syncShortcuts();
   }, [shortcuts]);
 
   // Listen for trash-drop bookmark deletions (from Header trash zone)

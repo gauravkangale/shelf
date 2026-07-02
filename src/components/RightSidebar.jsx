@@ -61,23 +61,45 @@ export default function RightSidebar({
   }, [activeProfile]);
 
   React.useEffect(() => {
-    const savedBook = localStorage.getItem(`current_book_${activeProfile.email}`);
-
-    if (savedBook) {
+    setIsEditing(false);
+    
+    // First, try local storage as a quick fallback to avoid UI flashing
+    const localBook = localStorage.getItem(`current_book_${activeProfile.email}`);
+    if (localBook) {
       try {
-        setBook(JSON.parse(savedBook));
+        setBook(JSON.parse(localBook));
       } catch {
         setBook(DEFAULT_BOOK);
       }
     } else {
-      // Use the default book until the user edits and saves it
       setBook(DEFAULT_BOOK);
     }
-
-    setIsEditing(false);
+    
+    // Then, fetch real data from backend
+    const fetchBook = async () => {
+      const token = localStorage.getItem('shelf_auth_token');
+      if (!token) return;
+      try {
+        const res = await fetch('/api/books/current', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.book && data.book.title) {
+            setBook(data.book);
+            // Cache locally
+            localStorage.setItem(`current_book_${activeProfile.email}`, JSON.stringify(data.book));
+          }
+        }
+      } catch (err) {
+        // Silently ignore network errors
+      }
+    };
+    
+    fetchBook();
   }, [activeProfile]);
 
-  const handleSaveBook = (e) => {
+  const handleSaveBook = async (e) => {
     e.preventDefault();
 
     const updatedBook = {
@@ -90,13 +112,30 @@ export default function RightSidebar({
 
     setBook(updatedBook);
 
-    // Save for this profile
+    // Save for this profile locally for immediate feedback
     localStorage.setItem(
       `current_book_${activeProfile.email}`,
       JSON.stringify(updatedBook)
     );
 
     setIsEditing(false);
+    
+    // Save to backend
+    const token = localStorage.getItem('shelf_auth_token');
+    if (token) {
+      try {
+        await fetch('/api/books/current', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(updatedBook)
+        });
+      } catch (err) {
+        console.error('Failed to sync book to server', err);
+      }
+    }
   };
   const startEditing = () => {
     setEditTitle(book.title);

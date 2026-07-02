@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url    TEXT,
   google_id     TEXT UNIQUE,
   is_verified   BOOLEAN DEFAULT false,
+  preferences   JSONB DEFAULT '{}'::jsonb,
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );

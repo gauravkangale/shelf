@@ -909,6 +909,7 @@ async function initDb() {
       shortcuts       JSONB DEFAULT '[]'::jsonb,
       daily_notes     JSONB DEFAULT '[]'::jsonb,
       books           JSONB DEFAULT '{}'::jsonb,
+      preferences     JSONB DEFAULT '{}'::jsonb,
       created_at      TIMESTAMPTZ DEFAULT NOW(),
       updated_at      TIMESTAMPTZ DEFAULT NOW()
     )
@@ -950,7 +951,23 @@ async function initDb() {
       image_url     TEXT,
       read          BOOLEAN DEFAULT false,
       created_at    TIMESTAMPTZ DEFAULT NOW()
-    )
+    );
+
+    ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+    
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'messages' AND policyname = 'Messages privacy policy'
+      ) THEN
+        CREATE POLICY "Messages privacy policy" ON messages
+          USING (
+            sender_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid 
+            OR receiver_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid
+          );
+      END IF;
+    END
+    $$;
   `;
   try {
     await sql`ALTER TABLE messages ADD COLUMN IF NOT EXISTS read BOOLEAN DEFAULT false`;
@@ -973,6 +990,10 @@ async function initDb() {
     )
   `;
   console.log('✅ DB tables ready');
+  
+  try {
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB DEFAULT '{}'::jsonb`;
+  } catch (err) {}
 
   // Performance indexes
   try {
@@ -1439,6 +1460,47 @@ app.post('/api/shortcuts', verifyToken, async (req, res) => {
   } catch (err) {
     console.error('Save shortcuts error:', err);
     res.status(500).json({ error: 'Failed to save shortcuts.' });
+  }
+});
+
+// ── GET /api/preferences ────────────────────────────────────────────────────────
+app.get('/api/preferences', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const [user] = await sql`
+      SELECT preferences FROM users WHERE id = ${userId}
+    `;
+    const prefs = (user && user.preferences) ? user.preferences : {};
+    res.json({ preferences: prefs });
+  } catch (err) {
+    console.error('Fetch preferences error:', err);
+    res.status(500).json({ error: 'Failed to fetch preferences.' });
+  }
+});
+
+// ── POST /api/preferences ───────────────────────────────────────────────────────
+app.post('/api/preferences', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const { preferences } = req.body;
+    if (!preferences || typeof preferences !== 'object') {
+      return res.status(400).json({ error: 'preferences must be an object' });
+    }
+    
+    // Merge existing with new
+    const [user] = await sql`SELECT preferences FROM users WHERE id = ${userId}`;
+    const currentPrefs = (user && user.preferences) ? user.preferences : {};
+    const mergedPrefs = { ...currentPrefs, ...preferences };
+    
+    await sql`
+      UPDATE users
+      SET preferences = ${JSON.stringify(mergedPrefs)}::jsonb
+      WHERE id = ${userId}
+    `;
+    res.json({ success: true, preferences: mergedPrefs });
+  } catch (err) {
+    console.error('Save preferences error:', err);
+    res.status(500).json({ error: 'Failed to save preferences.' });
   }
 });
 
