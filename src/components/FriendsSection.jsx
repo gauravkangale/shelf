@@ -471,7 +471,11 @@ function ChatView({ friend, currentUser, token, onBack }) {
         padding: '24px 28px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '12px'
+        gap: '20px',
+        background: '#fffef9',
+        backgroundImage: 'repeating-linear-gradient(transparent, transparent 52px, rgba(0,0,0,0.04) 52px, rgba(0,0,0,0.04) 53px)',
+        backgroundSize: '100% 53px',
+        backgroundAttachment: 'local'
       }}>
         {loading && (
           <div style={{ margin: 'auto', textAlign: 'center' }}>
@@ -517,7 +521,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
         {messages.map((m, i) => {
           const isSelf = m.senderId === currentUser?.id;
           const showTime = i === 0 ||
-            new Date(m.createdAt) - new Date(messages[i - 1]?.createdAt) > 5 * 60 * 1000;
+            new Date(m.createdAt) - new Date(messages[i - 1]?.createdAt) > 30 * 60 * 1000;
           const isSelected = selectedMsgIds.includes(m.id);
           const isMenuOpen = activeMsgMenuId === m.id;
 
@@ -525,17 +529,17 @@ function ChatView({ friend, currentUser, token, onBack }) {
             <React.Fragment key={m.id}>
               {showTime && (
                 <div style={{
-                  textAlign: 'center', fontSize: '10px', color: 'var(--text-secondary)',
-                  margin: '12px 0 6px', fontWeight: '600', letterSpacing: '0.04em'
+                  textAlign: 'center', fontSize: '11px', color: 'var(--brass)',
+                  margin: '16px 0 8px', fontWeight: '700', letterSpacing: '0.05em'
                 }}>
-                  {formatTime(m.createdAt)}
+                  {new Date(m.createdAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} at {formatTime(m.createdAt)}
                 </div>
               )}
               <div style={{
                 display: 'flex',
                 flexDirection: isSelf ? 'row-reverse' : 'row',
-                alignItems: 'flex-end',
-                gap: '8px',
+                alignItems: 'flex-start',
+                gap: '12px',
                 opacity: m.optimistic ? 0.65 : 1,
                 transition: 'opacity 0.3s',
                 position: 'relative'
@@ -561,141 +565,151 @@ function ChatView({ friend, currentUser, token, onBack }) {
                   </div>
                 )}
 
-                {!isSelf && <Avatar user={friend} size={28} />}
-                <div style={{ maxWidth: '65%', position: 'relative' }} className="msg-wrap">
-                  <div
-                    onClick={() => {
-                      if (isSelectMode) {
-                        setSelectedMsgIds(prev =>
-                          prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
-                        );
-                      }
-                    }}
-                    style={{
-                      borderRadius: isSelf ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                      background: isSelf ? 'var(--accent-color, #b33533)' : 'var(--surface-bg)',
-                      color: isSelf ? '#fff' : 'var(--ink)',
-                      fontSize: '13.5px',
-                      lineHeight: 1.5,
-                      wordBreak: 'break-word',
-                      boxShadow: isSelf ? '0 3px 10px rgba(179, 53, 51, 0.12)' : '0 3px 10px rgba(0,0,0,0.03)',
-                      border: isSelected ? '2px solid var(--accent-color, #b33533)' : (isSelf ? 'none' : '1px solid rgba(0,0,0,0.06)'),
-                      cursor: isSelectMode ? 'pointer' : 'default',
-                      overflow: 'hidden',
-                      position: 'relative'
-                    }}
-                  >
-                    {m.imageUrl && (
-                      <div style={{ position: 'relative', overflow: 'hidden' }}>
-                        <a href={m.imageUrl} target="_blank" rel="noreferrer" style={{ display: 'block', outline: 'none' }} onClick={e => isSelectMode && e.preventDefault()}>
-                          <img
-                            src={m.imageUrl}
-                            alt="Shared media"
-                            style={{
-                              maxWidth: '100%',
-                              maxHeight: '280px',
-                              width: '100%',
-                              objectFit: 'cover',
-                              display: 'block',
-                              transition: 'transform 0.3s ease'
-                            }}
-                            className="chat-image"
-                          />
-                        </a>
-                      </div>
+                {!isSelf && <div style={{ marginTop: '2px' }}><Avatar user={friend} size={36} /></div>}
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: isSelf ? 'flex-end' : 'flex-start', maxWidth: '65%' }}>
+                  <div style={{ maxWidth: '100%', position: 'relative' }} className="msg-wrap">
+                    <div
+                      onClick={() => {
+                        if (isSelectMode) {
+                          setSelectedMsgIds(prev =>
+                            prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
+                          );
+                        }
+                      }}
+                      style={{
+                        borderRadius: isSelf ? '22px 22px 6px 22px' : '22px 22px 22px 6px',
+                        background: isSelf ? '#fad3d8' : '#e6f2fb',
+                        color: '#443c3d',
+                        fontSize: '14.5px',
+                        fontWeight: '500',
+                        lineHeight: 1.5,
+                        wordBreak: 'break-word',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                        border: isSelected ? '2px solid var(--accent-color, #b33533)' : (isSelf ? '2px solid #eab7bc' : '2px solid #b8d0e6'),
+                        cursor: isSelectMode ? 'pointer' : 'default',
+                        overflow: 'hidden',
+                        position: 'relative'
+                      }}
+                    >
+                      {m.imageUrl && (
+                        <div style={{ position: 'relative', overflow: 'hidden' }}>
+                          <a href={m.imageUrl} target="_blank" rel="noreferrer" style={{ display: 'block', outline: 'none' }} onClick={e => isSelectMode && e.preventDefault()}>
+                            <img
+                              src={m.imageUrl}
+                              alt="Shared media"
+                              style={{
+                                maxWidth: '100%',
+                                maxHeight: '280px',
+                                width: '100%',
+                                objectFit: 'cover',
+                                display: 'block',
+                                transition: 'transform 0.3s ease'
+                              }}
+                              className="chat-image"
+                            />
+                          </a>
+                        </div>
+                      )}
+                      {m.text && (
+                        <div style={{ padding: m.imageUrl ? '12px 16px' : '12px 18px' }}>
+                          {m.text}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Inline Options Menu Trigger next to bubble */}
+                    {!isSelectMode && !m.optimistic && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMsgMenuId(isMenuOpen ? null : m.id);
+                        }}
+                        className="msg-menu-btn"
+                        style={{
+                          position: 'absolute',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          [isSelf ? 'left' : 'right']: '-32px',
+                          background: 'var(--surface-bg)',
+                          border: '1.5px solid var(--border-color)',
+                          borderRadius: '50%',
+                          width: '26px',
+                          height: '26px',
+                          display: 'none',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: 'var(--brass)',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+                          zIndex: 5
+                        }}
+                      >
+                        <MoreVertical size={14} />
+                      </button>
                     )}
-                    {m.text && (
-                      <div style={{ padding: m.imageUrl ? '10px 14px' : '10px 16px' }}>
-                        {m.text}
+
+                    {/* Bubble Options Dropdown Menu */}
+                    {isMenuOpen && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '50%',
+                          transform: 'translateY(12px)',
+                          [isSelf ? 'left' : 'right']: '0px',
+                          background: 'var(--surface-bg)',
+                          border: '1.5px solid var(--border-color)',
+                          borderRadius: '12px',
+                          boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                          padding: '6px 0',
+                          zIndex: 20,
+                          minWidth: '120px'
+                        }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(m.text || '');
+                            setActiveMsgMenuId(null);
+                          }}
+                          style={{
+                            display: 'block', width: '100%', padding: '8px 16px',
+                            background: 'none', border: 'none', textAlign: 'left',
+                            fontSize: '12.5px', cursor: 'pointer', color: 'var(--ink)',
+                            fontFamily: 'var(--font-sans)', transition: 'background 0.2s'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                        >
+                          Copy Text
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleDelete(m.id);
+                            setActiveMsgMenuId(null);
+                          }}
+                          style={{
+                            display: 'block', width: '100%', padding: '8px 16px',
+                            background: 'none', border: 'none', textAlign: 'left',
+                            fontSize: '12.5px', cursor: 'pointer', color: 'var(--danger-color, #d94a43)',
+                            fontFamily: 'var(--font-sans)', transition: 'background 0.2s'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(217,74,67,0.05)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                        >
+                          Delete Message
+                        </button>
                       </div>
                     )}
                   </div>
 
-                  {/* Inline Options Menu Trigger next to bubble */}
-                  {!isSelectMode && !m.optimistic && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMsgMenuId(isMenuOpen ? null : m.id);
-                      }}
-                      className="msg-menu-btn"
-                      style={{
-                        position: 'absolute',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        [isSelf ? 'left' : 'right']: '-28px',
-                        background: 'var(--surface-bg)',
-                        border: '1.5px solid var(--border-color)',
-                        borderRadius: '50%',
-                        width: '24px',
-                        height: '24px',
-                        display: 'none',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        color: 'var(--brass)',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
-                        zIndex: 5
-                      }}
-                    >
-                      <MoreVertical size={12} />
-                    </button>
-                  )}
-
-                  {/* Bubble Options Dropdown Menu */}
-                  {isMenuOpen && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '50%',
-                        transform: 'translateY(12px)',
-                        [isSelf ? 'left' : 'right']: '0px',
-                        background: 'var(--surface-bg)',
-                        border: '1.5px solid var(--border-color)',
-                        borderRadius: '12px',
-                        boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
-                        padding: '6px 0',
-                        zIndex: 20,
-                        minWidth: '120px'
-                      }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(m.text || '');
-                          setActiveMsgMenuId(null);
-                        }}
-                        style={{
-                          display: 'block', width: '100%', padding: '8px 16px',
-                          background: 'none', border: 'none', textAlign: 'left',
-                          fontSize: '12.5px', cursor: 'pointer', color: 'var(--ink)',
-                          fontFamily: 'var(--font-sans)', transition: 'background 0.2s'
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                      >
-                        Copy Text
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleDelete(m.id);
-                          setActiveMsgMenuId(null);
-                        }}
-                        style={{
-                          display: 'block', width: '100%', padding: '8px 16px',
-                          background: 'none', border: 'none', textAlign: 'left',
-                          fontSize: '12.5px', cursor: 'pointer', color: 'var(--danger-color, #d94a43)',
-                          fontFamily: 'var(--font-sans)', transition: 'background 0.2s'
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(217,74,67,0.05)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                      >
-                        Delete Message
-                      </button>
-                    </div>
-                  )}
+                  {/* INLINE TIMESTAMP */}
+                  <div style={{ fontSize: '10.5px', color: 'var(--brass)', marginTop: '4px', opacity: 0.8, padding: '0 4px', fontWeight: '600' }}>
+                    {formatTime(m.createdAt)}
+                  </div>
                 </div>
-                {isSelf && <Avatar user={currentUser} size={28} />}
+
+                {isSelf && <div style={{ marginTop: '2px' }}><Avatar user={currentUser} size={36} /></div>}
               </div>
             </React.Fragment>
           );
@@ -801,7 +815,6 @@ function ChatView({ friend, currentUser, token, onBack }) {
       </form>
 
       <style>{`
-        .msg-wrap:hover .msg-delete-btn { display: flex !important; }
       `}</style>
     </div>
   );
@@ -1246,10 +1259,6 @@ export default function FriendsSection({ setActiveTab }) {
         @keyframes bounceSlow {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-8px); }
-        }
-
-        .msg-wrap:hover .msg-menu-btn {
-          display: flex !important;
         }
         .chat-image:hover {
           transform: scale(1.02);
