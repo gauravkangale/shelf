@@ -214,7 +214,7 @@ export default function BookmarksSection() {
         alignItems: 'center',
         padding: '24px 40px',
         borderBottom: '1px solid var(--border-color)',
-        background: 'var(--panel-bg)'
+        background: 'var(--bg-color)'
       }}>
         <div>
           <h1 style={{ fontFamily: 'var(--serif)', fontSize: '28px', color: 'var(--forest-deep)', margin: 0 }}>Saved Bookmarks</h1>

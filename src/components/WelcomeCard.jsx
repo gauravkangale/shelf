@@ -1,8 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Pencil, FileText, Link, Image } from 'lucide-react';
 import { uGet, uSet, uRemove } from '../utils/userKey';
 
 const STORAGE_KEY = 'welcome_decoration_index';
 const CUSTOM_IMG_KEY = 'welcome_decoration_custom';
+const UPLOADED_RESOURCE_KEY = 'welcome_uploaded_resource'; // user-scoped doc key
 
 const DECORATION_IMAGES = [
   { src: '/mpage.png', label: 'Dark Roses' },
@@ -26,6 +28,36 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
   const [customImg, setCustomImg] = useState(() => uGet(CUSTOM_IMG_KEY) || null);
   const [showPicker, setShowPicker] = useState(false);
 
+  // ── User-scoped uploaded resource (PDF/image/link) ──────────────────────────
+  // Loaded from localStorage so it's private to the current user account
+  const [uploadedResource, setUploadedResource] = useState(() => uGet(UPLOADED_RESOURCE_KEY) || null);
+
+  // When account switches, reload the resource scoped to the new user
+  useEffect(() => {
+    const handleUserSwitch = () => {
+      // Re-read the storage key now scoped to the newly active user
+      const saved = uGet(UPLOADED_RESOURCE_KEY);
+      setUploadedResource(saved || null);
+
+      // Also reload decoration preferences
+      const savedDeco = uGet(STORAGE_KEY);
+      setDecoIndex(savedDeco !== null ? parseInt(savedDeco, 10) : 0);
+      setCustomImg(uGet(CUSTOM_IMG_KEY) || null);
+    };
+    window.addEventListener('user-switched', handleUserSwitch);
+    return () => window.removeEventListener('user-switched', handleUserSwitch);
+  }, []);
+
+  const menuItemStyle = {
+    width: "100%",
+    border: "none",
+    background: "transparent",
+    padding: "8px 10px",
+    cursor: "pointer",
+    borderRadius: "6px",
+    textAlign: "left",
+    fontSize: "13px"
+  };
   const handleMouseMove = (e) => {
     if (!graphicRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -33,6 +65,12 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
     const y = (e.clientY - rect.top) / rect.height - 0.5;
     graphicRef.current.style.transform = `rotateX(${-y * 35}deg) rotateY(${x * 35}deg) scale(1.06)`;
     graphicRef.current.style.transition = 'transform 0.1s ease-out';
+  };
+  const iconStyle = {
+    width: "14px",
+    height: "14px",
+    color: "var(--forest, #e85d56)",
+    flexShrink: 0
   };
 
   const handleMouseLeave = () => {
@@ -64,12 +102,108 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
 
   const activeSrc = customImg || DECORATION_IMAGES[decoIndex]?.src || '/mpage.png';
   const activeLabel = customImg ? 'Custom upload' : (DECORATION_IMAGES[decoIndex]?.label || 'Dark Roses');
+  const [showUploadMenu, setShowUploadMenu] = React.useState(false);
 
+  // File input refs for triggering native dialogs
+  const fileInputRef = React.useRef(null);
+  const imageInputRef = React.useRef(null);
+
+  // ── Save uploaded resource scoped to current user ───────────────────────────
+  const saveResource = (resource) => {
+    setUploadedResource(resource);
+    uSet(UPLOADED_RESOURCE_KEY, resource);
+  };
+
+  const handleFileChange = (e, type) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Use FileReader to get a base64 data URL (persists in localStorage, unlike blob URLs)
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      saveResource({
+        type,
+        value: ev.target.result,
+        name: file.name,
+      });
+    };
+    reader.readAsDataURL(file);
+
+    setShowUploadMenu(false);
+  };
+
+  const handleAddLink = () => {
+    const url = prompt("Enter or paste your book link:");
+    if (url) {
+      const formattedUrl = url.startsWith('http') ? url : `https://${url}`;
+      saveResource({ type: 'link', value: formattedUrl });
+    }
+    setShowUploadMenu(false);
+  };
+
+  const handleClearResource = () => {
+    setUploadedResource(null);
+    uRemove(UPLOADED_RESOURCE_KEY);
+  };
+
+  const MenuButton = ({ icon, label, onClick, color }) => {
+    return (
+      <button
+        onClick={onClick}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          width: "100%",
+          padding: "10px 10px",
+          borderRadius: "10px",
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          fontSize: "13px",
+          fontWeight: 500,
+          color: 'var(--text-primary)',
+          transition: "all 0.15s ease",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--bg-color)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+        }}
+        onMouseDown={(e) => {
+          e.currentTarget.style.transform = "scale(0.98)";
+        }}
+        onMouseUp={(e) => {
+          e.currentTarget.style.transform = "translateY(-1px)";
+        }}
+      >
+        <span style={{ color }}>{icon}</span>
+        {label}
+      </button>
+    );
+  };
   return (
     <section className="welcome-card-container">
 
       {/* ── Left info ──────────────────────────────────────── */}
-      <div className="welcome-info">
+      <div className="welcome-info" style={{ position: "relative" }}>
+        {/* Hidden native inputs for asset fetching */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept=".pdf"
+          style={{ display: 'none' }}
+          onChange={(e) => handleFileChange(e, 'pdf')}
+        />
+        <input
+          type="file"
+          ref={imageInputRef}
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => handleFileChange(e, 'image')}
+        />
+
         <h1 className="welcome-title">
           Happy reading,<br />
           <span className="welcome-name">{activeProfileName}</span>
@@ -79,17 +213,144 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
           Have Harry's parents died yet? Oops, looks like you're not there yet.
           Get reading now!
         </p>
-        <button
-          className="primary-btn"
-          onClick={() => {
-            setActiveTab?.('home');
-            setTimeout(() => {
-              document.getElementById('current-reading-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 100);
-          }}
-        >
-          Start reading ↗
-        </button>
+
+        {/* Uploaded resource indicator */}
+        {uploadedResource && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            fontSize: '11px', color: 'var(--text-secondary)',
+            marginBottom: '6px', fontStyle: 'italic'
+          }}>
+            <span>📄</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+              {uploadedResource.name || (uploadedResource.type === 'link' ? uploadedResource.value : 'Uploaded file')}
+            </span>
+            <button
+              onClick={handleClearResource}
+              title="Remove uploaded resource"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--text-secondary)', fontSize: '12px', padding: '0 2px', flexShrink: 0
+              }}
+            >✕</button>
+          </div>
+        )}
+
+        {/* Side-by-Side Flex Anchor Layer */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button
+            className="primary-btn"
+            onClick={() => {
+              if (!uploadedResource) {
+                setActiveTab?.("home");
+                setTimeout(() => {
+                  document
+                    .getElementById("current-reading-card")
+                    ?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "center",
+                    });
+                }, 100);
+                return;
+              }
+
+              // Open the resource — data URLs and http links both work with window.open
+              window.open(uploadedResource.value, "_blank");
+            }}
+          >
+            Start reading ↗
+          </button>
+
+          {/* Pencil option selector node layout */}
+          <div style={{ position: "relative", display: "inline-block" }}>
+            <button
+              className="pencil-edit-icon"
+              style={{
+                opacity: 1,
+                position: "static",
+                width: "22px",
+                height: "22px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowUploadMenu(!showUploadMenu);
+              }}
+              title="Upload Context Document"
+            >
+              <Pencil size={10} />
+            </button>
+
+            {showUploadMenu && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "110%",
+                  left: 0,
+                  background: "rgba(255,255,255,0.9)",
+                  backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
+                  border: "1px solid rgba(0,0,0,0.08)",
+                  borderRadius: "14px",
+                  padding: "8px",
+                  boxShadow: "0 12px 30px rgba(0,0,0,0.12)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  width: "190px",
+                  zIndex: 9999,
+
+                  // animation
+                  transform: "scale(0.96)",
+                  opacity: 0,
+                  animation: "fadeInMenu 160ms ease-out forwards"
+                }}
+              >
+                <MenuButton
+                  icon={<FileText size={16} />}
+                  label="Upload PDF"
+                  onClick={() => fileInputRef.current.click()}
+                  color="#6366f1"
+                />
+
+                <MenuButton
+                  icon={<Link size={16} />}
+                  label="Add Web Link"
+                  onClick={handleAddLink}
+                  color="#06b6d4"
+                />
+
+                <MenuButton
+                  icon={<Image size={16} />}
+                  label="Upload Image"
+                  onClick={() => imageInputRef.current.click()}
+                  color="#f59e0b"
+                />
+
+                {uploadedResource && (
+                  <MenuButton
+                    icon={<span style={{ fontSize: '14px' }}>🗑</span>}
+                    label="Clear Document"
+                    onClick={handleClearResource}
+                    color="#e85d56"
+                  />
+                )}
+
+                <style>{`
+      @keyframes fadeInMenu {
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+    `}</style>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ── Animated open-book ─────────────────────────────── */}

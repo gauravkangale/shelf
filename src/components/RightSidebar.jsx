@@ -33,11 +33,11 @@ export default function RightSidebar({
   handleCalendarScroll
 }) {
   const DEFAULT_BOOK = {
-    title: 'The Chamber of Secrets',
-    currentPage: '154',
+    title: 'The Divine Segregation',
+    currentPage: '163',
     totalPages: '300',
-    description: 'Harry as he returns to Hogwarts school of witchcraft and wizardry for his 2nd year, only to discover that..',
-    author: 'JK Rowling'
+    description: 'The dark purple device fused to his left eye granted him omnipotent vision. A technology that could teleport anything directly into his desired location.',
+    author: 'grvua'
   };
 
   const [book, setBook] = React.useState(DEFAULT_BOOK);
@@ -119,9 +119,10 @@ export default function RightSidebar({
           }}
         >
           <img
-            src={activeProfile.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80"}
+            src={activeProfile.avatar || activeProfile.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80"}
             className="avatar"
             alt={activeProfile.name}
+            onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80"; }}
           />
           <span className="username">{activeProfile.name}</span>
         </div>

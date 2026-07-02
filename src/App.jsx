@@ -4,6 +4,7 @@ import Homepage from './components/Homepage';
 import BookmarksSection from './components/BookmarksSection';
 import FriendsSection from './components/FriendsSection';
 import SettingsPage from './components/SettingsPage';
+import ReadingTimer from './components/ReadingTimer';
 import './App.css';
 import { userKey } from './utils/userKey';
 import { cachedFetch } from './utils/apiCache';
@@ -457,6 +458,14 @@ function App() {
     document.documentElement.dataset.theme = savedMode;
   }, []);
 
+  // Switch to Library/chat tab when "Message" is clicked anywhere (e.g. from profile cards)
+  useEffect(() => {
+    const handleOpenChat = () => setActiveTab('library');
+    window.addEventListener('open-direct-chat', handleOpenChat);
+    return () => window.removeEventListener('open-direct-chat', handleOpenChat);
+  }, []);
+
+
   // Self-heal: If token is present in localStorage but not in active profileAccount, sync it
   useEffect(() => {
     const token = localStorage.getItem('shelf_auth_token');
@@ -469,6 +478,48 @@ function App() {
       }));
     }
   }, []);
+
+  // Critical: On mount, sync shelf_current_user with real server UUID via /api/auth/me
+  // This fixes cases where the stored id is a timestamp or stale value instead of the DB UUID
+  useEffect(() => {
+    const syncRealUserId = async () => {
+      const token = localStorage.getItem('shelf_auth_token');
+      if (!token) return;
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const serverUser = data.user || data;
+        if (!serverUser?.id) return;
+
+        // Update localStorage with real server data
+        const current = JSON.parse(localStorage.getItem('shelf_current_user') || '{}');
+        const updated = {
+          ...current,
+          id: serverUser.id,
+          username: serverUser.username || current.username,
+          name: serverUser.name || current.name,
+          avatar_url: serverUser.avatar_url || current.avatar_url,
+          avatar: serverUser.avatar_url || current.avatar
+        };
+        localStorage.setItem('shelf_current_user', JSON.stringify(updated));
+
+        // Also update the active profile in state with the real DB id
+        setProfileAccounts(prev => prev.map(acc => {
+          if (acc.active) return { ...acc, id: serverUser.id, username: serverUser.username || acc.username, name: serverUser.name || acc.name };
+          return acc;
+        }));
+
+        window.dispatchEvent(new Event('user-switched'));
+      } catch {
+        // Silently ignore — user may be offline or token expired
+      }
+    };
+    syncRealUserId();
+  }, []);
+
 
   // Switch active profile account
   const switchProfileAccount = (id) => {
@@ -636,7 +687,7 @@ function App() {
           });
         } else {
           const newAcc = {
-            id: userData.id || Date.now().toString(),
+            id: userData.id,   // Always use server-provided UUID
             name: userData.name || userData.email || userData.phone || 'Member',
             username: userData.username || '',
             email: userData.email || '',
@@ -895,9 +946,9 @@ function App() {
         return <FriendsSection setActiveTab={setActiveTab} />;
       case 'timer':
         return (
-          <div style={placeholderStyle}>
-            <h1 style={headingStyle}>Reading Timer</h1>
-            <p style={textStyle}>Start a reading session to keep track of your daily pages and view historical stats.</p>
+          <div className="flex-1 w-full h-full">
+            {/* Make sure this is here! */}
+            <ReadingTimer />
           </div>
         );
       case 'bookmarks':

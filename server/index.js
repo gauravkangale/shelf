@@ -57,7 +57,8 @@ const inMemoryStore = {
     { id: 'g4', name: 'General Assembly', description: 'All-hands discussion, general announcements, and casual chats.' }
   ],
   cohort_members: [],
-  friendships: []
+  friendships: [],
+  notifications: []
 };
 
 let neonClient;
@@ -126,7 +127,7 @@ function simulateSqlInMemory(strings, values) {
     return inMemoryStore.users.filter(u =>
       u.id !== excludeId &&
       ((u.username && u.username.toLowerCase().includes(pattern)) ||
-      (u.name && u.name.toLowerCase().includes(pattern)))
+        (u.name && u.name.toLowerCase().includes(pattern)))
     ).slice(0, 15).map(u => ({
       id: u.id, name: u.name, username: u.username, avatar_url: u.avatar_url
     }));
@@ -305,6 +306,18 @@ function simulateSqlInMemory(strings, values) {
     return [];
   }
 
+  // UPDATE messages
+  if (query.includes('UPDATE messages')) {
+    const friendId = values[0];
+    const userId = values[1];
+    inMemoryStore.messages.forEach(m => {
+      if (m.sender_id === friendId && m.receiver_id === userId) {
+        m.read = true;
+      }
+    });
+    return [];
+  }
+
   // DELETE FROM friendships
   if (query.includes('DELETE FROM friendships')) {
     const id1 = values[0];
@@ -455,7 +468,7 @@ function simulateSqlInMemory(strings, values) {
     const identifier = values[0];
     const otp = values[1];
     const purpose = values[2];
-    const found = inMemoryStore.otp_tokens.filter(t => 
+    const found = inMemoryStore.otp_tokens.filter(t =>
       t.identifier === identifier &&
       t.otp_code === otp &&
       t.purpose === purpose &&
@@ -606,6 +619,8 @@ function simulateSqlInMemory(strings, values) {
         id: m.id,
         senderId: m.sender_id,
         text: m.message_text,
+        imageUrl: m.image_url || null,
+        read: m.read || false,
         createdAt: m.created_at
       }));
   }
@@ -621,6 +636,8 @@ function simulateSqlInMemory(strings, values) {
         sender_id,
         cohort_id,
         message_text,
+        image_url: null,
+        read: false,
         created_at: new Date()
       };
       inMemoryStore.messages.push(rawMsg);
@@ -630,25 +647,62 @@ function simulateSqlInMemory(strings, values) {
         senderId: rawMsg.sender_id,
         cohortId: rawMsg.cohort_id,
         text: rawMsg.message_text,
+        imageUrl: null,
+        read: false,
         createdAt: rawMsg.created_at
       }];
     } else {
       const sender_id = values[0];
       const receiver_id = values[1];
       const message_text = values[2];
+      const image_url = values[3] || null;
       const rawMsg = {
         id: crypto.randomUUID(),
         sender_id,
         receiver_id,
         message_text,
+        image_url,
+        read: false,
         created_at: new Date()
       };
       inMemoryStore.messages.push(rawMsg);
-      return [{ id: rawMsg.id, senderId: rawMsg.sender_id, text: rawMsg.message_text, createdAt: rawMsg.created_at }];
+      return [{
+        id: rawMsg.id,
+        senderId: rawMsg.sender_id,
+        text: rawMsg.message_text,
+        imageUrl: rawMsg.image_url,
+        read: false,
+        createdAt: rawMsg.created_at
+      }];
     }
   }
 
   return [];
+}
+
+// ─── In-Memory Notification Helpers ─────────────────────────────────────────
+function createInMemoryNotification({ recipientId, type, title, body, senderId, refId }) {
+  const notif = {
+    id: crypto.randomUUID(),
+    recipient_id: recipientId,
+    type,
+    title,
+    body,
+    sender_id: senderId || null,
+    ref_id: refId || null,
+    read: false,
+    created_at: new Date()
+  };
+  inMemoryStore.notifications.push(notif);
+  saveDb();
+  return notif;
+}
+
+function getInMemoryNotifications(userId) {
+  return inMemoryStore.notifications
+    .filter(n => n.recipient_id === userId)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 50);
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -656,9 +710,8 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
-
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function generateOtp() {
   // Use cryptographically secure random number instead of Math.random()
@@ -700,19 +753,38 @@ async function isCohortMember(cohortId, userId) {
 
 async function areAcceptedFriends(userId, friendId) {
   if (isInMemory) {
+    // Check direct accepted friendship
+    const id1 = userId < friendId ? userId : friendId;
+    const id2 = userId < friendId ? friendId : userId;
+    const directFriend = inMemoryStore.friendships.some(
+      f => f.user_id_1 === id1 && f.user_id_2 === id2 && f.status === 'accepted'
+    );
+    if (directFriend) return true;
+    // Fallback: shared cohort (teammates can also chat)
     const myCohorts = new Set(
       inMemoryStore.cohort_members.filter(gm => gm.user_id === userId).map(gm => gm.cohort_id)
     );
     return inMemoryStore.cohort_members.some(gm => gm.user_id === friendId && myCohorts.has(gm.cohort_id));
   }
 
-  const rows = await sql`
+  // Check direct accepted friendship
+  const id1 = userId < friendId ? userId : friendId;
+  const id2 = userId < friendId ? friendId : userId;
+  const friendRows = await sql`
+    SELECT 1 FROM friendships
+    WHERE user_id_1 = ${id1} AND user_id_2 = ${id2} AND status = 'accepted'
+    LIMIT 1
+  `;
+  if (friendRows.length > 0) return true;
+
+  // Fallback: shared cohort (teammates can also chat)
+  const cohortRows = await sql`
     SELECT 1 FROM cohort_members gm1
     JOIN cohort_members gm2 ON gm1.cohort_id = gm2.cohort_id
     WHERE gm1.user_id = ${userId} AND gm2.user_id = ${friendId}
     LIMIT 1
   `;
-  return rows.length > 0;
+  return cohortRows.length > 0;
 }
 
 async function sendOtpEmail(toEmail, otp, purpose) {
@@ -764,7 +836,7 @@ async function initDb() {
     try {
       const tables = await sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`;
       const tableNames = tables.map(t => t.table_name);
-      
+
       // Rename groups -> cohorts
       if (tableNames.includes('groups') && !tableNames.includes('cohorts')) {
         console.log('🔄 Migrating groups table to cohorts...');
@@ -776,7 +848,7 @@ async function initDb() {
         await sql`ALTER TABLE group_members RENAME TO cohort_members`;
         await sql`ALTER TABLE cohort_members RENAME COLUMN group_id TO cohort_id`;
       }
-      
+
       // Rename group_id column to cohort_id in messages table
       const messagesCols = await sql`
         SELECT column_name FROM information_schema.columns 
@@ -859,11 +931,49 @@ async function initDb() {
       sender_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       receiver_id   UUID REFERENCES users(id) ON DELETE CASCADE,
       cohort_id     UUID REFERENCES cohorts(id) ON DELETE CASCADE,
-      message_text  TEXT NOT NULL,
+      message_text  TEXT,
+      image_url     TEXT,
+      read          BOOLEAN DEFAULT false,
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  try {
+    await sql`ALTER TABLE messages ADD COLUMN IF NOT EXISTS read BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_url TEXT`;
+    await sql`ALTER TABLE messages ALTER COLUMN message_text DROP NOT NULL`;
+  } catch (err) {
+    console.error('Migration warning:', err.message);
+  }
+  await sql`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      recipient_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      sender_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+      type          TEXT NOT NULL,
+      title         TEXT NOT NULL,
+      body          TEXT NOT NULL,
+      ref_id        TEXT,
+      read          BOOLEAN DEFAULT false,
       created_at    TIMESTAMPTZ DEFAULT NOW()
     )
   `;
   console.log('✅ DB tables ready');
+
+  // Performance indexes
+  try {
+    await sql`CREATE INDEX IF NOT EXISTS idx_friendships_user1 ON friendships(user_id_1)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_friendships_user2 ON friendships(user_id_2)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_friendships_both ON friendships(user_id_1, user_id_2, status)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender_id, receiver_id, created_at)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id, created_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_cohort_members_user ON cohort_members(user_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_cohort_members_cohort ON cohort_members(cohort_id)`;
+  } catch (idxErr) {
+    console.error('⚠️ Index creation warning:', idxErr.message);
+  }
+
 
   // Seed default cohorts
   try {
@@ -1449,6 +1559,36 @@ app.get('/api/friends/status', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
 
+    if (isInMemory) {
+      const acceptedFs = inMemoryStore.friendships.filter(
+        f => (f.user_id_1 === userId || f.user_id_2 === userId) && f.status === 'accepted'
+      );
+      const friends = acceptedFs.map(f => {
+        const otherId = f.user_id_1 === userId ? f.user_id_2 : f.user_id_1;
+        const u = inMemoryStore.users.find(u => u.id === otherId);
+        return u ? { id: u.id, name: u.name, username: u.username, avatar_url: u.avatar_url } : null;
+      }).filter(Boolean);
+
+      const pendingInFs = inMemoryStore.friendships.filter(
+        f => (f.user_id_1 === userId || f.user_id_2 === userId) && f.status === 'pending' && f.sender_id !== userId
+      );
+      const pendingIncoming = pendingInFs.map(f => {
+        const u = inMemoryStore.users.find(u => u.id === f.sender_id);
+        return u ? { id: u.id, name: u.name, username: u.username, avatar_url: u.avatar_url } : null;
+      }).filter(Boolean);
+
+      const pendingOutFs = inMemoryStore.friendships.filter(
+        f => (f.user_id_1 === userId || f.user_id_2 === userId) && f.status === 'pending' && f.sender_id === userId
+      );
+      const pendingOutgoing = pendingOutFs.map(f => {
+        const otherId = f.user_id_1 === userId ? f.user_id_2 : f.user_id_1;
+        const u = inMemoryStore.users.find(u => u.id === otherId);
+        return u ? { id: u.id, name: u.name, username: u.username, avatar_url: u.avatar_url } : null;
+      }).filter(Boolean);
+
+      return res.json({ friends, pendingIncoming, pendingOutgoing });
+    }
+
     const friends = await sql`
       SELECT u.id, u.name, u.username, u.avatar_url
       FROM friendships f
@@ -1477,13 +1617,72 @@ app.get('/api/friends/status', verifyToken, async (req, res) => {
         AND u.id != ${userId}
     `;
 
-    res.json({
-      friends,
-      pendingIncoming,
-      pendingOutgoing
-    });
+    res.json({ friends, pendingIncoming, pendingOutgoing });
   } catch (err) {
     console.error('Get friendships error:', err);
+    res.status(500).json({ error: 'Failed to fetch friends.' });
+  }
+});
+
+// ── GET /api/friends ──────────────────────────────────────────────────────────
+// Returns all accepted friends with reading data, for the Direct Conversations list
+app.get('/api/friends', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    let friends = [];
+
+    if (isInMemory) {
+      const acceptedFs = inMemoryStore.friendships.filter(
+        f => (f.user_id_1 === userId || f.user_id_2 === userId) && f.status === 'accepted'
+      );
+      friends = acceptedFs.map(f => {
+        const otherId = f.user_id_1 === userId ? f.user_id_2 : f.user_id_1;
+        const u = inMemoryStore.users.find(u => u.id === otherId);
+        if (!u) return null;
+        const unreadCount = inMemoryStore.messages.filter(
+          m => m.sender_id === otherId && m.receiver_id === userId && !m.read
+        ).length;
+        return {
+          id: u.id, name: u.name, username: u.username, avatar_url: u.avatar_url,
+          currentBook: u.books && u.books.title ? {
+            title: u.books.title, author: u.books.author,
+            currentPage: u.books.currentPage || u.books.current_page,
+            totalPages: u.books.totalPages || u.books.total_pages
+          } : null,
+          lastActive: u.updated_at ? new Date(u.updated_at).toISOString() : null,
+          unreadCount
+        };
+      }).filter(Boolean);
+    } else {
+      const rows = await sql`
+        SELECT u.id, u.name, u.username, u.avatar_url, u.books, u.updated_at,
+               COALESCE((
+                 SELECT COUNT(*)::int 
+                 FROM messages m 
+                 WHERE m.sender_id = u.id AND m.receiver_id = ${userId} AND m.read = false
+               ), 0) as "unreadCount"
+        FROM friendships f
+        JOIN users u ON (u.id = f.user_id_1 OR u.id = f.user_id_2)
+        WHERE (f.user_id_1 = ${userId} OR f.user_id_2 = ${userId})
+          AND f.status = 'accepted'
+          AND u.id != ${userId}
+        ORDER BY f.updated_at DESC
+      `;
+      friends = rows.map(u => ({
+        id: u.id, name: u.name, username: u.username, avatar_url: u.avatar_url,
+        currentBook: u.books && u.books.title ? {
+          title: u.books.title, author: u.books.author,
+          currentPage: u.books.currentPage || u.books.current_page,
+          totalPages: u.books.totalPages || u.books.total_pages
+        } : null,
+        lastActive: u.updated_at ? new Date(u.updated_at).toISOString() : null,
+        unreadCount: u.unreadCount || 0
+      }));
+    }
+
+    res.json({ friends });
+  } catch (err) {
+    console.error('Get friends error:', err);
     res.status(500).json({ error: 'Failed to fetch friends.' });
   }
 });
@@ -1492,59 +1691,95 @@ app.get('/api/friends/status', verifyToken, async (req, res) => {
 app.post('/api/friends/request', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const { username } = req.body;
-    if (!username) {
-      return res.status(400).json({ error: 'Username is required.' });
+    const { username, friendId } = req.body;
+
+    if (!username && !friendId) {
+      return res.status(400).json({ error: 'username or friendId is required.' });
     }
 
-    const cleanUsername = username.trim().toLowerCase();
-
-    // Look up target user
-    const [target] = await sql`
-      SELECT id FROM users WHERE LOWER(username) = ${cleanUsername}
-    `;
-    if (!target) {
-      return res.status(404).json({ error: 'User not found.' });
+    let target;
+    if (isInMemory) {
+      if (friendId) {
+        target = inMemoryStore.users.find(u => u.id === friendId);
+      } else {
+        const cleanUsername = username.trim().toLowerCase();
+        target = inMemoryStore.users.find(u => (u.username || '').toLowerCase() === cleanUsername);
+      }
+    } else if (friendId) {
+      [target] = await sql`SELECT id, name, username FROM users WHERE id = ${friendId}`;
+    } else {
+      const cleanUsername = username.trim().toLowerCase();
+      [target] = await sql`SELECT id, name, username FROM users WHERE LOWER(username) = ${cleanUsername}`;
     }
 
-    if (target.id === userId) {
-      return res.status(400).json({ error: 'You cannot add yourself.' });
-    }
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    if (target.id === userId) return res.status(400).json({ error: 'You cannot add yourself.' });
 
-    // Check existing friendship
     const id1 = userId < target.id ? userId : target.id;
     const id2 = userId < target.id ? target.id : userId;
+
+    if (isInMemory) {
+      const existing = inMemoryStore.friendships.find(f => f.user_id_1 === id1 && f.user_id_2 === id2);
+      if (existing) {
+        if (existing.status === 'accepted') return res.status(400).json({ error: 'You are already friends.' });
+        if (existing.sender_id === userId) return res.status(400).json({ error: 'Request already sent.' });
+        // Auto-accept: the other person already sent us a request
+        existing.status = 'accepted';
+        existing.updated_at = new Date();
+        const sender = inMemoryStore.users.find(u => u.id === userId);
+        const senderName = sender?.name || sender?.username || 'Someone';
+        await createNotification({
+          recipientId: existing.sender_id, type: 'friend_accepted',
+          title: 'Friend request accepted',
+          body: `${senderName} accepted your friend request.`,
+          senderId: userId, refId: userId
+        });
+        return res.json({ success: true, message: 'Friend request accepted!' });
+      }
+      inMemoryStore.friendships.push({
+        id: crypto.randomUUID(), user_id_1: id1, user_id_2: id2,
+        status: 'pending', sender_id: userId,
+        created_at: new Date(), updated_at: new Date()
+      });
+      const sender = inMemoryStore.users.find(u => u.id === userId);
+      const senderName = sender?.name || sender?.username || 'Someone';
+      await createNotification({
+        recipientId: target.id, type: 'friend_request',
+        title: 'New friend request',
+        body: `${senderName} wants to connect with you.`,
+        senderId: userId, refId: userId
+      });
+      return res.json({ success: true, message: 'Friend request sent.' });
+    }
 
     const [existing] = await sql`
       SELECT status, sender_id FROM friendships
       WHERE user_id_1 = ${id1} AND user_id_2 = ${id2}
     `;
-
     if (existing) {
-      if (existing.status === 'accepted') {
-        return res.status(400).json({ error: 'You are already friends.' });
-      }
+      if (existing.status === 'accepted') return res.status(400).json({ error: 'You are already friends.' });
       if (existing.status === 'pending') {
-        if (existing.sender_id === userId) {
-          return res.status(400).json({ error: 'Request already sent.' });
-        } else {
-          // Auto-accept request if target has already sent a request to active user
-          await sql`
-            UPDATE friendships
-            SET status = 'accepted', updated_at = NOW()
-            WHERE user_id_1 = ${id1} AND user_id_2 = ${id2}
-          `;
-          return res.json({ success: true, message: 'Friend request accepted!' });
-        }
+        if (existing.sender_id === userId) return res.status(400).json({ error: 'Request already sent.' });
+        await sql`UPDATE friendships SET status = 'accepted', updated_at = NOW() WHERE user_id_1 = ${id1} AND user_id_2 = ${id2}`;
+        const [senderUser] = await sql`SELECT name, username FROM users WHERE id = ${userId}`;
+        const senderName = senderUser?.name || senderUser?.username || 'Someone';
+        await createNotification({
+          recipientId: existing.sender_id, type: 'friend_accepted',
+          title: 'Friend request accepted', body: `${senderName} accepted your friend request.`,
+          senderId: userId, refId: userId
+        });
+        return res.json({ success: true, message: 'Friend request accepted!' });
       }
     }
 
-    // Insert new friendship
-    await sql`
-      INSERT INTO friendships (user_id_1, user_id_2, status, sender_id)
-      VALUES (${id1}, ${id2}, 'pending', ${userId})
-    `;
-
+    await sql`INSERT INTO friendships (user_id_1, user_id_2, status, sender_id) VALUES (${id1}, ${id2}, 'pending', ${userId})`;
+    const [senderUser] = await sql`SELECT name, username FROM users WHERE id = ${userId}`;
+    const senderName = senderUser?.name || senderUser?.username || 'Someone';
+    await createNotification({
+      recipientId: target.id, type: 'friend_request',
+      title: 'New friend request', body: `${senderName} wants to connect with you.`,
+      senderId: userId, refId: userId
+    });
     res.json({ success: true, message: 'Friend request sent.' });
   } catch (err) {
     console.error('Send friend request error:', err);
@@ -1556,7 +1791,7 @@ app.post('/api/friends/request', verifyToken, async (req, res) => {
 app.post('/api/friends/respond', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const { friendId, action } = req.body; // action: 'accept' | 'decline'
+    const { friendId, action, notificationId } = req.body;
     if (!friendId || !['accept', 'decline'].includes(action)) {
       return res.status(400).json({ error: 'friendId and valid action are required.' });
     }
@@ -1564,31 +1799,65 @@ app.post('/api/friends/respond', verifyToken, async (req, res) => {
     const id1 = userId < friendId ? userId : friendId;
     const id2 = userId < friendId ? friendId : userId;
 
+    if (isInMemory) {
+      const fs = inMemoryStore.friendships.find(
+        f => f.user_id_1 === id1 && f.user_id_2 === id2 && f.status === 'pending'
+      );
+      if (!fs) return res.status(404).json({ error: 'No pending friend request found.' });
+      if (fs.sender_id === userId) return res.status(403).json({ error: 'You cannot respond to your own friend request.' });
+
+      if (action === 'accept') {
+        fs.status = 'accepted';
+        fs.updated_at = new Date();
+        const accepter = inMemoryStore.users.find(u => u.id === userId);
+        const accepterName = accepter?.name || accepter?.username || 'Someone';
+        await createNotification({
+          recipientId: fs.sender_id, type: 'friend_accepted',
+          title: 'Friend request accepted',
+          body: `${accepterName} accepted your friend request. You are now connected!`,
+          senderId: userId, refId: userId
+        });
+      } else {
+        inMemoryStore.friendships = inMemoryStore.friendships.filter(
+          f => !(f.user_id_1 === id1 && f.user_id_2 === id2)
+        );
+      }
+      // DELETE the notification so it never reappears on next poll
+      if (notificationId) {
+        inMemoryStore.notifications = (inMemoryStore.notifications || []).filter(
+          n => n.id !== notificationId
+        );
+      }
+      return res.json({ success: true });
+    }
+
     const [pending] = await sql`
       SELECT sender_id FROM friendships
       WHERE user_id_1 = ${id1} AND user_id_2 = ${id2} AND status = 'pending'
     `;
-    if (!pending) {
-      return res.status(404).json({ error: 'No pending friend request found.' });
-    }
-    if (pending.sender_id === userId) {
-      return res.status(403).json({ error: 'You cannot respond to your own friend request.' });
-    }
+    if (!pending) return res.status(404).json({ error: 'No pending friend request found.' });
+    if (pending.sender_id === userId) return res.status(403).json({ error: 'You cannot respond to your own friend request.' });
 
     if (action === 'accept') {
-      await sql`
-        UPDATE friendships
-        SET status = 'accepted', updated_at = NOW()
-        WHERE user_id_1 = ${id1} AND user_id_2 = ${id2}
-      `;
-      // Touch user records to trigger updates
+      await sql`UPDATE friendships SET status = 'accepted', updated_at = NOW() WHERE user_id_1 = ${id1} AND user_id_2 = ${id2}`;
       await sql`UPDATE users SET updated_at = NOW() WHERE id = ${userId} OR id = ${friendId}`;
+      const [accepter] = await sql`SELECT name, username FROM users WHERE id = ${userId}`;
+      const accepterName = accepter?.name || accepter?.username || 'Someone';
+      await createNotification({
+        recipientId: pending.sender_id, type: 'friend_accepted',
+        title: 'Friend request accepted',
+        body: `${accepterName} accepted your friend request. You are now connected!`,
+        senderId: userId, refId: userId
+      });
     } else {
-      await sql`
-        DELETE FROM friendships
-        WHERE user_id_1 = ${id1} AND user_id_2 = ${id2}
-      `;
+      await sql`DELETE FROM friendships WHERE user_id_1 = ${id1} AND user_id_2 = ${id2}`;
     }
+
+    // DELETE the notification so it doesn't reappear on next poll
+    if (notificationId) {
+      await sql`DELETE FROM notifications WHERE id = ${notificationId} AND recipient_id = ${userId}`;
+    }
+
     res.json({ success: true });
   } catch (err) {
     console.error('Friend response error:', err);
@@ -1600,7 +1869,7 @@ app.post('/api/friends/respond', verifyToken, async (req, res) => {
 app.get('/api/users/activity', async (req, res) => {
   try {
     let activeUsers = [];
-    
+
     // Check if token is provided
     const auth = req.headers.authorization;
     let userId = null;
@@ -1680,8 +1949,16 @@ app.get('/api/chat/:friendId', verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'You are not friends with this user.' });
     }
 
+    // Mark all unread incoming messages from this friend as read
+    await sql`
+      UPDATE messages
+      SET read = true
+      WHERE sender_id = ${friendId} AND receiver_id = ${userId} AND read = false
+    `;
+
     const messages = await sql`
-      SELECT id, sender_id as "senderId", receiver_id as "receiverId", message_text as "text", created_at as "createdAt"
+      SELECT id, sender_id as "senderId", receiver_id as "receiverId", 
+             message_text as "text", image_url as "imageUrl", read, created_at as "createdAt"
       FROM messages
       WHERE (sender_id = ${userId} AND receiver_id = ${friendId})
          OR (sender_id = ${friendId} AND receiver_id = ${userId})
@@ -1699,9 +1976,13 @@ app.get('/api/chat/:friendId', verifyToken, async (req, res) => {
 app.post('/api/chat', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const { receiverId, messageText } = req.body;
-    if (!receiverId || !messageText) {
-      return res.status(400).json({ error: 'receiverId and messageText are required.' });
+    const { receiverId, messageText, imageUrl } = req.body;
+    
+    if (!receiverId) {
+      return res.status(400).json({ error: 'receiverId is required.' });
+    }
+    if (!messageText && !imageUrl) {
+      return res.status(400).json({ error: 'Either messageText or imageUrl is required.' });
     }
 
     if (!(await areAcceptedFriends(userId, receiverId))) {
@@ -1709,9 +1990,10 @@ app.post('/api/chat', verifyToken, async (req, res) => {
     }
 
     const [msg] = await sql`
-      INSERT INTO messages (sender_id, receiver_id, message_text)
-      VALUES (${userId}, ${receiverId}, ${messageText})
-      RETURNING id, sender_id as "senderId", receiver_id as "receiverId", message_text as "text", created_at as "createdAt"
+      INSERT INTO messages (sender_id, receiver_id, message_text, image_url, read)
+      VALUES (${userId}, ${receiverId}, ${messageText || null}, ${imageUrl || null}, false)
+      RETURNING id, sender_id as "senderId", receiver_id as "receiverId", 
+                message_text as "text", image_url as "imageUrl", read, created_at as "createdAt"
     `;
 
     res.json({ success: true, message: msg });
@@ -1730,14 +2012,72 @@ app.get('/api/users/search', verifyToken, async (req, res) => {
       return res.json({ users: [] });
     }
     const pattern = `%${q.trim().toLowerCase()}%`;
-    const users = await sql`
-      SELECT id, name, username, avatar_url
-      FROM users
-      WHERE id != ${userId}
-        AND (LOWER(username) ILIKE ${pattern} OR LOWER(name) ILIKE ${pattern})
-      LIMIT 10
-    `;
-    res.json({ users });
+
+    let users = [];
+    if (isInMemory) {
+      users = inMemoryStore.users
+        .filter(u => u.id !== userId &&
+          ((u.username || '').toLowerCase().includes(q.trim().toLowerCase()) ||
+           (u.name || '').toLowerCase().includes(q.trim().toLowerCase())))
+        .slice(0, 10)
+        .map(u => ({
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          avatar_url: u.avatar_url,
+          books: u.books || {}
+        }));
+    } else {
+      users = await sql`
+        SELECT id, name, username, avatar_url, books
+        FROM users
+        WHERE id != ${userId}
+          AND (LOWER(username) ILIKE ${pattern} OR LOWER(name) ILIKE ${pattern})
+        LIMIT 10
+      `;
+    }
+
+    // Query friendships for this user to determine status
+    let friendships = [];
+    if (isInMemory) {
+      friendships = inMemoryStore.friendships.filter(
+        f => f.user_id_1 === userId || f.user_id_2 === userId
+      );
+    } else {
+      friendships = await sql`
+        SELECT user_id_1, user_id_2, status, sender_id
+        FROM friendships
+        WHERE user_id_1 = ${userId} OR user_id_2 = ${userId}
+      `;
+    }
+
+    const fsMap = new Map();
+    friendships.forEach(f => {
+      const otherId = f.user_id_1 === userId ? f.user_id_2 : f.user_id_1;
+      let status = 'none';
+      if (f.status === 'accepted') {
+        status = 'accepted';
+      } else if (f.status === 'pending') {
+        status = f.sender_id === userId ? 'pending_sent' : 'pending_received';
+      }
+      fsMap.set(otherId, status);
+    });
+
+    const enriched = users.map(u => ({
+      id: u.id,
+      name: u.name,
+      username: u.username,
+      avatar_url: u.avatar_url,
+      friendship_status: fsMap.get(u.id) || 'none',
+      currentBook: u.books && u.books.title ? {
+        title: u.books.title,
+        author: u.books.author,
+        currentPage: u.books.currentPage || u.books.current_page,
+        totalPages: u.books.totalPages || u.books.total_pages
+      } : null
+    }));
+
+    res.json({ users: enriched });
   } catch (err) {
     console.error('User search error:', err);
     res.status(500).json({ error: 'Failed to search users.' });
@@ -1959,6 +2299,38 @@ app.post('/api/chat/cohort', verifyToken, async (req, res) => {
       avatar_url: user.avatar_url
     };
 
+    // Notify all other cohort members about the new message
+    try {
+      const senderName = user?.name || user?.username || 'Someone';
+      let cohortMembers;
+      if (isInMemory) {
+        cohortMembers = inMemoryStore.cohort_members
+          .filter(m => m.cohort_id === cohortId && m.user_id !== userId)
+          .map(m => ({ user_id: m.user_id }));
+      } else {
+        cohortMembers = await sql`
+          SELECT user_id FROM cohort_members
+          WHERE cohort_id = ${cohortId} AND user_id != ${userId}
+        `;
+      }
+      const cohort = isInMemory
+        ? inMemoryStore.cohorts.find(c => c.id === cohortId)
+        : (await sql`SELECT name FROM cohorts WHERE id = ${cohortId}`)[0];
+      const cohortName = cohort?.name || 'a cohort';
+      for (const member of cohortMembers) {
+        await createNotification({
+          recipientId: member.user_id,
+          type: 'group_message',
+          title: cohortName,
+          body: `${senderName}: ${messageText.slice(0, 80)}${messageText.length > 80 ? '…' : ''}`,
+          senderId: userId,
+          refId: cohortId
+        });
+      }
+    } catch (notifErr) {
+      console.error('Cohort notification error:', notifErr.message);
+    }
+
     res.json({ success: true, message: enrichedMsg });
   } catch (err) {
     console.error('Send cohort message error:', err);
@@ -1970,7 +2342,7 @@ app.post('/api/chat/cohort', verifyToken, async (req, res) => {
 app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
-    
+
     // In-memory mode mock helper
     if (isInMemory) {
       // Find other users who share at least one cohort membership with this user
@@ -1983,9 +2355,12 @@ app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
           .map(gm => gm.user_id)
       );
       const teammates = inMemoryStore.users.filter(u => teammateIds.has(u.id));
-      
+
       const activities = teammates.map(u => {
         const book = u.books && u.books.title ? u.books : null;
+        const unreadCount = inMemoryStore.messages.filter(
+          m => m.sender_id === u.id && m.receiver_id === userId && !m.read
+        ).length;
         return {
           id: u.id,
           name: u.name,
@@ -1998,14 +2373,20 @@ app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
             totalPages: book.totalPages || book.total_pages || 100
           } : null,
           latestNote: null,
-          lastActive: new Date().toISOString()
+          lastActive: new Date().toISOString(),
+          unreadCount
         };
       });
       return res.json({ teammates: activities });
     }
 
     const teammates = await sql`
-      SELECT DISTINCT u.id, u.name, u.username, u.avatar_url, u.updated_at, u.books, u.daily_notes
+      SELECT DISTINCT u.id, u.name, u.username, u.avatar_url, u.updated_at, u.books, u.daily_notes,
+             COALESCE((
+               SELECT COUNT(*)::int 
+               FROM messages m 
+               WHERE m.sender_id = u.id AND m.receiver_id = ${userId} AND m.read = false
+             ), 0) as "unreadCount"
       FROM cohort_members gm1
       JOIN cohort_members gm2 ON gm1.cohort_id = gm2.cohort_id
       JOIN users u ON u.id = gm2.user_id
@@ -2041,7 +2422,8 @@ app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
           text: latestNote.text || latestNote.note_text,
           createdAt: latestNote.created_at || latestNote.createdAt
         } : null,
-        lastActive: new Date(lastActiveTime).toISOString()
+        lastActive: new Date(lastActiveTime).toISOString(),
+        unreadCount: u.unreadCount || 0
       });
     }
 
@@ -2132,9 +2514,8 @@ app.get('/api/chats/recent', verifyToken, async (req, res) => {
       JOIN cohort_members mine ON mine.cohort_id = c.id
       WHERE mine.user_id = ${userId}
     `;
-
     const cohortLastMessages = await sql`
-      SELECT m.cohort_id, m.message_text, m.created_at, u.name as sender_name, u.username as sender_username, u.avatar_url as sender_avatar
+      SELECT m.cohort_id, m.message_text, m.image_url, m.created_at, u.name as sender_name, u.username as sender_username, u.avatar_url as sender_avatar
       FROM messages m
       JOIN users u ON u.id = m.sender_id
       WHERE m.cohort_id IN (
@@ -2156,7 +2537,7 @@ app.get('/api/chats/recent', verifyToken, async (req, res) => {
     const dmLastMessages = await sql`
       SELECT DISTINCT ON (partner_id)
              CASE WHEN sender_id = ${userId} THEN receiver_id ELSE sender_id END as partner_id,
-             message_text, created_at, sender_id
+             message_text, image_url, created_at, sender_id
       FROM messages
       WHERE (sender_id = ${userId} AND receiver_id IS NOT NULL)
          OR (receiver_id = ${userId} AND sender_id IS NOT NULL)
@@ -2172,6 +2553,7 @@ app.get('/api/chats/recent', verifyToken, async (req, res) => {
         name: c.name,
         description: c.description,
         lastMessageText: lm ? lm.message_text : null,
+        lastMessageImageUrl: lm ? lm.image_url : null,
         lastMessageAt: lm ? lm.created_at : null,
         lastMessageSenderName: lm ? lm.sender_name : null,
         lastMessageSenderAvatarUrl: lm ? lm.sender_avatar : null,
@@ -2188,6 +2570,7 @@ app.get('/api/chats/recent', verifyToken, async (req, res) => {
         username: u.username,
         avatarUrl: u.avatar_url,
         lastMessageText: lm ? lm.message_text : null,
+        lastMessageImageUrl: lm ? lm.image_url : null,
         lastMessageAt: lm ? lm.created_at : null,
         lastMessageSenderName: lm ? (lm.sender_id === userId ? 'You' : (u.name || u.username)) : null,
         lastMessageSenderAvatarUrl: u.avatar_url,
@@ -2202,6 +2585,11 @@ app.get('/api/chats/recent', verifyToken, async (req, res) => {
     });
 
     res.json({ chats: allChats });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // ── DELETE /api/chat/message/:id ──────────────────────────────────────────────
@@ -2237,28 +2625,7 @@ app.delete('/api/chat/message/:id', verifyToken, async (req, res) => {
   }
 });
 
-// ── GET /api/users/search ─────────────────────────────────────────────────────
-app.get('/api/users/search', verifyToken, async (req, res) => {
-  try {
-    const userId = req.user.sub;
-    const query = (req.query.q || '').trim();
-    if (!query || query.length < 2) {
-      return res.json({ users: [] });
-    }
-    const searchTerm = `%${query.toLowerCase()}%`;
-    const users = await sql`
-      SELECT id, name, username, avatar_url
-      FROM users
-      WHERE id != ${userId}
-        AND (LOWER(username) LIKE ${searchTerm} OR LOWER(name) LIKE ${searchTerm})
-      LIMIT 15
-    `;
-    res.json({ users });
-  } catch (err) {
-    console.error('Search users error:', err);
-    res.status(500).json({ error: 'Failed to search users.' });
-  }
-});
+
 
 // ── POST /api/cohorts/members/add ─────────────────────────────────────────────
 app.post('/api/cohorts/members/add', verifyToken, async (req, res) => {
@@ -2342,6 +2709,117 @@ app.post('/api/friends/cancel', verifyToken, async (req, res) => {
   } catch (err) {
     console.error('Cancel friend request error:', err);
     res.status(500).json({ error: 'Failed to cancel request.' });
+  }
+});
+
+// ── Notification Helpers ──────────────────────────────────────────────────────
+async function createNotification({ recipientId, type, title, body, senderId, refId }) {
+  try {
+    if (isInMemory) {
+      return createInMemoryNotification({ recipientId, type, title, body, senderId, refId });
+    }
+    await sql`
+      INSERT INTO notifications (recipient_id, sender_id, type, title, body, ref_id)
+      VALUES (${recipientId}, ${senderId || null}, ${type}, ${title}, ${body}, ${refId || null})
+    `;
+  } catch (err) {
+    console.error('createNotification error:', err.message);
+  }
+}
+
+async function markNotificationRead(notifId, userId) {
+  try {
+    if (isInMemory) {
+      const n = inMemoryStore.notifications.find(n => n.id === notifId && n.recipient_id === userId);
+      if (n) { n.read = true; saveDb(); }
+      return;
+    }
+    await sql`UPDATE notifications SET read = true WHERE id = ${notifId} AND recipient_id = ${userId}`;
+  } catch (err) {
+    console.error('markNotificationRead error:', err.message);
+  }
+}
+
+// ── GET /api/notifications ────────────────────────────────────────────────────
+app.get('/api/notifications', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    let notifications;
+    if (isInMemory) {
+      notifications = getInMemoryNotifications(userId);
+    } else {
+      notifications = await sql`
+        SELECT n.id, n.type, n.title, n.body, n.read, n.ref_id,
+               n.created_at,
+               u.name as sender_name, u.username as sender_username, u.avatar_url as sender_avatar_url
+        FROM notifications n
+        LEFT JOIN users u ON u.id = n.sender_id
+        WHERE n.recipient_id = ${userId}
+        ORDER BY n.created_at DESC
+        LIMIT 50
+      `;
+    }
+    // Format for frontend
+    const formatted = notifications.map(n => ({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      body: n.body,
+      read: !!n.read,
+      refId: n.ref_id || null,
+      time: n.created_at,
+      senderName: n.sender_name || null,
+      senderUsername: n.sender_username || null,
+      senderAvatarUrl: n.sender_avatar_url || null,
+    }));
+    res.json({ notifications: formatted });
+  } catch (err) {
+    console.error('Fetch notifications error:', err);
+    res.status(500).json({ error: 'Failed to fetch notifications.' });
+  }
+});
+
+// ── POST /api/notifications/mark-read ─────────────────────────────────────────
+app.post('/api/notifications/mark-read', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const { id } = req.body; // if omitted, mark all read
+    if (id) {
+      await markNotificationRead(id, userId);
+    } else {
+      if (isInMemory) {
+        inMemoryStore.notifications
+          .filter(n => n.recipient_id === userId)
+          .forEach(n => { n.read = true; });
+        saveDb();
+      } else {
+        await sql`UPDATE notifications SET read = true WHERE recipient_id = ${userId}`;
+      }
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Mark notifications read error:', err);
+    res.status(500).json({ error: 'Failed to mark notifications.' });
+  }
+});
+
+// ── DELETE /api/notifications/:id ─────────────────────────────────────────────
+app.delete('/api/notifications/:id', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const notifId = req.params.id;
+    if (isInMemory) {
+      inMemoryStore.notifications = inMemoryStore.notifications.filter(
+        n => !(n.id === notifId && n.recipient_id === userId)
+      );
+      saveDb();
+    } else {
+      await sql`DELETE FROM notifications WHERE id = ${notifId} AND recipient_id = ${userId}`;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete notification error:', err);
+    res.status(500).json({ error: 'Failed to delete notification.' });
   }
 });
 

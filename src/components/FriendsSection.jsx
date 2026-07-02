@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, MessageSquare, X, Send, Check, Trash2, ArrowLeft, Bell, BookOpen
 } from 'lucide-react';
+import { LibraryCardModal } from './Header';
 
 // ── Decorative SVG Icons ──────────────────────────────────────────────────────
 const WingIcon = ({ isLeft = true, color = 'currentColor', size = 18 }) => (
@@ -212,6 +213,18 @@ export default function FriendsSection({ setActiveTab }) {
   const [teammates, setTeammates] = useState([]);
   const [selectedTeammate, setSelectedTeammate] = useState(null);
   const [privateMessages, setPrivateMessages] = useState([]);
+  const [activeProfileCard, setActiveProfileCard] = useState(null);
+
+  useEffect(() => {
+    const handleOpenProfile = (e) => {
+      if (e.detail?.user) {
+        setActiveProfileCard(e.detail.user);
+      }
+    };
+    window.addEventListener('open-profile-card', handleOpenProfile);
+    return () => window.removeEventListener('open-profile-card', handleOpenProfile);
+  }, []);
+
   const [dmInput, setDmInput] = useState('');
   const [dmSendLoading, setDmSendLoading] = useState(false);
   const [selectedMsgIds, setSelectedMsgIds] = useState([]);
@@ -457,36 +470,43 @@ export default function FriendsSection({ setActiveTab }) {
                 <ArrowLeft size={20} />
               </button>
 
-              {selectedTeammate.avatar_url || selectedTeammate.avatar ? (
-                <img src={selectedTeammate.avatar_url || selectedTeammate.avatar} alt={teammateName} style={{
-                  width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover',
-                  border: '2px solid var(--accent-color)'
-                }} />
-              ) : (
-                <div style={{
-                  width: '40px', height: '40px', borderRadius: '50%', background: avatarColor,
-                  color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: '700', fontSize: '16px', border: '2px solid var(--accent-color)'
-                }}>
-                  {initial}
-                </div>
-              )}
-
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--ink)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {teammateName}
-                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>@{selectedTeammate.username}</span>
-                </h3>
-                {book ? (
-                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '2px 0 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <BookOpen size={12} style={{ color: 'var(--brass)' }} />
-                    Reading <strong>{book.title}</strong> by {book.author} · {Math.round((book.currentPage / book.totalPages) * 100)}% progress
-                  </p>
+              <div 
+                style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', flex: 1, minWidth: 0 }}
+                onClick={() => {
+                  setActiveProfileCard(selectedTeammate);
+                }}
+              >
+                {selectedTeammate.avatar_url || selectedTeammate.avatar ? (
+                  <img src={selectedTeammate.avatar_url || selectedTeammate.avatar} alt={teammateName} style={{
+                    width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover',
+                    border: '2px solid var(--accent-color)', flexShrink: 0
+                  }} />
                 ) : (
-                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
-                    Direct Conversations
-                  </p>
+                  <div style={{
+                    width: '40px', height: '40px', borderRadius: '50%', background: avatarColor,
+                    color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: '700', fontSize: '16px', border: '2px solid var(--accent-color)', flexShrink: 0
+                  }}>
+                    {initial}
+                  </div>
                 )}
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--ink)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {teammateName}
+                    <span style={{ fontSize: '12px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>@{selectedTeammate.username}</span>
+                  </h3>
+                  {book ? (
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '2px 0 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <BookOpen size={12} style={{ color: 'var(--brass)' }} />
+                      Reading <strong>{book.title}</strong> by {book.author} · {Math.round((book.currentPage / book.totalPages) * 100)}% progress
+                    </p>
+                  ) : (
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                      Direct Conversations
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -582,9 +602,10 @@ export default function FriendsSection({ setActiveTab }) {
                 );
               }
 
+              const msgText = m.text || '';
               const role = isSelf 
-                ? (m.text.length % 2 === 0 ? 'Streamer' : 'VIP')
-                : (m.text.length % 2 === 0 ? 'Moderator' : 'Just User');
+                ? (msgText.length % 2 === 0 ? 'Streamer' : 'VIP')
+                : (msgText.length % 2 === 0 ? 'Moderator' : 'Just User');
 
               let badgeStyle = {};
               let badgeText = '';
@@ -717,7 +738,12 @@ export default function FriendsSection({ setActiveTab }) {
                     )}
 
                     {/* Sender Profile Avatar image next to bubble */}
-                    <div style={{ flexShrink: 0, marginTop: '14px' }}>
+                    <div 
+                      style={{ flexShrink: 0, marginTop: '14px', cursor: 'pointer' }}
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent('open-profile-card', { detail: { user: isSelf ? currentUser : selectedTeammate } }));
+                      }}
+                    >
                       {isSelf ? (
                         <Avatar user={currentUser} size={30} />
                       ) : (
@@ -771,11 +797,16 @@ export default function FriendsSection({ setActiveTab }) {
                         {role === 'VIP' ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
                             <WingIcon isLeft={true} color="#ffffff" size={16} />
-                            <span>{m.text}</span>
+                            <span>{msgText}</span>
                             <WingIcon isLeft={false} color="#ffffff" size={16} />
                           </div>
                         ) : (
-                          m.text
+                          msgText
+                        )}
+                        {m.imageUrl && (
+                          <div style={{ marginTop: msgText ? '8px' : '0' }}>
+                            <img src={m.imageUrl} alt="Attachment" style={{ maxWidth: '100%', borderRadius: '8px', display: 'block' }} />
+                          </div>
                         )}
 
                         {/* Outer/border absolute-positioned decorations */}
@@ -1085,6 +1116,14 @@ export default function FriendsSection({ setActiveTab }) {
           <span>active conversations</span>
         </div>
       </div>
+      {activeProfileCard && (
+        <LibraryCardModal
+          user={activeProfileCard}
+          currentUserId={currentUser?.id}
+          onClose={() => setActiveProfileCard(null)}
+        />
+      )}
     </div>
   );
 }
+

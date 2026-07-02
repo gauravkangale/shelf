@@ -1,46 +1,265 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Bell, Trash2, UserPlus, X, MessageSquare, Flame, BookOpen, Trophy, Users } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, Bell, Trash2, UserPlus, X, MessageSquare, Flame, BookOpen, Trophy, Users, Check, UserCheck, Clock, ArrowLeft } from 'lucide-react';
 
 const NOTIF_ICONS = {
   friend_request:  { Icon: UserPlus,      bg: '#e8f0fe', color: '#3a6df0' },
+  friend_accepted: { Icon: Users,         bg: '#edf6ec', color: '#2e7d32' },
   group_message:   { Icon: MessageSquare, bg: '#edf6ec', color: '#2e7d32' },
   reading_streak:  { Icon: Flame,         bg: '#fff3e0', color: '#e65100' },
+  book_update:     { Icon: BookOpen,      bg: '#f3e5f5', color: '#7b1fa2' },
   book_suggestion: { Icon: BookOpen,      bg: '#f3e5f5', color: '#7b1fa2' },
   achievement:     { Icon: Trophy,        bg: '#fff8e1', color: '#f57f17' },
 };
 
-const SAMPLE_NOTIFICATIONS = [
-  {
-    id: 1, type: 'friend_request',
-    title: 'New friend request',
-    body: 'Priya Sharma wants to connect with you.',
-    time: '2 min ago', read: false,
-  },
-  {
-    id: 2, type: 'group_message',
-    title: 'Design Systems group',
-    body: 'Arjun posted a new message in the group.',
-    time: '15 min ago', read: false,
-  },
-  {
-    id: 3, type: 'reading_streak',
-    title: 'Reading streak',
-    body: "You're on a 5-day reading streak! Keep it up.",
-    time: '1 hr ago', read: true,
-  },
-  {
-    id: 4, type: 'book_suggestion',
-    title: 'Book suggestion',
-    body: 'Rohan suggested "Atomic Habits" based on your reading list.',
-    time: '3 hrs ago', read: true,
-  },
-  {
-    id: 5, type: 'achievement',
-    title: 'Achievement unlocked',
-    body: 'You finished 10 books this year. Amazing!',
-    time: 'Yesterday', read: true,
-  },
-];
+function formatTime(dateVal) {
+  if (!dateVal) return '';
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return '';
+  const diff = new Date() - d;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)} min ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)} hr ago`;
+  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+// ── Avatar helper ─────────────────────────────────────────────────────────────
+function Avatar({ user, size = 36 }) {
+  const name = user?.name || user?.username || '?';
+  const init = name.charAt(0).toUpperCase();
+  const palettes = ['#c41e3a', '#1b3d2f', '#1e355c', '#61461b', '#4a1a5c', '#1a3d4f'];
+  const bg = palettes[(init.charCodeAt(0) || 0) % palettes.length];
+  if (user?.avatar_url || user?.avatar) {
+    return (
+      <img src={user.avatar_url || user.avatar} alt={name}
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+    );
+  }
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', background: bg,
+      color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.38, fontWeight: '700', flexShrink: 0,
+      fontFamily: 'var(--font-serif, Georgia, serif)'
+    }}>{init}</div>
+  );
+}
+
+// ── Library Card Modal ────────────────────────────────────────────────────────
+export function LibraryCardModal({ user, onClose, currentUserId, onFriendAction }) {
+  const [friendStatus, setFriendStatus] = useState(user.friendship_status || 'none');
+  const [loading, setLoading] = useState(false);
+  const [isHoveredCancel, setIsHoveredCancel] = useState(false);
+  const name = user.name || user.username || 'Reader';
+  const profileUrl = `${window.location.origin}/u/${(user.username || 'reader').toLowerCase()}`;
+
+  const handleAdd = async () => {
+    setLoading(true);
+    try {
+      const tk = localStorage.getItem('shelf_auth_token');
+      if (!tk) return;
+      const res = await fetch('/api/friends/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
+        body: JSON.stringify({ friendId: user.id }),
+      });
+      if (res.ok) {
+        setFriendStatus('pending_sent');
+        onFriendAction?.(user.id, 'pending_sent');
+      }
+    } catch {} finally { setLoading(false); }
+  };
+
+  const handleCancel = async () => {
+    setLoading(true);
+    try {
+      const tk = localStorage.getItem('shelf_auth_token');
+      if (!tk) return;
+      const res = await fetch('/api/friends/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
+        body: JSON.stringify({ friendId: user.id }),
+      });
+      if (res.ok) {
+        setFriendStatus('none');
+        onFriendAction?.(user.id, 'none');
+      }
+    } catch {} finally { setLoading(false); }
+  };
+
+  const book = user.currentBook || null;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      animation: 'fadeIn 0.15s ease'
+    }} onClick={onClose}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--library-card-bg, #fcfaf2)',
+          border: '1px solid var(--library-card-border, #c8b99a)',
+          borderTop: '8px solid var(--rust, #b33533)',
+          borderRadius: '6px',
+          padding: '28px 32px 32px',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          maxWidth: '380px', width: '90vw',
+          fontFamily: 'var(--font-sans)',
+          position: 'relative',
+          animation: 'slideUp 0.2s ease'
+        }}
+      >
+        <button onClick={onClose} style={{
+          position: 'absolute', top: '12px', right: '14px',
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--text-secondary)', opacity: 0.6, fontSize: '18px'
+        }}>×</button>
+
+        {/* Card header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-serif, Georgia)', fontSize: '14px', fontWeight: '700', color: 'var(--rust, #b33533)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Shelf Public Library
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--brass)', fontFamily: 'monospace', textTransform: 'uppercase', marginTop: '2px' }}>
+              Official Borrower Card
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=56x56&color=2b2927&bgcolor=fcfaf2&margin=0&data=${encodeURIComponent(profileUrl)}`}
+              style={{ width: '56px', height: '56px', border: '1px solid var(--library-card-border)' }}
+              alt="QR"
+            />
+            <div style={{ fontSize: '8px', fontFamily: 'monospace', color: 'var(--brass)', marginTop: '2px' }}>
+              {user.id ? `ID-${user.id.slice(0, 8).toUpperCase()}` : 'GUEST'}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ borderTop: '2px solid var(--rust, #b33533)', paddingTop: '16px', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+          {/* Photo */}
+          <div style={{
+            width: '80px', height: '96px', flexShrink: 0,
+            border: '1.5px solid var(--library-card-border)', background: '#eae6d9',
+            padding: '3px', borderRadius: '2px', boxShadow: '2px 4px 10px rgba(0,0,0,0.08)',
+            transform: 'rotate(-1.5deg)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden'
+          }}>
+            <Avatar user={user} size={74} />
+          </div>
+
+          {/* Info */}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'var(--font-serif, Georgia)', fontSize: '18px', fontWeight: '700', color: 'var(--ink)', marginBottom: '2px' }}>{name}</div>
+            {user.username && (
+              <div style={{ fontSize: '11px', color: 'var(--brass)', fontFamily: 'monospace', marginBottom: '10px' }}>@{user.username}</div>
+            )}
+
+            {book ? (
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                <div style={{ fontSize: '9px', color: 'var(--brass)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '3px' }}>Currently Reading</div>
+                <div style={{ fontWeight: '600', color: 'var(--ink)', fontSize: '12px' }}>📖 {book.title}</div>
+                {book.author && <div style={{ color: 'var(--text-secondary)' }}>by {book.author}</div>}
+                {book.currentPage && book.totalPages && (
+                  <div style={{ marginTop: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '3px' }}>
+                      <span>Page {book.currentPage}</span>
+                      <span>{Math.round((book.currentPage / book.totalPages) * 100)}%</span>
+                    </div>
+                    <div style={{ height: '4px', background: 'rgba(0,0,0,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, (book.currentPage / book.totalPages) * 100)}%`, height: '100%', background: 'var(--rust, #b33533)' }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>No reading activity yet</div>
+            )}
+
+            {/* Action button */}
+            {user.id !== currentUserId && (
+              <div style={{ marginTop: '14px' }}>
+                {friendStatus === 'accepted' ? (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button disabled style={{ padding: '6px 14px', borderRadius: '14px', border: '1.5px solid var(--border-color)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '600', cursor: 'default', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <UserCheck size={12} /> Friends
+                    </button>
+                    <button
+                      onClick={() => {
+                        onClose();
+                        const targetUser = {
+                          id: user.id,
+                          name: user.name || user.username,
+                          username: user.username,
+                          avatar_url: user.avatar_url || user.avatar
+                        };
+                        localStorage.setItem('shelf_pending_chat_target', JSON.stringify(targetUser));
+                        window.dispatchEvent(new CustomEvent('open-direct-chat', { detail: { user: targetUser } }));
+                      }}
+                      style={{
+                        padding: '6px 16px', borderRadius: '14px', border: 'none',
+                        background: 'var(--accent-color, #b33533)', color: '#fff',
+                        fontSize: '12px', fontWeight: '700', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: '5px'
+                      }}
+                    >
+                      <MessageSquare size={12} /> Message
+                    </button>
+                  </div>
+                ) : friendStatus === 'pending_sent' ? (
+                  <button
+                    onClick={handleCancel}
+                    disabled={loading}
+                    onMouseEnter={() => setIsHoveredCancel(true)}
+                    onMouseLeave={() => setIsHoveredCancel(false)}
+                    style={{
+                      padding: '6px 16px', borderRadius: '14px',
+                      border: '1.5px solid var(--border-color)',
+                      background: isHoveredCancel ? 'rgba(217, 74, 67, 0.1)' : 'transparent',
+                      color: isHoveredCancel ? 'var(--danger-color)' : 'var(--text-secondary)',
+                      fontSize: '12px', fontWeight: '600', cursor: loading ? 'default' : 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '5px',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {isHoveredCancel ? <X size={12} /> : <Clock size={12} />}
+                    {isHoveredCancel ? 'Cancel' : 'Pending'}
+                  </button>
+                ) : friendStatus === 'pending_received' ? (
+                  <button
+                    onClick={handleAdd}
+                    disabled={loading}
+                    style={{
+                      padding: '6px 16px', borderRadius: '14px', border: 'none',
+                      background: 'var(--accent-color, #b33533)', color: '#fff',
+                      fontSize: '12px', fontWeight: '700', cursor: loading ? 'default' : 'pointer'
+                    }}
+                  >
+                    Accept Request
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleAdd} disabled={loading}
+                    style={{
+                      padding: '6px 18px', borderRadius: '14px', border: 'none',
+                      background: 'var(--accent-color, #b33533)', color: '#fff',
+                      fontSize: '12px', fontWeight: '700', cursor: loading ? 'default' : 'pointer',
+                      opacity: loading ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '5px'
+                    }}
+                  >
+                    <UserPlus size={12} /> Add Friend
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Delete Confirmation Dialog ────────────────────────────────────────────────
 function DeleteConfirmDialog({ item, onConfirm, onCancel }) {
@@ -57,12 +276,8 @@ function DeleteConfirmDialog({ item, onConfirm, onCancel }) {
           This action cannot be undone.
         </p>
         <div className="delete-confirm-actions">
-          <button className="delete-confirm-cancel" onClick={onCancel}>
-            Cancel
-          </button>
-          <button className="delete-confirm-ok" onClick={onConfirm}>
-            Delete
-          </button>
+          <button className="delete-confirm-cancel" onClick={onCancel}>Cancel</button>
+          <button className="delete-confirm-ok" onClick={onConfirm}>Delete</button>
         </div>
       </div>
     </div>
@@ -70,7 +285,7 @@ function DeleteConfirmDialog({ item, onConfirm, onCancel }) {
 }
 
 // ── Notification Panel ────────────────────────────────────────────────────────
-function NotificationPanel({ notifications, onDismiss, onMarkAllRead }) {
+function NotificationPanel({ notifications, onDismiss, onMarkAllRead, onFriendRespond, loading, onProfileClick }) {
   const unreadCount = notifications.filter(n => !n.read).length;
   return (
     <div className="notif-panel">
@@ -88,7 +303,12 @@ function NotificationPanel({ notifications, onDismiss, onMarkAllRead }) {
         )}
       </div>
       <div className="notif-panel-list">
-        {notifications.length === 0 ? (
+        {loading && notifications.length === 0 ? (
+          <div className="notif-panel-empty">
+            <Bell size={28} strokeWidth={1.5} style={{ color: 'var(--text-secondary)', opacity: 0.5, marginBottom: '8px' }} />
+            <p>Loading...</p>
+          </div>
+        ) : notifications.length === 0 ? (
           <div className="notif-panel-empty">
             <Bell size={28} strokeWidth={1.5} style={{ color: 'var(--text-secondary)', opacity: 0.5, marginBottom: '8px' }} />
             <p>You're all caught up!</p>
@@ -99,13 +319,22 @@ function NotificationPanel({ notifications, onDismiss, onMarkAllRead }) {
               key={n.id}
               className={`notif-item ${n.read ? 'notif-item-read' : 'notif-item-unread'}`}
             >
-              {/* Icon badge */}
-              <div className="notif-item-icon">
-                {(() => {
+              {/* Sender avatar / icon — clickable for profile */}
+              <div
+                className="notif-item-icon"
+                onClick={() => n.senderId && onProfileClick?.({ id: n.senderId, name: n.senderName || n.title, friendship_status: n.friendship_status })}
+                style={{ cursor: n.senderId ? 'pointer' : 'default' }}
+              >
+                {(n.senderAvatarUrl || n.senderAvatar) ? (
+                  <img src={n.senderAvatarUrl || n.senderAvatar} alt=""
+                    style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                ) : n.senderName ? (
+                  <Avatar user={{ name: n.senderName, avatar_url: null }} size={36} />
+                ) : (() => {
                   const cfg = NOTIF_ICONS[n.type] || { Icon: Bell, bg: '#f0ede8', color: '#888' };
                   return (
                     <div style={{
-                      width: 34, height: 34, borderRadius: '50%',
+                      width: 36, height: 36, borderRadius: '50%',
                       background: cfg.bg, display: 'flex',
                       alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                     }}>
@@ -117,7 +346,39 @@ function NotificationPanel({ notifications, onDismiss, onMarkAllRead }) {
               <div className="notif-item-body">
                 <div className="notif-item-title">{n.title}</div>
                 <div className="notif-item-text">{n.body}</div>
-                <div className="notif-item-time">{n.time}</div>
+                <div className="notif-item-time">{formatTime(n.time)}</div>
+
+                {/* Inline Accept / Decline — only shown for un-responded friend requests */}
+                {n.type === 'friend_request' && !n.responded && (
+                  <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                    <button
+                      onClick={() => onFriendRespond(n, 'accept')}
+                      style={{
+                        padding: '5px 14px', fontSize: '11px', fontWeight: '700',
+                        background: '#3a6df0', color: '#fff',
+                        border: 'none', borderRadius: '12px', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: '4px', transition: 'opacity 0.15s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+                      onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                    >
+                      <Check size={11} /> Accept
+                    </button>
+                    <button
+                      onClick={() => onFriendRespond(n, 'decline')}
+                      style={{
+                        padding: '5px 14px', fontSize: '11px', fontWeight: '600',
+                        background: 'var(--ui-hover-bg)', color: 'var(--text-secondary)',
+                        border: '1px solid var(--border-color)', borderRadius: '12px', cursor: 'pointer',
+                        transition: 'opacity 0.15s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.opacity = '0.75'}
+                      onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                    >
+                      Decline
+                    </button>
+                  </div>
+                )}
               </div>
               {!n.read && <div className="notif-unread-dot" />}
               <button
@@ -131,23 +392,25 @@ function NotificationPanel({ notifications, onDismiss, onMarkAllRead }) {
       </div>
       {notifications.length > 0 && (
         <div className="notif-panel-footer">
-          <button className="notif-view-all-btn">View all notifications</button>
+          <button className="notif-view-all-btn" onClick={onMarkAllRead}>Mark all read</button>
         </div>
       )}
     </div>
   );
 }
 
-// ── Find Readers Panel (inline dropdown) ──────────────────────────────────────
-function FindReadersPanel({ onClose }) {
+// ── Find Readers Panel — Instagram-style ──────────────────────────────────────
+function FindReadersPanel({ onClose, onProfileClick }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [sentRequests, setSentRequests] = useState(new Set());
+  // Map of userId → status: 'none' | 'pending_sent' | 'pending_received' | 'accepted'
+  const [statusMap, setStatusMap] = useState({});
   const inputRef = useRef(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+  // Search users — server now returns friendship_status per user
   useEffect(() => {
     if (!query.trim()) { setResults([]); return; }
     const t = setTimeout(async () => {
@@ -161,7 +424,12 @@ function FindReadersPanel({ onClose }) {
         );
         if (res.ok) {
           const data = await res.json();
-          setResults(data.users || []);
+          const users = data.users || [];
+          setResults(users);
+          // Initialize status map from server response
+          const map = {};
+          users.forEach(u => { map[u.id] = u.friendship_status || 'none'; });
+          setStatusMap(prev => ({ ...prev, ...map }));
         } else {
           setResults([]);
         }
@@ -170,26 +438,86 @@ function FindReadersPanel({ onClose }) {
       } finally {
         setLoading(false);
       }
-    }, 320);
+    }, 300);
     return () => clearTimeout(t);
   }, [query]);
 
   const sendRequest = async (userId) => {
-    setSentRequests(p => new Set([...p, userId]));
+    // Optimistic update
+    setStatusMap(prev => ({ ...prev, [userId]: 'pending_sent' }));
     try {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
-      await fetch('/api/friends/request', {
+      const res = await fetch('/api/friends/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
         body: JSON.stringify({ friendId: userId }),
       });
-    } catch { /* silently ignore */ }
+      if (!res.ok) {
+        // Revert on error
+        setStatusMap(prev => ({ ...prev, [userId]: 'none' }));
+      }
+    } catch {
+      setStatusMap(prev => ({ ...prev, [userId]: 'none' }));
+    }
   };
 
-  const initial = (u) => (u?.name || u?.username || '?').charAt(0).toUpperCase();
-  const palettes = ['#c41e3a', '#1b3d2f', '#1e355c', '#61461b', '#4a1a5c', '#1a3d4f'];
-  const avatarColor = (u) => palettes[(initial(u).charCodeAt(0) || 0) % palettes.length];
+  const getActionButton = (user) => {
+    const status = statusMap[user.id] || 'none';
+    if (status === 'accepted') {
+      return (
+        <button
+          onClick={() => onProfileClick?.(user)}
+          style={{
+            padding: '5px 14px', borderRadius: '14px', border: '1.5px solid var(--border-color)',
+            background: 'transparent', color: 'var(--text-secondary)',
+            fontSize: '11px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap',
+            display: 'flex', alignItems: 'center', gap: '4px'
+          }}
+        >
+          <UserCheck size={11} /> Friends
+        </button>
+      );
+    }
+    if (status === 'pending_sent') {
+      return (
+        <button disabled style={{
+          padding: '5px 14px', borderRadius: '14px', border: '1.5px solid var(--border-color)',
+          background: 'transparent', color: 'var(--text-secondary)',
+          fontSize: '11px', fontWeight: '600', cursor: 'default', whiteSpace: 'nowrap',
+          display: 'flex', alignItems: 'center', gap: '4px'
+        }}>
+          <Clock size={11} /> Pending
+        </button>
+      );
+    }
+    if (status === 'pending_received') {
+      return (
+        <button
+          onClick={() => sendRequest(user.id)}
+          style={{
+            padding: '5px 14px', borderRadius: '14px', border: 'none',
+            background: 'var(--accent-color, #b33533)', color: '#fff',
+            fontSize: '11px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap'
+          }}
+        >
+          Accept
+        </button>
+      );
+    }
+    return (
+      <button
+        onClick={() => sendRequest(user.id)}
+        style={{
+          padding: '5px 14px', borderRadius: '14px', border: 'none',
+          background: 'var(--accent-color, #b33533)', color: '#fff',
+          fontSize: '11px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap'
+        }}
+      >
+        Add
+      </button>
+    );
+  };
 
   return (
     <div className="find-readers-panel">
@@ -223,7 +551,7 @@ function FindReadersPanel({ onClose }) {
           type="text"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Search by name or username..."
+          placeholder="Search by name or @username..."
           style={{
             flex: 1, border: 'none', outline: 'none', background: 'transparent',
             fontSize: '12px', color: 'var(--ink)',
@@ -256,48 +584,32 @@ function FindReadersPanel({ onClose }) {
             Search for readers to connect with
           </p>
         )}
-        {results.map(user => {
-          const sent = sentRequests.has(user.id);
-          return (
-            <div key={user.id} className="find-readers-item">
-              {user.avatar_url || user.avatar ? (
-                <img src={user.avatar_url || user.avatar} alt={user.name}
-                  style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-              ) : (
-                <div style={{
-                  width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-                  background: avatarColor(user), color: '#fff', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center',
-                  fontSize: 12, fontWeight: 700,
-                }}>
-                  {initial(user)}
-                </div>
-              )}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: '600', fontSize: '12px', color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {user.name || user.username}
-                </div>
-                {user.username && (
-                  <div style={{ fontSize: '11px', color: 'var(--brass)' }}>@{user.username}</div>
-                )}
-              </div>
-              <button
-                onClick={() => !sent && sendRequest(user.id)}
-                disabled={sent}
-                style={{
-                  background: sent ? 'var(--ui-hover-bg)' : 'var(--accent-color)',
-                  color: sent ? 'var(--text-secondary)' : '#fff',
-                  border: 'none', borderRadius: '14px',
-                  padding: '4px 10px', fontSize: '11px', fontWeight: '700',
-                  cursor: sent ? 'default' : 'pointer',
-                  whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s',
-                }}
-              >
-                {sent ? '✓ Sent' : 'Add'}
-              </button>
+        {results.map(user => (
+          <div key={user.id} className="find-readers-item">
+            {/* Avatar — clickable → profile card */}
+            <div
+              onClick={() => onProfileClick?.({ ...user, friendship_status: statusMap[user.id] || user.friendship_status })}
+              style={{ cursor: 'pointer', flexShrink: 0 }}
+            >
+              <Avatar user={user} size={38} />
             </div>
-          );
-        })}
+
+            {/* Name + username — clickable → profile card */}
+            <div
+              style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+              onClick={() => onProfileClick?.({ ...user, friendship_status: statusMap[user.id] || user.friendship_status })}
+            >
+              <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user.name || user.username}
+              </div>
+              {user.username && (
+                <div style={{ fontSize: '11px', color: 'var(--brass)' }}>@{user.username}</div>
+              )}
+            </div>
+
+            {getActionButton(user)}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -314,29 +626,74 @@ export default function Header({
   const [isDragOverTrash, setIsDragOverTrash] = useState(false);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [showFindReaders, setShowFindReaders] = useState(false);
-  const [notifications, setNotifications] = useState(SAMPLE_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
+  const [notifLoading, setNotifLoading] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [profileCard, setProfileCard] = useState(null); // user to show in LibraryCardModal
 
   const notifRef = useRef(null);
   const findReadersRef = useRef(null);
+  const pollIntervalRef = useRef(null);
 
-  // ── Close panels on outside click ─────────────────────────────────────────
+  const currentUser = (() => {
+    try { return JSON.parse(localStorage.getItem('shelf_current_user') || 'null'); } catch { return null; }
+  })();
+
+  // ── Fetch real notifications from server ───────────────────────────────────
+  const fetchNotifications = useCallback(async () => {
+    const tk = localStorage.getItem('shelf_auth_token');
+    if (!tk) { setNotifications([]); return; }
+    try {
+      const res = await fetch('/api/notifications', {
+        headers: { Authorization: `Bearer ${tk}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Preserve local 'responded' state — if we responded, the server should have deleted it,
+        // but as a safety net we filter out locally-responded notifications
+        setNotifications(prev => {
+          const respondedIds = new Set(prev.filter(n => n.responded).map(n => n.id));
+          return (data.notifications || []).filter(n => !respondedIds.has(n.id));
+        });
+      }
+    } catch {} finally {
+      setNotifLoading(false);
+    }
+  }, []);
+
+  const startPolling = useCallback(() => {
+    fetchNotifications();
+    clearInterval(pollIntervalRef.current);
+    pollIntervalRef.current = setInterval(fetchNotifications, 15000);
+  }, [fetchNotifications]);
+
+  useEffect(() => {
+    const tk = localStorage.getItem('shelf_auth_token');
+    if (tk) { setNotifLoading(true); startPolling(); }
+    const handleAuthChange = () => {
+      const newTk = localStorage.getItem('shelf_auth_token');
+      if (newTk) { setNotifLoading(true); startPolling(); }
+      else { clearInterval(pollIntervalRef.current); setNotifications([]); }
+    };
+    window.addEventListener('user-switched', handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+    return () => {
+      clearInterval(pollIntervalRef.current);
+      window.removeEventListener('user-switched', handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, [startPolling]);
+
+  // Close panels on outside click
   useEffect(() => {
     const handleClick = (e) => {
-      if (notifRef.current && !notifRef.current.contains(e.target)) {
-        setShowNotifPanel(false);
-      }
-      if (findReadersRef.current && !findReadersRef.current.contains(e.target)) {
-        setShowFindReaders(false);
-      }
+      if (notifRef.current && !notifRef.current.contains(e.target)) setShowNotifPanel(false);
+      if (findReadersRef.current && !findReadersRef.current.contains(e.target)) setShowFindReaders(false);
     };
-    if (showNotifPanel || showFindReaders) {
-      document.addEventListener('mousedown', handleClick);
-    }
+    if (showNotifPanel || showFindReaders) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showNotifPanel, showFindReaders]);
 
-  // ── Listen for global open-suggest-users event ─────────────────────────────
   useEffect(() => {
     const handler = () => setShowFindReaders(v => !v);
     window.addEventListener('open-suggest-users', handler);
@@ -344,20 +701,62 @@ export default function Header({
   }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
-  const dismissNotification = (id) => setNotifications(p => p.filter(n => n.id !== id));
-  const markAllRead = () => setNotifications(p => p.map(n => ({ ...n, read: true })));
 
-  // ── Trash drop: encode type inside the text/plain payload ─────────────────
-  // Bookmarks encode as "bookmark::<json>", notes encode as plain integer id
+  // Dismiss a notification
+  const dismissNotification = async (id) => {
+    setNotifications(p => p.filter(n => n.id !== id));
+    try {
+      const tk = localStorage.getItem('shelf_auth_token');
+      if (!tk) return;
+      await fetch(`/api/notifications/${id}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${tk}` }
+      });
+    } catch {}
+  };
+
+  const markAllRead = async () => {
+    setNotifications(p => p.map(n => ({ ...n, read: true })));
+    try {
+      const tk = localStorage.getItem('shelf_auth_token');
+      if (!tk) return;
+      await fetch('/api/notifications/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
+        body: JSON.stringify({})
+      });
+    } catch {}
+  };
+
+  // Accept / Decline friend request
+  const handleFriendRespond = async (notif, action) => {
+    // Immediately remove notification from UI — it will also be deleted on server
+    setNotifications(p => p.filter(n => n.id !== notif.id));
+
+    try {
+      const tk = localStorage.getItem('shelf_auth_token');
+      if (!tk) return;
+      await fetch('/api/friends/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
+        body: JSON.stringify({
+          friendId: notif.refId,
+          action,
+          notificationId: notif.id
+        })
+      });
+      window.dispatchEvent(new Event('user-switched'));
+    } catch (err) {
+      console.error('Friend respond error:', err);
+    }
+  };
+
+  // Trash drop
   const handleTrashDrop = (e) => {
     e.preventDefault();
     setIsDragOverTrash(false);
-
     const raw = e.dataTransfer.getData('text/plain');
     if (!raw) return;
-
     if (raw.startsWith('bookmark::')) {
-      // Bookmark dragged to trash → show confirmation dialog
       try {
         const item = JSON.parse(raw.slice('bookmark::'.length));
         setPendingDelete({ id: item.id, title: item.title, type: 'bookmark' });
@@ -365,21 +764,22 @@ export default function Header({
         setPendingDelete({ id: raw, title: 'this bookmark', type: 'bookmark' });
       }
     } else {
-      // Note dragged to trash → delete immediately (existing behavior)
       const noteId = parseInt(raw, 10);
-      if (!isNaN(noteId)) {
-        window.dispatchEvent(new CustomEvent('delete-note', { detail: { id: noteId } }));
-      }
+      if (!isNaN(noteId)) window.dispatchEvent(new CustomEvent('delete-note', { detail: { id: noteId } }));
     }
   };
 
   const confirmBookmarkDelete = () => {
     if (pendingDelete?.type === 'bookmark') {
-      window.dispatchEvent(
-        new CustomEvent('delete-bookmark', { detail: { id: pendingDelete.id } })
-      );
+      window.dispatchEvent(new CustomEvent('delete-bookmark', { detail: { id: pendingDelete.id } }));
     }
     setPendingDelete(null);
+  };
+
+  const openProfile = (user) => {
+    setShowFindReaders(false);
+    setShowNotifPanel(false);
+    setProfileCard(user);
   };
 
   return (
@@ -416,7 +816,7 @@ export default function Header({
           </div>
         </form>
 
-        {/* ── Header Action Buttons ──────────────────────────────────────── */}
+        {/* Header Action Buttons */}
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
 
           {/* Trash Drop Zone */}
@@ -430,8 +830,7 @@ export default function Header({
               background: isDragOverTrash ? 'var(--danger-color)' : 'var(--ui-hover-bg)',
               color: isDragOverTrash ? '#fff' : 'var(--text-secondary)',
               border: isDragOverTrash ? 'none' : '1.5px dashed var(--border-color)',
-              transition: 'all 0.2s',
-              cursor: 'default',
+              transition: 'all 0.2s', cursor: 'default',
               transform: isDragOverTrash ? 'scale(1.18)' : 'scale(1)',
             }}
             title="Drag a note or bookmark here to delete"
@@ -445,7 +844,10 @@ export default function Header({
               id="notif-bell-btn"
               className="notification-bell"
               aria-label="Notifications"
-              onClick={() => setShowNotifPanel(v => !v)}
+              onClick={() => {
+                setShowNotifPanel(v => !v);
+                if (!showNotifPanel) fetchNotifications();
+              }}
               style={{
                 background: showNotifPanel ? 'var(--accent-light)' : 'var(--ui-hover-bg)',
                 border: showNotifPanel ? '1.5px solid var(--accent-color)' : 'none',
@@ -466,13 +868,16 @@ export default function Header({
             {showNotifPanel && (
               <NotificationPanel
                 notifications={notifications}
+                loading={notifLoading}
                 onDismiss={dismissNotification}
                 onMarkAllRead={markAllRead}
+                onFriendRespond={handleFriendRespond}
+                onProfileClick={openProfile}
               />
             )}
           </div>
 
-          {/* Find Readers / UserPlus Button */}
+          {/* Find Readers Button */}
           <div ref={findReadersRef} style={{ position: 'relative' }}>
             <button
               id="add-friend-btn"
@@ -483,8 +888,7 @@ export default function Header({
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 width: '40px', height: '40px', borderRadius: '50%',
                 background: showFindReaders ? 'var(--accent-color)' : 'var(--ui-hover-bg)',
-                border: showFindReaders ? 'none' : 'none',
-                cursor: 'pointer',
+                border: 'none', cursor: 'pointer',
                 color: showFindReaders ? '#fff' : 'var(--text-secondary)',
                 transition: 'all 0.2s',
               }}
@@ -506,9 +910,11 @@ export default function Header({
               <UserPlus size={17} />
             </button>
 
-            {/* Inline dropdown anchored to the button */}
             {showFindReaders && (
-              <FindReadersPanel onClose={() => setShowFindReaders(false)} />
+              <FindReadersPanel
+                onClose={() => setShowFindReaders(false)}
+                onProfileClick={openProfile}
+              />
             )}
           </div>
         </div>
@@ -520,6 +926,18 @@ export default function Header({
           item={pendingDelete}
           onConfirm={confirmBookmarkDelete}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {/* Library Card Profile Modal */}
+      {profileCard && (
+        <LibraryCardModal
+          user={profileCard}
+          currentUserId={currentUser?.id}
+          onClose={() => setProfileCard(null)}
+          onFriendAction={(userId, status) => {
+            setProfileCard(prev => prev ? { ...prev, friendship_status: status } : null);
+          }}
         />
       )}
     </>
