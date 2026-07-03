@@ -9,6 +9,7 @@ import './App.css';
 import { userKey } from './utils/userKey';
 import { cachedFetch } from './utils/apiCache';
 import { applyTheme, DEFAULT_THEME_KEY } from './utils/themePresets';
+import ProfileModal from './components/ProfileModal';
 
 // ── Profile Settings Sub-component ──
 function ProfileSettings({ activeProfile, updateActiveProfile }) {
@@ -428,8 +429,27 @@ function App() {
 
   // Global profile accounts state
   const [profileAccounts, setProfileAccounts] = useState(() => {
-    const saved = localStorage.getItem('profile_accounts');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const stored = localStorage.getItem('profile_accounts');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Deduplicate in case glitch already occurred
+        const unique = [];
+        const seenEmails = new Set();
+        parsed.forEach(acc => {
+          if (acc.email && !seenEmails.has(acc.email)) {
+            unique.push(acc);
+            seenEmails.add(acc.email);
+          } else if (!acc.email) {
+            unique.push(acc); // keep accounts without email just in case
+          }
+        });
+        return unique;
+      }
+      return [];
+    } catch {
+      return [];
+    }
   });
 
   const activeProfile = profileAccounts.find(acc => acc.active) || profileAccounts[0] || {
@@ -446,9 +466,34 @@ function App() {
   const [newProfileAccEmail, setNewProfileAccEmail] = useState('');
   const [newProfileAccAvatar, setNewProfileAccAvatar] = useState('');
 
+  const [profileCardUser, setProfileCardUser] = useState(null);
+
   // Persist profile accounts (preserving auth tokens for multi-account login persistence)
   useEffect(() => {
-    localStorage.setItem('profile_accounts', JSON.stringify(profileAccounts));
+    // Force deduplication on state updates (helps with HMR state preservation)
+    const unique = [];
+    const seenEmails = new Set();
+    let hasDuplicates = false;
+    
+    profileAccounts.forEach(acc => {
+      if (acc.email) {
+        const lowerEmail = acc.email.toLowerCase();
+        if (!seenEmails.has(lowerEmail)) {
+          unique.push(acc);
+          seenEmails.add(lowerEmail);
+        } else {
+          hasDuplicates = true;
+        }
+      } else {
+        unique.push(acc);
+      }
+    });
+
+    if (hasDuplicates) {
+      setProfileAccounts(unique);
+    } else {
+      localStorage.setItem('profile_accounts', JSON.stringify(profileAccounts));
+    }
   }, [profileAccounts]);
 
   useEffect(() => {
@@ -552,14 +597,22 @@ function App() {
     }
   };
 
-  // Add a new profile account
   const addProfileAccount = (e) => {
     e.preventDefault();
     if (!newProfileAccName.trim() || !newProfileAccEmail.trim()) return;
+    
+    const emailToUse = newProfileAccEmail.trim().toLowerCase();
+    
+    // Prevent adding if account with email already exists
+    if (profileAccounts.some(acc => acc.email?.toLowerCase() === emailToUse)) {
+      alert("An account with this email is already connected.");
+      return;
+    }
+
     const newAcc = {
       id: Date.now().toString(),
       name: newProfileAccName.trim(),
-      email: newProfileAccEmail.trim(),
+      email: emailToUse,
       avatar: newProfileAccAvatar.trim(),
       active: false
     };
@@ -685,6 +738,7 @@ function App() {
                 phone: userData.phone || acc.phone || '',
                 avatar: userData.avatar || userData.avatar_url || acc.avatar || './profile.jpeg',
                 token: userData.token || acc.token,
+                id: userData.id || acc.id, // Ensure real UUID overwrites timestamp id
                 active: true
               };
             }
@@ -733,6 +787,17 @@ function App() {
       delete window.handleLoginSuccess;
       window.removeEventListener('storage', handleStorageEvent);
     };
+  }, []);
+
+  // Handle open profile modal event
+  useEffect(() => {
+    const handleOpenProfileModal = (e) => {
+      if (e.detail?.user) {
+        setProfileCardUser(e.detail.user);
+      }
+    };
+    window.addEventListener('open-profile-modal', handleOpenProfileModal);
+    return () => window.removeEventListener('open-profile-modal', handleOpenProfileModal);
   }, []);
 
   // Notes DB Sync Manager — scoped to current user
@@ -984,6 +1049,14 @@ function App() {
     <div className="app-container">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       {renderContent()}
+      
+      {profileCardUser && (
+        <ProfileModal
+          user={profileCardUser}
+          currentUserId={activeProfile?.id}
+          onClose={() => setProfileCardUser(null)}
+        />
+      )}
     </div>
   );
 }

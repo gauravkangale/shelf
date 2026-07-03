@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, Send, ArrowLeft, BookOpen, Trash2, Users, MessageSquare, Image, X, MoreVertical, BookUser, MessageCircle } from 'lucide-react';
-
+import Avatar from './Avatar';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatTime(dateVal) {
@@ -67,29 +67,7 @@ function compressImage(base64Str, maxWidth = 1000, maxHeight = 1000) {
   });
 }
 
-// ─── Avatar ───────────────────────────────────────────────────────────────────
-function Avatar({ user, size = 36 }) {
-  const initial = (user?.name || user?.username || '?').charAt(0).toUpperCase();
-  const palettes = ['#c41e3a', '#1b3d2f', '#1e355c', '#61461b', '#4a1a5c', '#1a3d4f'];
-  const bg = palettes[(initial.charCodeAt(0) || 0) % palettes.length];
-  if (user?.avatar_url || user?.avatar) {
-    return (
-      <img src={user.avatar_url || user.avatar} alt={user.name || ''}
-        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-    );
-  }
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: bg, color: '#fff', display: 'flex',
-      alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.4, fontWeight: '700',
-      fontFamily: 'var(--font-serif, Georgia, serif)', userSelect: 'none'
-    }}>
-      {initial}
-    </div>
-  );
-}
+
 
 // ─── Chat Conversation View ───────────────────────────────────────────────────
 function ChatView({ friend, currentUser, token, onBack }) {

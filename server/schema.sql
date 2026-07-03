@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
   google_id     TEXT UNIQUE,
   is_verified   BOOLEAN DEFAULT false,
   preferences   JSONB DEFAULT '{}'::jsonb,
+  "alter"       TEXT,
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
@@ -83,8 +84,8 @@ ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
 -- (Your server uses the neondb_owner role which bypasses RLS)
 
 -- Policy: prevent direct public access (add specific policies as needed)
-CREATE POLICY "Users: service access only" ON users
-  USING (true) WITH CHECK (true);
+CREATE POLICY "Users can read all profiles" ON users FOR SELECT USING (true);
+CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid) WITH CHECK (id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid);
 
 CREATE POLICY "OTP: service access only" ON otp_tokens
   USING (true) WITH CHECK (true);

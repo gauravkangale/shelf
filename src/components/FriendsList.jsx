@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MoreHorizontal, MessageSquare, Send, X, Users, UserPlus, Search } from 'lucide-react';
 import { userKey } from '../utils/userKey';
 import { cachedFetch, invalidateCache, getCached } from '../utils/apiCache';
+import Avatar from './Avatar';
 
 const GRP_CACHE = 'fl_cached_groups';
 const TM_CACHE = 'fl_cached_teammates';
@@ -23,29 +24,6 @@ function formatRelativeTime(dateString) {
   return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
 }
 
-function Avatar({ user, size = 28 }) {
-  const initial = (user?.name || user?.username || '?').charAt(0).toUpperCase();
-  const palettes = ['#c41e3a', '#1b3d2f', '#1e355c', '#61461b', '#4a1a5c', '#1a3d4f'];
-  const color = palettes[(initial.charCodeAt(0) || 0) % palettes.length];
-
-  if (user?.avatar_url || user?.avatar) {
-    return (
-      <img src={user.avatar_url || user.avatar} alt={user.name || ''}
-        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-    );
-  }
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: color, color: 'var(--button-text)', display: 'flex',
-      alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.38, fontWeight: '700',
-      fontFamily: 'var(--font-serif, Georgia, serif)', userSelect: 'none'
-    }}>
-      {initial}
-    </div>
-  );
-}
 
 // WingIcon removed since it is no longer used in chat layout.
 
@@ -409,12 +387,12 @@ export default function FriendsList() {
                 }
 
                 // Append 'You: ' sender tag if current user sent it
-                const prefix = isCohort 
+                const prefix = isCohort
                   ? (chat.lastMessageSenderName ? `${chat.lastMessageSenderName}: ` : '')
                   : (chat.lastMessageSenderName === 'You' ? 'You: ' : '');
 
                 const shortPreview = previewText.length > 72 ? `${previewText.slice(0, 72)}...` : previewText;
-                
+
                 return (
                   <div
                     key={chat.id}
@@ -580,7 +558,7 @@ export default function FriendsList() {
         <div>
           <div className="section-header" style={{ marginBottom: '8px' }}>
             <h2 className="calendar-title" style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--brass)' }}>
-              Mutual Teammates
+              Teammates
             </h2>
             <button
               title="Find & suggest readers"

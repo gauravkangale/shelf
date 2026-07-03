@@ -166,7 +166,6 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
 
   // File input refs for triggering native dialogs
   const fileInputRef = React.useRef(null);
-  const imageInputRef = React.useRef(null);
 
   // ── Save uploaded resource scoped to current user ───────────────────────────
   const saveResource = (resource) => {
@@ -258,13 +257,6 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
           accept=".pdf"
           style={{ display: 'none' }}
           onChange={(e) => handleFileChange(e, 'pdf')}
-        />
-        <input
-          type="file"
-          ref={imageInputRef}
-          accept="image/*"
-          style={{ display: 'none' }}
-          onChange={(e) => handleFileChange(e, 'image')}
         />
 
         <h1 className="welcome-title">
@@ -361,13 +353,6 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
                   label="Add Web Link"
                   onClick={handleAddLink}
                   color="#06b6d4"
-                />
-
-                <MenuButton
-                  icon={<Image size={16} />}
-                  label="Upload Image"
-                  onClick={() => imageInputRef.current.click()}
-                  color="#f59e0b"
                 />
 
                 {uploadedResource && (

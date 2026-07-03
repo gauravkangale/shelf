@@ -921,6 +921,7 @@ async function initDb() {
       daily_notes     JSONB DEFAULT '[]'::jsonb,
       books           JSONB DEFAULT '{}'::jsonb,
       preferences     JSONB DEFAULT '{}'::jsonb,
+      "alter"         TEXT,
       created_at      TIMESTAMPTZ DEFAULT NOW(),
       updated_at      TIMESTAMPTZ DEFAULT NOW()
     )
@@ -962,10 +963,12 @@ async function initDb() {
       image_url     TEXT,
       read          BOOLEAN DEFAULT false,
       created_at    TIMESTAMPTZ DEFAULT NOW()
-    );
+    )
+  `;
 
-    ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
-    
+  await sql`ALTER TABLE messages ENABLE ROW LEVEL SECURITY`;
+  
+  await sql`
     DO $$
     BEGIN
       IF NOT EXISTS (
@@ -1005,6 +1008,33 @@ async function initDb() {
   try {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB DEFAULT '{}'::jsonb`;
   } catch (err) {}
+  try {
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS "alter" TEXT`;
+  } catch (err) {}
+
+  try {
+    await sql`ALTER TABLE users ENABLE ROW LEVEL SECURITY`;
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can read all profiles'
+        ) THEN
+          CREATE POLICY "Users can read all profiles" ON users FOR SELECT USING (true);
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can update own profile'
+        ) THEN
+          CREATE POLICY "Users can update own profile" ON users FOR UPDATE 
+            USING (id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid)
+            WITH CHECK (id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid);
+        END IF;
+      END
+      $$;
+    `;
+  } catch (err) {
+    console.error('⚠️ Users RLS policy warning:', err.message);
+  }
 
   // Performance indexes
   try {
@@ -1406,6 +1436,10 @@ app.put('/api/users/profile', verifyToken, async (req, res) => {
       WHERE id = ${userId}
       RETURNING *
     `;
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found in database. Please sign out and sign in again.' });
+    }
 
     res.json({
       success: true,
