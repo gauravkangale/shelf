@@ -460,6 +460,17 @@ function simulateSqlInMemory(strings, values) {
       }
       return [];
     }
+    if (query.includes('SET preferences =')) {
+      const prefsJson = values[0];
+      const userId = values[1];
+      const user = inMemoryStore.users.find(u => u.id === userId);
+      if (user) {
+        user.preferences = prefsJson ? JSON.parse(prefsJson) : {};
+        user.updated_at = new Date();
+        return [user];
+      }
+      return [];
+    }
     // values will be: name, username, email, avatar_url, userId
     const name = values[0];
     const username = values[1];

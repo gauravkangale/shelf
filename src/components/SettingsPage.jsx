@@ -52,10 +52,42 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatar(reader.result);
+      reader.onload = (event) => {
+        const rawBase64 = event.target.result;
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const canvas = document.createElement("canvas");
+            const MAX = 400;
+            let w = img.width;
+            let h = img.height;
+
+            if (w > h && w > MAX) {
+              h = (h * MAX) / w;
+              w = MAX;
+            } else if (h > MAX) {
+              w = (w * MAX) / h;
+              h = MAX;
+            }
+
+            canvas.width = w;
+            canvas.height = h;
+
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return setAvatar(rawBase64);
+
+            ctx.drawImage(img, 0, 0, w, h);
+            const compressed = canvas.toDataURL("image/jpeg", 0.7);
+            setAvatar(compressed);
+          } catch (err) {
+            setAvatar(rawBase64);
+          }
+        };
+        img.onerror = () => setAvatar(rawBase64);
+        img.src = rawBase64;
       };
       reader.readAsDataURL(file);
+      e.target.value = '';
     }
   };
 
@@ -484,7 +516,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
                 }}
               >
                 <span style={{ userSelect: 'none' }}>{role.label}</span>
-                
+
                 {/* Visual Swatch Color Selector Box */}
                 <button
                   type="button"
@@ -511,7 +543,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
                 {activeColorPickerKey === key && (
                   <>
                     {/* Fixed overlay to capture outside clicks and close popover */}
-                    <div 
+                    <div
                       onClick={(e) => {
                         e.stopPropagation();
                         setActiveColorPickerKey(null);
@@ -526,7 +558,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
                     />
 
                     {/* Popover Panel */}
-                    <div 
+                    <div
                       onClick={(e) => e.stopPropagation()}
                       style={{
                         position: 'absolute',

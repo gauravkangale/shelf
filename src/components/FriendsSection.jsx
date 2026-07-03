@@ -96,6 +96,17 @@ function ChatView({ friend, currentUser, token, onBack }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+
+  // Extract true user ID from token to perfectly identify own messages
+  const tokenUserId = React.useMemo(() => {
+    try {
+      if (!token) return currentUser?.id;
+      return JSON.parse(atob(token.split('.')[1])).sub || currentUser?.id;
+    } catch {
+      return currentUser?.id;
+    }
+  }, [token, currentUser]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -228,7 +239,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
     const tempId = `opt-${Date.now()}`;
     const optimistic = {
       id: tempId,
-      senderId: currentUser?.id,
+      senderId: tokenUserId,
       text,
       imageUrl: image,
       createdAt: new Date().toISOString(),
@@ -472,18 +483,25 @@ function ChatView({ friend, currentUser, token, onBack }) {
       </div>
 
       {/* Messages Area */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: '24px 28px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '20px',
-        background: '#fffef9',
-        backgroundImage: 'repeating-linear-gradient(transparent, transparent 52px, rgba(0,0,0,0.04) 52px, rgba(0,0,0,0.04) 53px)',
-        backgroundSize: '100% 53px',
-        backgroundAttachment: 'local'
-      }}>
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '28px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '22px',
+          background: `
+      radial-gradient(circle at top right, rgba(255, 214, 102, 0.12), transparent 35%),
+      radial-gradient(circle at bottom left, rgba(99, 102, 241, 0.08), transparent 40%),
+      linear-gradient(180deg, #fffdf8 0%, #fcfaf4 100%)
+    `,
+          borderLeft: '1px solid rgba(0,0,0,0.06)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+          scrollBehavior: 'smooth',
+          position: 'relative'
+        }}
+      >
         {loading && (
           <div style={{ margin: 'auto', textAlign: 'center' }}>
             <div style={{
@@ -526,7 +544,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
         )}
 
         {messages.map((m, i) => {
-          const isSelf = m.senderId === currentUser?.id;
+          const isSelf = m.senderId === tokenUserId;
           const showTime = i === 0 ||
             new Date(m.createdAt) - new Date(messages[i - 1]?.createdAt) > 30 * 60 * 1000;
           const isSelected = selectedMsgIds.includes(m.id);

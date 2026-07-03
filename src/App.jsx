@@ -15,7 +15,7 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
   const [name, setName] = useState(activeProfile.name || '');
   const [username, setUsername] = useState(activeProfile.username || '');
   const [email, setEmail] = useState(activeProfile.email || '');
-  const [avatar, setAvatar] = useState(activeProfile.avatar || '');
+  const [avatar, setAvatar] = useState(activeProfile.avatar || './profile.jpeg');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isHoveredPhoto, setIsHoveredPhoto] = useState(false);
@@ -25,7 +25,7 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
     setName(activeProfile.name || '');
     setUsername(activeProfile.username || '');
     setEmail(activeProfile.email || '');
-    setAvatar(activeProfile.avatar || '');
+    setAvatar(activeProfile.avatar || './profile.jpeg');
     setSaveSuccess(false);
     setErrorMessage('');
   }, [activeProfile]);
@@ -408,7 +408,8 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
                 border: 'none',
                 borderRadius: '3px',
                 cursor: 'pointer',
-                boxShadow: '0 4px 10px rgba(179, 57, 51, 0.2)'
+                boxShadow: '0 4px 10px rgba(179, 57, 51, 0.2)',
+                transition: 'all 0.2s ease'
               }}>
                 Update Library Card
               </button>
@@ -435,7 +436,7 @@ function App() {
     id: 'guest',
     name: 'Guest User',
     email: 'guest@local.browser',
-    avatar: ''
+    avatar: './profile.jpeg'
   };
 
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -629,14 +630,18 @@ function App() {
     });
 
     // Sync shelf_current_user in localStorage
-    localStorage.setItem('shelf_current_user', JSON.stringify({
-      id: activeProfile.id,
-      name: cleanName,
-      username: cleanUsername,
-      email: cleanEmail,
-      avatar_url: cleanAvatar,
-      avatar: cleanAvatar
-    }));
+    try {
+      localStorage.setItem('shelf_current_user', JSON.stringify({
+        id: activeProfile.id,
+        name: cleanName,
+        username: cleanUsername,
+        email: cleanEmail,
+        avatar_url: cleanAvatar,
+        avatar: cleanAvatar
+      }));
+    } catch (e) {
+      console.warn("Could not save profile to localStorage, it might be too large:", e);
+    }
 
     // Dispatch events to update all open tabs and components
     window.dispatchEvent(new Event('storage'));
@@ -658,8 +663,8 @@ function App() {
         username: userData.username || '',
         email: userData.email || '',
         phone: userData.phone || '',
-        avatar_url: userData.avatar_url || userData.avatar || '',
-        avatar: userData.avatar_url || userData.avatar || '',
+        avatar_url: userData.avatar_url || userData.avatar || './profile.jpeg',
+        avatar: userData.avatar || userData.avatar_url || './profile.jpeg',
       }));
 
       setProfileAccounts(prevAccounts => {
@@ -678,7 +683,7 @@ function App() {
                 username: userData.username || acc.username || '',
                 email: userData.email || acc.email || '',
                 phone: userData.phone || acc.phone || '',
-                avatar: userData.avatar || userData.avatar_url || acc.avatar || '',
+                avatar: userData.avatar || userData.avatar_url || acc.avatar || './profile.jpeg',
                 token: userData.token || acc.token,
                 active: true
               };

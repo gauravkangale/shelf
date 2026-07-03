@@ -29,47 +29,38 @@ export const INITIAL_SHORTCUTS = [
   },
   {
     id: 2,
-    title: 'LinkedIn',
-    subtitle: 'Professional Network',
-    author: 'LinkedIn',
-    url: 'https://www.linkedin.com/',
-    coverImage: './2.jpeg',
-    shortcutKey: 'L'
-  },
-  {
-    id: 3,
-    title: 'GitHub',
-    subtitle: 'Code Hosting',
-    author: 'GitHub',
-    url: 'https://github.com/',
-    coverImage: './3.jpeg',
-    shortcutKey: 'G'
-  },
-  {
-    id: 4,
     title: 'YouTube',
     subtitle: 'Video Platform',
     author: 'Google',
     url: 'https://www.youtube.com/',
-    coverImage: './4.jpeg',
+    coverImage: './2.jpeg',
     shortcutKey: 'Y'
   },
   {
-    id: 5,
-    title: 'ChatGPT',
-    subtitle: 'AI Assistant',
-    author: 'OpenAI',
-    url: 'https://chatgpt.com/',
-    coverImage: './5.jpeg',
-    shortcutKey: 'C'
+    id: 3,
+    title: 'LinkedIn',
+    subtitle: 'Professional Network',
+    author: 'LinkedIn',
+    url: 'https://www.linkedin.com/in/gauravkangale',
+    coverImage: './3.jpeg',
+    shortcutKey: 'L'
   },
   {
-    id: 6,
-    title: 'Google Drive',
-    subtitle: 'Cloud Storage',
-    author: 'Google',
-    url: 'https://drive.google.com/',
-    coverImage: './6.jpeg',
-    shortcutKey: 'D'
+    id: 4,
+    title: 'GitHub',
+    subtitle: 'Code Hosting',
+    author: 'GitHub',
+    url: 'https://github.com/gauravkangale',
+    coverImage: './4.jpeg',
+    shortcutKey: 'G'
+  },
+  {
+    id: 5,
+    title: 'Portfolio',
+    subtitle: 'My Personal Site',
+    author: 'Me',
+    url: 'https://portfolio-grvua.web.app',
+    coverImage: './5.jpeg',
+    shortcutKey: 'P'
   }
 ];

@@ -1823,3 +1823,15 @@ body {
 .find-readers-item:hover {
   background: var(--ui-hover-bg);
 }
+
+.stamp-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(179, 57, 51, 0.3) !important;
+  opacity: 0.95;
+}
+
+.stamp-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 4px rgba(179, 57, 51, 0.2) !important;
+  opacity: 1;
+}

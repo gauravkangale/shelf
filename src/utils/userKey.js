@@ -25,16 +25,12 @@ export function uGet(key, fallback = null) {
 
 export function uSet(key, value) {
   try {
-    const token = localStorage.getItem('shelf_auth_token');
-    if (!token) return;
     localStorage.setItem(userKey(key), JSON.stringify(value));
   } catch {}
 }
 
 export function uRemove(key) {
   try {
-    const token = localStorage.getItem('shelf_auth_token');
-    if (!token) return;
     localStorage.removeItem(userKey(key));
   } catch {}
 }
