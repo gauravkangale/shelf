@@ -14,6 +14,16 @@ export default function BookCard({ item, openEditModal }) {
     e.dataTransfer.effectAllowed = 'move';
   };
 
+  const getImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('./')) {
+      return url.substring(1);
+    }
+    return url;
+  };
+
+  const displayImage = item.customImage || item.coverImage;
+
   return (
     <a
       href={item.url}
@@ -29,7 +39,7 @@ export default function BookCard({ item, openEditModal }) {
         <div
           className="book-cover"
           style={{
-            backgroundImage: (item.customImage || item.coverImage) ? `url(${item.customImage || item.coverImage})` : item.gradient,
+            backgroundImage: displayImage ? `url(${getImageUrl(displayImage)})` : item.gradient,
             backgroundSize: 'cover',
             backgroundPosition: 'center'
           }}

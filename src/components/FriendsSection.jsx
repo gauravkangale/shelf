@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Search, Send, ArrowLeft, BookOpen, Trash2, Users, MessageSquare, Image, X, MoreVertical, BookUser, MessageCircle } from 'lucide-react';
+import { Search, Send, ArrowLeft, BookOpen, Trash2, Users, MessageSquare, Image, X, MoreVertical, BookUser, MessageCircle, ExternalLink, Download } from 'lucide-react';
 import Avatar from './Avatar';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -67,6 +67,42 @@ function compressImage(base64Str, maxWidth = 1000, maxHeight = 1000) {
   });
 }
 
+// Format text to make links clickable
+function formatMessageText(text, isSelectMode) {
+  if (!text) return '';
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, index) => {
+    if (part.startsWith('http://') || part.startsWith('https://')) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: 'var(--rust, #b33933)',
+            textDecoration: 'underline',
+            wordBreak: 'break-all',
+            fontWeight: '600'
+          }}
+          onClick={e => {
+            if (isSelectMode) {
+              e.preventDefault();
+            } else {
+              e.stopPropagation();
+            }
+          }}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
+
 
 
 // ─── Chat Conversation View ───────────────────────────────────────────────────
@@ -88,12 +124,14 @@ function ChatView({ friend, currentUser, token, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [activeImageUrl, setActiveImageUrl] = useState(null);
 
   // Clear drafting state when switching users or friends
   useEffect(() => {
     setImagePreview(null);
     setInput('');
     setError(null);
+    setActiveImageUrl(null);
   }, [currentUser?.id, friend?.id]);
 
   // Message selection states
@@ -597,7 +635,18 @@ function ChatView({ friend, currentUser, token, onBack }) {
                     >
                       {m.imageUrl && (
                         <div style={{ position: 'relative', overflow: 'hidden' }}>
-                          <a href={m.imageUrl} target="_blank" rel="noreferrer" style={{ display: 'block', outline: 'none' }} onClick={e => isSelectMode && e.preventDefault()}>
+                          <a
+                            href={m.imageUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ display: 'block', outline: 'none', cursor: isSelectMode ? 'pointer' : 'zoom-in' }}
+                            onClick={e => {
+                              e.preventDefault();
+                              if (!isSelectMode) {
+                                setActiveImageUrl(m.imageUrl);
+                              }
+                            }}
+                          >
                             <img
                               src={m.imageUrl}
                               alt="Shared media"
@@ -616,7 +665,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
                       )}
                       {m.text && (
                         <div style={{ padding: m.imageUrl ? '12px 16px' : '12px 18px' }}>
-                          {m.text}
+                          {formatMessageText(m.text, isSelectMode)}
                         </div>
                       )}
                     </div>
@@ -816,6 +865,220 @@ function ChatView({ friend, currentUser, token, onBack }) {
           <Send size={15} />
         </button>
       </form>
+
+      {/* Lightbox Modal for Shared Images */}
+      {activeImageUrl && (
+        <div
+          onClick={() => setActiveImageUrl(null)}
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 10000,
+            background: "rgba(255,255,255,0.08)",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            animation: "fadeIn .18s ease",
+            cursor: "zoom-out",
+          }}
+        >
+          {/* Floating Toolbar */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute",
+              top: 12,
+              right: 12,
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "3px 5px",
+              background: "rgba(255,255,255,.82)",
+              backdropFilter: "blur(18px)",
+              WebkitBackdropFilter: "blur(18px)",
+              border: "1px solid rgba(255,255,255,.55)",
+              borderRadius: 999,
+              boxShadow: "0 4px 12px rgba(0,0,0,.08)",
+              zIndex: 1,
+            }}
+          >
+            {/* Open */}
+            <a
+              href={activeImageUrl}
+              target="_blank"
+              rel="noreferrer"
+              title="Open"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                height: 38,
+                padding: "0 16px",
+                borderRadius: 999,
+                textDecoration: "none",
+                color: "#444",
+                fontSize: 13,
+                fontWeight: 500,
+                fontFamily: "Outfit,sans-serif",
+                transition: "all .18s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,.7)";
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.color = "#111";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.color = "#444";
+              }}
+            >
+              <ExternalLink size={15} />
+              <span>Open</span>
+            </a>
+
+            <div
+              style={{
+                width: 1,
+                height: 18,
+                background: "rgba(0,0,0,.08)",
+              }}
+            />
+
+            {/* Download */}
+            <a
+              href={activeImageUrl}
+              download="shared_image.jpg"
+              title="Download"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                height: 38,
+                padding: "0 16px",
+                borderRadius: 999,
+                textDecoration: "none",
+                color: "#444",
+                fontSize: 13,
+                fontWeight: 500,
+                fontFamily: "Outfit,sans-serif",
+                transition: "all .18s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,.7)";
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.color = "#111";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.color = "#444";
+              }}
+            >
+              <Download size={15} />
+              <span>Download</span>
+            </a>
+
+            <div
+              style={{
+                width: 1,
+                height: 18,
+                background: "rgba(0,0,0,.08)",
+              }}
+            />
+            {/* Close */}
+            <button
+              onClick={() => setActiveImageUrl(null)}
+              title="Close"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                height: 38,
+                padding: "0 16px",
+                border: "none",
+                background: "transparent",
+                borderRadius: 999,
+                color: "#E5484D",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 500,
+                fontFamily: "Outfit,sans-serif",
+                transition: "all .18s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(229,72,77,.08)";
+                e.currentTarget.style.transform = "translateY(-1px)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.transform = "translateY(0)";
+              }}
+            >
+              <X size={15} />
+              <span>Close</span>
+            </button>
+          </div>
+
+          {/* Image */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "relative",
+              maxWidth: "100%",
+              maxHeight: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              animation: "scaleIn .22s cubic-bezier(.22,1,.36,1)",
+              zIndex: 10001,
+              border: "3px solid #000000ff",
+              borderRadius: "20px",
+            }}
+          >
+            <img
+              src={activeImageUrl}
+              alt="Preview"
+              draggable={false}
+              style={{
+                maxWidth: "100%",
+                maxHeight: "84vh",
+                objectFit: "contain",
+                borderRadius: 20,
+                display: "block",
+                userSelect: "none",
+                boxShadow:
+                  "0 18px 55px rgba(0,0,0,.18), 0 4px 12px rgba(0,0,0,.06)",
+                transition: "transform .25s ease",
+              }}
+            />
+          </div>
+
+          <style>{`
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes scaleIn {
+        from {
+          opacity: 0;
+          transform: scale(.96);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+    `}</style>
+        </div>
+      )}
 
       <style>{`
       `}</style>

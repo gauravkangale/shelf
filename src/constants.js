@@ -9,12 +9,12 @@ export const BOOK_COLORS = [
 ];
 
 export const PRESET_COVERS = [
-  { name: 'Dark Academia', coverImage: './1.jpeg' },
-  { name: 'Vintage Floral', coverImage: './2.jpeg' },
-  { name: 'Moonlit Library', coverImage: './3.jpeg' },
-  { name: 'Celestial Dreams', coverImage: './4.jpeg' },
-  { name: 'Antique Manuscript', coverImage: './5.jpeg' },
-  { name: 'Enchanted Garden', coverImage: './6.jpeg' }
+  { name: 'Dark Academia', coverImage: '/1.jpeg' },
+  { name: 'Vintage Floral', coverImage: '/2.jpeg' },
+  { name: 'Moonlit Library', coverImage: '/3.jpeg' },
+  { name: 'Celestial Dreams', coverImage: '/4.jpeg' },
+  { name: 'Antique Manuscript', coverImage: '/5.jpeg' },
+  { name: 'Enchanted Garden', coverImage: '/6.jpeg' }
 ];
 
 export const INITIAL_SHORTCUTS = [
@@ -24,7 +24,7 @@ export const INITIAL_SHORTCUTS = [
     subtitle: 'Google Mail',
     author: 'Google',
     url: 'https://mail.google.com/',
-    coverImage: './1.jpeg',
+    coverImage: '/1.jpeg',
     shortcutKey: 'M'
   },
   {
@@ -33,7 +33,7 @@ export const INITIAL_SHORTCUTS = [
     subtitle: 'Video Platform',
     author: 'Google',
     url: 'https://www.youtube.com/',
-    coverImage: './2.jpeg',
+    coverImage: '/2.jpeg',
     shortcutKey: 'Y'
   },
   {
@@ -42,7 +42,7 @@ export const INITIAL_SHORTCUTS = [
     subtitle: 'Professional Network',
     author: 'LinkedIn',
     url: 'https://www.linkedin.com/in/gauravkangale',
-    coverImage: './3.jpeg',
+    coverImage: '/3.jpeg',
     shortcutKey: 'L'
   },
   {
@@ -51,7 +51,7 @@ export const INITIAL_SHORTCUTS = [
     subtitle: 'Code Hosting',
     author: 'GitHub',
     url: 'https://github.com/gauravkangale',
-    coverImage: './4.jpeg',
+    coverImage: '/4.jpeg',
     shortcutKey: 'G'
   },
   {
@@ -60,7 +60,7 @@ export const INITIAL_SHORTCUTS = [
     subtitle: 'My Personal Site',
     author: 'Me',
     url: 'https://portfolio-grvua.web.app',
-    coverImage: './5.jpeg',
+    coverImage: '/5.jpeg',
     shortcutKey: 'P'
   }
 ];

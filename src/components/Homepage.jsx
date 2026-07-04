@@ -33,12 +33,34 @@ export default function Homepage({
   const [searchEngine, setSearchEngine] = useState('google'); // 'google' or 'shelf'
   const [searchQuery, setSearchQuery] = useState('');
 
+  const healShortcuts = (list) => {
+    if (!Array.isArray(list)) return [];
+    return list.map(s => {
+      const copy = { ...s };
+      if (copy.coverImage && copy.coverImage.startsWith('./')) {
+        copy.coverImage = copy.coverImage.substring(1);
+      }
+      if (copy.customImage && copy.customImage.startsWith('./')) {
+        copy.customImage = copy.customImage.substring(1);
+      }
+      if (!copy.coverImage && !copy.customImage) {
+        const titleLower = (copy.title || '').toLowerCase();
+        if (titleLower.includes('gmail')) copy.coverImage = '/1.jpeg';
+        else if (titleLower.includes('youtube')) copy.coverImage = '/2.jpeg';
+        else if (titleLower.includes('linkedin')) copy.coverImage = '/3.jpeg';
+        else if (titleLower.includes('github')) copy.coverImage = '/4.jpeg';
+        else if (titleLower.includes('portfolio')) copy.coverImage = '/5.jpeg';
+      }
+      return copy;
+    });
+  };
+
   // Shortcuts/bookmarks shelf
   const [shortcuts, setShortcuts] = useState(() => {
     // Quick fallback
     const saved = uGet('homepage_shortcuts');
-    if (saved) return saved;
-    return INITIAL_SHORTCUTS;
+    if (saved) return healShortcuts(saved);
+    return healShortcuts(INITIAL_SHORTCUTS);
   });
 
   // Fetch true shortcuts from server
@@ -53,8 +75,9 @@ export default function Homepage({
         if (res.ok) {
           const data = await res.json();
           if (data.shortcuts && Array.isArray(data.shortcuts)) {
-            setShortcuts(data.shortcuts);
-            uSet('homepage_shortcuts', data.shortcuts);
+            const healed = healShortcuts(data.shortcuts);
+            setShortcuts(healed);
+            uSet('homepage_shortcuts', healed);
           }
         }
       } catch (err) {}

@@ -1018,7 +1018,7 @@ function App() {
         return (
           <div className="flex-1 w-full h-full">
             {/* Make sure this is here! */}
-            <ReadingTimer />
+            <ReadingTimer username={activeProfile?.username || 'reader'} />
           </div>
         );
       case 'bookmarks':

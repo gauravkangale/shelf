@@ -1479,7 +1479,8 @@ app.get('/api/shortcuts', verifyToken, async (req, res) => {
       author: s.author || null,
       gradient: s.gradient || null,
       shortcutKey: s.shortcutKey || s.shortcut_key || null,
-      customImage: s.customImage || s.custom_image || null
+      customImage: s.customImage || s.custom_image || null,
+      coverImage: s.coverImage || s.cover_image || null
     }));
     res.json({ shortcuts });
   } catch (err) {

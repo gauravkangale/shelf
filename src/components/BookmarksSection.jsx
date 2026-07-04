@@ -10,22 +10,44 @@ const SHORTCUTS_KEY = 'homepage_shortcuts';
 let _dragTargetIsTrash = false;
 
 export default function BookmarksSection() {
+  const healShortcuts = (list) => {
+    if (!Array.isArray(list)) return [];
+    return list.map(s => {
+      const copy = { ...s };
+      if (copy.coverImage && copy.coverImage.startsWith('./')) {
+        copy.coverImage = copy.coverImage.substring(1);
+      }
+      if (copy.customImage && copy.customImage.startsWith('./')) {
+        copy.customImage = copy.customImage.substring(1);
+      }
+      if (!copy.coverImage && !copy.customImage) {
+        const titleLower = (copy.title || '').toLowerCase();
+        if (titleLower.includes('gmail')) copy.coverImage = '/1.jpeg';
+        else if (titleLower.includes('youtube')) copy.coverImage = '/2.jpeg';
+        else if (titleLower.includes('linkedin')) copy.coverImage = '/3.jpeg';
+        else if (titleLower.includes('github')) copy.coverImage = '/4.jpeg';
+        else if (titleLower.includes('portfolio')) copy.coverImage = '/5.jpeg';
+      }
+      return copy;
+    });
+  };
+
   const [bookmarks, setBookmarks] = useState(() => {
     const saved = uGet(SHORTCUTS_KEY);
     if (saved) {
       if (saved.some(s => s.title === 'The World of Ice and Fire' || s.title === 'Fantastic Beasts')) {
         uSet(SHORTCUTS_KEY, INITIAL_SHORTCUTS);
-        return INITIAL_SHORTCUTS;
+        return healShortcuts(INITIAL_SHORTCUTS);
       }
-      return saved;
+      return healShortcuts(saved);
     }
-    return INITIAL_SHORTCUTS;
+    return healShortcuts(INITIAL_SHORTCUTS);
   });
 
   useEffect(() => {
     const reload = () => {
       const saved = uGet(SHORTCUTS_KEY);
-      setBookmarks(saved || INITIAL_SHORTCUTS);
+      setBookmarks(healShortcuts(saved || INITIAL_SHORTCUTS));
     };
     window.addEventListener('user-switched', reload);
     return () => window.removeEventListener('user-switched', reload);

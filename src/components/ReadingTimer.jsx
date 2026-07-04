@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { THEME_COLOR_ROLES } from "../utils/themePresets";
-import { Pencil } from "lucide-react";
+import { Pencil, Sun, Moon } from "lucide-react";
 import { uGet, uSet } from "../utils/userKey";
 
-export default function DesktopNeumorphicDashboard() {
+export default function DesktopNeumorphicDashboard({ username }) {
     const [time, setTime] = useState(new Date());
     const [weather, setWeather] = useState(null);
     const [cryptoData, setCryptoData] = useState(null);
@@ -127,7 +127,56 @@ export default function DesktopNeumorphicDashboard() {
     const endOfYear = new Date(time.getFullYear() + 1, 0, 1);
     const yearProgress = Math.floor(((time - startOfYear) / (endOfYear - startOfYear)) * 100);
 
+    const currentHours = time.getHours();
+    const currentMinutes = time.getMinutes();
+    const elapsedMinutes = currentHours * 60 + currentMinutes;
+    const totalMinutesInDay = 24 * 60;
+    const dayProgress = Math.floor((elapsedMinutes / totalMinutesInDay) * 100);
+    const dayRemaining = 100 - dayProgress;
+
+    const getGreetingIcon = () => {
+        const hrs = time.getHours();
+        if (hrs >= 6 && hrs < 18) {
+            return <Sun size={36} strokeWidth={1.5} style={{ color: `var(${THEME_COLOR_ROLES.accentColor.cssVar})` }} />;
+        }
+        return <Moon size={36} strokeWidth={1.5} style={{ color: `var(${THEME_COLOR_ROLES.accentColor.cssVar})` }} />;
+    };
+
+    const getGreetingText = () => {
+        const hrs = time.getHours();
+        if (hrs < 12) return "Good Morning";
+        if (hrs < 17) return "Good Afternoon";
+        return "Good Evening";
+    };
+
     const [calendarDate, setCalendarDate] = useState(new Date());
+    const [hasNotesMap, setHasNotesMap] = useState({});
+
+    useEffect(() => {
+        const updateNotesMap = () => {
+            const parsed = uGet('shelf_daily_notes');
+            if (parsed) {
+                const map = {};
+                Object.keys(parsed).forEach(key => {
+                    if (parsed[key] && parsed[key].length > 0) {
+                        map[key] = true;
+                    }
+                });
+                setHasNotesMap(map);
+            } else {
+                setHasNotesMap({});
+            }
+        };
+
+        updateNotesMap();
+
+        window.addEventListener('notes-updated', updateNotesMap);
+        window.addEventListener('storage', updateNotesMap);
+        return () => {
+            window.removeEventListener('notes-updated', updateNotesMap);
+            window.removeEventListener('storage', updateNotesMap);
+        };
+    }, []);
 
     const handlePrevMonth = () => {
         setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
@@ -142,8 +191,8 @@ export default function DesktopNeumorphicDashboard() {
     const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
     const firstDay = new Date(calendarYear, calendarMonth, 1).getDay();
 
-    const outerShadow = `12px 12px 24px var(--accent-light), -12px -12px 24px var(--highlight)`;
-    const innerShadow = `inset 8px 8px 16px var(--accent-light), inset -8px -8px 16px var(--highlight)`;
+    const outerShadow = `var(--shadow-md)`;
+    const innerShadow = `none`;
 
     useEffect(() => {
         const fetchWeather = async () => {
@@ -196,7 +245,7 @@ export default function DesktopNeumorphicDashboard() {
                 width: "100vw",
                 backgroundColor: `var(${THEME_COLOR_ROLES.background.cssVar})`,
                 color: `var(${THEME_COLOR_ROLES.textPrimary.cssVar})`,
-                fontFamily: "'Nunito', 'Segoe UI', sans-serif",
+                fontFamily: "var(--sans)",
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
@@ -223,7 +272,8 @@ export default function DesktopNeumorphicDashboard() {
                             width: "140px",
                             height: "140px",
                             borderRadius: "50%",
-                            backgroundColor: `var(${THEME_COLOR_ROLES.background.cssVar})`,
+                            backgroundColor: `var(${THEME_COLOR_ROLES.panel.cssVar})`,
+                            border: '1.5px solid var(--border-color)',
                             boxShadow: outerShadow,
                             position: "relative",
                             display: "flex",
@@ -239,25 +289,77 @@ export default function DesktopNeumorphicDashboard() {
                         {/* Clock Hands */}
                         <div style={{ width: "6px", height: "40px", backgroundColor: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, position: "absolute", bottom: "50%", left: "calc(50% - 3px)", transformOrigin: "bottom center", transform: `rotate(${(time.getHours() % 12) * 30 + time.getMinutes() * 0.5}deg)`, borderRadius: "3px" }} />
                         <div style={{ width: "4px", height: "55px", backgroundColor: `var(${THEME_COLOR_ROLES.textPrimary.cssVar})`, position: "absolute", bottom: "50%", left: "calc(50% - 2px)", transformOrigin: "bottom center", transform: `rotate(${time.getMinutes() * 6}deg)`, borderRadius: "2px" }} />
-                        <div style={{ width: "12px", height: "12px", backgroundColor: `var(${THEME_COLOR_ROLES.accentColor.cssVar})`, borderRadius: "50%", zIndex: 10, border: `3px solid var(${THEME_COLOR_ROLES.background.cssVar})` }} />
+                        <div style={{ width: "12px", height: "12px", backgroundColor: `var(${THEME_COLOR_ROLES.accentColor.cssVar})`, borderRadius: "50%", zIndex: 10, border: `3px solid var(${THEME_COLOR_ROLES.panel.cssVar})` }} />
                     </div>
                 </div>
 
-                <div style={{ marginLeft: "30px", gridColumn: "3", display: "flex", flexDirection: "column", justifyContent: "flex-start", alignItems: "flex-end" }}>
-                    <h1 style={{ fontSize: "2.8rem", margin: "0 0 8px 0", color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, fontWeight: "600", letterSpacing: "1px" }}>
-                        Hello.<span style={{ color: `var(${THEME_COLOR_ROLES.ink.cssVar})` }}>{currentMonth}</span>
-                    </h1>
-                    <p style={{ margin: 0, fontSize: "1.2rem", color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, fontWeight: "500" }}>
-                        Live every day with ease!
-                    </p>
+                <div
+                    style={{
+                        gridColumn: "2 / 4",
+                        backgroundColor: `var(${THEME_COLOR_ROLES.panel.cssVar})`,
+                        border: '1.5px solid var(--border-color)',
+                        borderRadius: "20px",
+                        boxShadow: outerShadow,
+                        padding: "24px 32px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        height: "140px",
+                        boxSizing: "border-box",
+                        position: "relative",
+                        overflow: "hidden"
+                    }}
+                >
+                    {/* Faded Month Backdrop Text */}
+                    <div style={{
+                        position: 'absolute',
+                        right: '16px',
+                        bottom: '-16px',
+                        fontSize: '6.5rem',
+                        fontWeight: '900',
+                        fontFamily: 'var(--serif)',
+                        color: `var(${THEME_COLOR_ROLES.ink.cssVar})`,
+                        opacity: 0.05,
+                        pointerEvents: 'none',
+                        userSelect: 'none',
+                        textTransform: 'uppercase',
+                        letterSpacing: '4px'
+                    }}>
+                        {currentMonth.substring(0, 4)}
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "flex-start", zIndex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+                                {getGreetingText()}
+                            </span>
+                        </div>
+                        <h1 style={{
+                            fontFamily: "var(--serif)",
+                            fontSize: "2.4rem",
+                            margin: "0 0 4px 0",
+                            color: `var(${THEME_COLOR_ROLES.ink.cssVar})`,
+                            fontWeight: "800",
+                            letterSpacing: "0.5px"
+                        }}>
+                            Hello <span style={{ color: `var(${THEME_COLOR_ROLES.accentColor.cssVar})` }}>{username}</span>
+                        </h1>
+                        <p style={{ margin: 0, fontSize: "0.95rem", color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, fontWeight: "500", fontStyle: "italic" }}>
+                            Live every day with ease!
+                        </p>
+                    </div>
+                    <div style={{ zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingRight: '8px' }}>
+                        {getGreetingIcon()}
+                    </div>
                 </div>
 
                 {/* --- ROW 2: Digital Clock & Date Panel --- */}
                 <div
                     style={{
                         gridColumn: "span 3",
-                        backgroundColor: `var(${THEME_COLOR_ROLES.background.cssVar})`,
-                        borderRadius: "24px",
+                        backgroundColor: `var(${THEME_COLOR_ROLES.panel.cssVar})`,
+                        border: '1.5px solid var(--border-color)',
+                        borderRadius: "20px",
                         boxShadow: outerShadow,
                         padding: "20px 40px",
                         display: "flex",
@@ -268,10 +370,10 @@ export default function DesktopNeumorphicDashboard() {
                     {/* Recessed Clock Display */}
                     <div
                         style={{
-                            backgroundColor: `var(${THEME_COLOR_ROLES.background.cssVar})`,
-                            borderRadius: "16px",
-                            boxShadow: innerShadow,
-                            padding: "15px 35px",
+                            backgroundColor: `var(${THEME_COLOR_ROLES.optionBg.cssVar})`,
+                            border: '1px solid var(--border-color)',
+                            borderRadius: "12px",
+                            padding: "12px 24px",
                             fontSize: "4.5rem",
                             fontWeight: "700",
                             color: `var(${THEME_COLOR_ROLES.ink.cssVar})`,
@@ -291,26 +393,26 @@ export default function DesktopNeumorphicDashboard() {
                     </div>
                 </div>
 
-                {/* --- ROW 3: Year Progress Bar --- */}
+                {/* --- ROW 3: Day Progress Bar --- */}
                 <div style={{ gridColumn: "span 3" }}>
                     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px", fontSize: "1rem", color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, fontWeight: "600" }}>
-                        The rest of the year <span style={{ color: `var(${THEME_COLOR_ROLES.accentColor.cssVar})`, marginLeft: "8px" }}>{yearProgress}%</span>
+                        The rest of the day <span style={{ color: `var(${THEME_COLOR_ROLES.accentColor.cssVar})`, marginLeft: "8px" }}>{dayRemaining}%</span>
                     </div>
                     <div
                         style={{
                             width: "100%",
-                            height: "28px",
-                            borderRadius: "14px",
-                            backgroundColor: `var(${THEME_COLOR_ROLES.background.cssVar})`,
-                            boxShadow: innerShadow,
-                            padding: "6px",
+                            height: "24px",
+                            borderRadius: "12px",
+                            backgroundColor: `var(${THEME_COLOR_ROLES.optionBg.cssVar})`,
+                            border: '1px solid var(--border-color)',
+                            padding: "3px",
                             boxSizing: "border-box"
                         }}
                     >
                         <div
                             style={{
                                 height: "100%",
-                                width: `${100 - yearProgress}%`,
+                                width: `${dayProgress}%`,
                                 background: `linear-gradient(90deg, var(${THEME_COLOR_ROLES.accentSoft.cssVar}) 0%, var(${THEME_COLOR_ROLES.accentColor.cssVar}) 100%)`,
                                 borderRadius: "8px",
                                 transition: "width 1s ease"
@@ -322,7 +424,16 @@ export default function DesktopNeumorphicDashboard() {
                 {/* --- ROW 4: Bottom Widgets --- */}
 
                 {/* ================= IMAGES ================= */}
-                <div style={{ position: "relative" }}>
+                <div
+                    style={{
+                        position: "relative",
+                        borderRadius: "18px",
+                        overflow: "hidden",
+                        border: "1.5px solid var(--border-color)",
+                        boxShadow: outerShadow,
+                        height: "100%"
+                    }}
+                >
 
                     {/* IMAGE PREVIEW */}
                     {image ? (
@@ -331,8 +442,7 @@ export default function DesktopNeumorphicDashboard() {
                             style={{
                                 width: "100%",
                                 height: "100%",
-                                objectFit: "cover",
-                                borderRadius: "18px"
+                                objectFit: "cover"
                             }}
                         />
                     ) : (
@@ -391,8 +501,9 @@ export default function DesktopNeumorphicDashboard() {
                 {/* ================= IT / SOFTWARE NEWS ================= */}
                 <div
                     style={{
-                        backgroundColor: `var(${THEME_COLOR_ROLES.background.cssVar})`,
-                        borderRadius: "28px",
+                        backgroundColor: `var(${THEME_COLOR_ROLES.panel.cssVar})`,
+                        border: '1.5px solid var(--border-color)',
+                        borderRadius: "20px",
                         boxShadow: outerShadow,
                         padding: "24px 20px",
                         flex: 1,
@@ -412,7 +523,7 @@ export default function DesktopNeumorphicDashboard() {
                             textAlign: "center"
                         }}
                     >
-                        techcrunch news
+                        TechCrunch News
                     </p>
 
                     {!newsData ? (
@@ -424,11 +535,25 @@ export default function DesktopNeumorphicDashboard() {
                                 style={{
                                     width: "100%",
                                     padding: "8px 0",
-                                    borderBottom: i < 3 ? "1px solid rgba(0,0,0,0.06)" : "none"
+                                    borderBottom: i < 3 ? "1.5px solid var(--border-color)" : "none"
                                 }}
                             >
-                                <a href={n.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                                <a
+                                    href={n.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ textDecoration: "none", display: "block" }}
+                                    onMouseEnter={e => {
+                                        const t = e.currentTarget.querySelector('.news-title');
+                                        if (t) t.style.color = 'var(--accent-color)';
+                                    }}
+                                    onMouseLeave={e => {
+                                        const t = e.currentTarget.querySelector('.news-title');
+                                        if (t) t.style.color = `var(${THEME_COLOR_ROLES.ink.cssVar})`;
+                                    }}
+                                >
                                     <div
+                                        className="news-title"
                                         style={{
                                             fontWeight: "700",
                                             color: `var(${THEME_COLOR_ROLES.ink.cssVar})`,
@@ -437,7 +562,8 @@ export default function DesktopNeumorphicDashboard() {
                                             display: "-webkit-box",
                                             WebkitLineClamp: 2,
                                             WebkitBoxOrient: "vertical",
-                                            overflow: "hidden"
+                                            overflow: "hidden",
+                                            transition: "color 0.2s ease"
                                         }}
                                     >
                                         {n.title}
@@ -459,7 +585,17 @@ export default function DesktopNeumorphicDashboard() {
 
 
                 {/* Calendar */}
-                <div style={{ backgroundColor: `var(${THEME_COLOR_ROLES.background.cssVar})`, borderRadius: "28px", boxShadow: outerShadow, padding: "24px", display: "flex", flexDirection: "column", justifyContent: "center", alignSelf: "flex-start" }}>
+                <div style={{
+                    backgroundColor: `var(${THEME_COLOR_ROLES.panel.cssVar})`,
+                    border: '1.5px solid var(--border-color)',
+                    borderRadius: "20px",
+                    boxShadow: outerShadow,
+                    padding: "24px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    alignSelf: "flex-start"
+                }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                         <span style={{ fontWeight: "700", fontSize: "1.2rem", color: `var(${THEME_COLOR_ROLES.ink.cssVar})` }}>
                             {months[calendarMonth]} {calendarYear}
@@ -484,6 +620,8 @@ export default function DesktopNeumorphicDashboard() {
                         {[...Array(daysInMonth)].map((_, i) => {
                             const day = i + 1;
                             const isToday = time.getDate() === day && time.getMonth() === calendarMonth && time.getFullYear() === calendarYear;
+                            const cellDate = new Date(calendarYear, calendarMonth, day);
+                            const hasNotes = hasNotesMap[cellDate.toDateString()];
                             return (
                                 <div
                                     key={i}
@@ -493,10 +631,23 @@ export default function DesktopNeumorphicDashboard() {
                                         color: isToday ? "#FFFFFF" : `var(${THEME_COLOR_ROLES.ink.cssVar})`,
                                         borderRadius: "6px",
                                         padding: "4px 0",
-                                        boxShadow: isToday ? outerShadow : "none"
+                                        boxShadow: isToday ? '0 3px 8px rgba(0, 0, 0, 0.12)' : "none",
+                                        position: "relative"
                                     }}
                                 >
                                     {day}
+                                    {hasNotes && (
+                                        <span style={{
+                                            position: 'absolute',
+                                            bottom: '2px',
+                                            left: '50%',
+                                            transform: 'translateX(-50%)',
+                                            width: '4px',
+                                            height: '4px',
+                                            borderRadius: '50%',
+                                            backgroundColor: isToday ? '#FFFFFF' : 'var(--rust, #b33933)'
+                                        }} />
+                                    )}
                                 </div>
                             );
                         })}

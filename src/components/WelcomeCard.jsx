@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Pencil, FileText, Link, Image, Link2 } from 'lucide-react';
+import { Pencil, FileText, Trash2, Link2 } from 'lucide-react';
 import { uGet, uSet, uRemove } from '../utils/userKey';
 
 const STORAGE_KEY = 'welcome_decoration_index';
@@ -349,7 +349,7 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
                 />
 
                 <MenuButton
-                  icon={<Link size={16} />}
+                  icon={<Link2 size={16} />}
                   label="Add Web Link"
                   onClick={handleAddLink}
                   color="#06b6d4"
@@ -357,7 +357,7 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
 
                 {uploadedResource && (
                   <MenuButton
-                    icon={<span style={{ fontSize: '14px' }}>🗑</span>}
+                    icon={<Trash2 size={16} />}
                     label="Clear Document"
                     onClick={handleClearResource}
                     color="#e85d56"

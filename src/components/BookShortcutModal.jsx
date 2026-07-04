@@ -154,15 +154,19 @@ export default function BookShortcutModal({
           <div className="form-group">
             <label className="form-label">Choose Preset Cover/Page Style</label>
             <div className="preset-cover-picker">
-              {PRESET_COVERS.map((preset) => (
-                <div
-                  key={preset.name}
-                  className={`preset-cover-option ${shortcutCustomImage === preset.coverImage ? 'selected' : ''}`}
-                  style={{ backgroundImage: `url(${preset.coverImage})` }}
-                  title={preset.name}
-                  onClick={() => setShortcutCustomImage(preset.coverImage)}
-                ></div>
-              ))}
+              {PRESET_COVERS.map((preset) => {
+                const normalizedCustom = (shortcutCustomImage || '').replace(/^\.\//, '/');
+                const normalizedPreset = (preset.coverImage || '').replace(/^\.\//, '/');
+                return (
+                  <div
+                    key={preset.name}
+                    className={`preset-cover-option ${normalizedCustom === normalizedPreset ? 'selected' : ''}`}
+                    style={{ backgroundImage: `url(${preset.coverImage})` }}
+                    title={preset.name}
+                    onClick={() => setShortcutCustomImage(preset.coverImage)}
+                  ></div>
+                );
+              })}
             </div>
           </div>
 
