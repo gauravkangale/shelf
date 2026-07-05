@@ -396,7 +396,7 @@ export default function DesktopNeumorphicDashboard({ username }) {
                 {/* --- ROW 3: Day Progress Bar --- */}
                 <div style={{ gridColumn: "span 3" }}>
                     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px", fontSize: "1rem", color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, fontWeight: "600" }}>
-                        The rest of the day <span style={{ color: `var(${THEME_COLOR_ROLES.accentColor.cssVar})`, marginLeft: "8px" }}>{dayRemaining}%</span>
+                        The day so far <span style={{ color: `var(${THEME_COLOR_ROLES.accentColor.cssVar})`, marginLeft: "8px" }}>{dayProgress}%</span>
                     </div>
                     <div
                         style={{
