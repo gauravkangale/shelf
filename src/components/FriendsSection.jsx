@@ -81,7 +81,7 @@ function formatMessageText(text, isSelectMode) {
           target="_blank"
           rel="noopener noreferrer"
           style={{
-            color: 'var(--rust, #b33933)',
+            color: 'inherit',
             textDecoration: 'underline',
             wordBreak: 'break-all',
             fontWeight: '600'
@@ -100,6 +100,82 @@ function formatMessageText(text, isSelectMode) {
     }
     return part;
   });
+}
+
+function hasEmbed(text) {
+  if (!text) return false;
+  const imageRegex = /\.(jpeg|jpg|gif|png|webp)($|\?)/i;
+  const pinterestRegex = /pinterest\.com\/pin\/(\d+)/i;
+  return imageRegex.test(text) || pinterestRegex.test(text);
+}
+
+function renderParsedEmbedsOnly(text, isSelectMode, setActiveImageUrl) {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  const imageRegex = /\.(jpeg|jpg|gif|png|webp)($|\?)/i;
+  const pinterestRegex = /pinterest\.com\/pin\/(\d+)/i;
+
+  let embeds = [];
+
+  parts.forEach((part, index) => {
+    if (part.startsWith('http://') || part.startsWith('https://')) {
+      // Check for image embed
+      if (imageRegex.test(part)) {
+        embeds.push(
+          <div key={`img-${index}`} style={{ marginTop: index > 0 ? '6px' : '0' }}>
+            <img
+              src={part}
+              alt="Shared media"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '260px',
+                borderRadius: '12px',
+                display: 'block',
+                cursor: isSelectMode ? 'pointer' : 'zoom-in'
+              }}
+              onClick={e => {
+                if (isSelectMode) return;
+                e.stopPropagation();
+                if (setActiveImageUrl) {
+                  setActiveImageUrl(part);
+                } else {
+                  window.open(part, '_blank');
+                }
+              }}
+            />
+          </div>
+        );
+      }
+
+      // Check for Pinterest embed
+      const pinMatch = part.match(pinterestRegex);
+      if (pinMatch && pinMatch[1]) {
+        const pinId = pinMatch[1];
+        embeds.push(
+          <div key={`pin-${index}`} style={{ marginTop: index > 0 ? '6px' : '0' }}>
+            <iframe
+              src={`https://assets.pinterest.com/ext/embed.html?id=${pinId}`}
+              height="280"
+              width="240"
+              frameBorder="0"
+              scrolling="no"
+              style={{
+                border: 'none',
+                borderRadius: '12px',
+                display: 'block',
+                background: 'transparent',
+                boxShadow: 'none'
+              }}
+            />
+          </div>
+        );
+      }
+    }
+  });
+
+  return embeds.length > 0 ? <div>{embeds}</div> : null;
 }
 
 
@@ -140,6 +216,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
   const [showMenu, setShowMenu] = useState(false);
 
   const endRef = useRef(null);
+  const chatContainerRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const pollRef = useRef(null);
@@ -187,11 +264,54 @@ function ChatView({ friend, currentUser, token, onBack }) {
     return () => clearInterval(pollRef.current);
   }, [fetchMessages]);
 
+  // Scroll to bottom on initial load of friend chat
   useEffect(() => {
-    if (messages.length > 0) {
-      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (friend?.id) {
+      const scroll = () => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+      };
+      scroll();
+      const t1 = setTimeout(scroll, 100);
+      const t2 = setTimeout(scroll, 500);
+      const t3 = setTimeout(scroll, 1200);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
     }
-  }, [messages]);
+  }, [friend?.id]);
+
+  // Scroll to bottom when new messages are added, but only if user was already at bottom or sent it
+  const prevMessagesLengthRef = useRef(0);
+  useEffect(() => {
+    if (!friend?.id || messages.length === 0) {
+      prevMessagesLengthRef.current = 0;
+      return;
+    }
+
+    const prevLength = prevMessagesLengthRef.current;
+    prevMessagesLengthRef.current = messages.length;
+
+    if (prevLength > 0 && messages.length > prevLength) {
+      const container = chatContainerRef.current;
+      if (container) {
+        const lastMsg = messages[messages.length - 1];
+        const isSelf = String(lastMsg.senderId) === String(tokenUserId);
+
+        // If the user is already near the bottom (within 120px) or they sent the message, scroll to bottom
+        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+        if (isSelf || isNearBottom) {
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }
+    }
+  }, [messages, friend?.id, tokenUserId]);
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -500,6 +620,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
 
       {/* Messages Area */}
       <div
+        ref={chatContainerRef}
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -609,66 +730,92 @@ function ChatView({ friend, currentUser, token, onBack }) {
                 {!isSelf && <div style={{ marginTop: '2px' }}><Avatar user={friend} size={36} /></div>}
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: isSelf ? 'flex-end' : 'flex-start', maxWidth: '65%' }}>
-                  <div style={{ maxWidth: '100%', position: 'relative' }} className="msg-wrap">
-                    <div
-                      onClick={() => {
-                        if (isSelectMode) {
-                          setSelectedMsgIds(prev =>
-                            prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
-                          );
-                        }
-                      }}
-                      style={{
-                        borderRadius: isSelf ? '22px 22px 6px 22px' : '22px 22px 22px 6px',
-                        background: isSelf ? '#fad3d8' : '#e6f2fb',
-                        color: '#443c3d',
-                        fontSize: '14.5px',
-                        fontWeight: '500',
-                        lineHeight: 1.5,
-                        wordBreak: 'break-word',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                        border: isSelected ? '2px solid var(--accent-color, #b33533)' : (isSelf ? '2px solid #eab7bc' : '2px solid #b8d0e6'),
-                        cursor: isSelectMode ? 'pointer' : 'default',
-                        overflow: 'hidden',
-                        position: 'relative'
-                      }}
-                    >
-                      {m.imageUrl && (
-                        <div style={{ position: 'relative', overflow: 'hidden' }}>
-                          <a
-                            href={m.imageUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ display: 'block', outline: 'none', cursor: isSelectMode ? 'pointer' : 'zoom-in' }}
-                            onClick={e => {
-                              e.preventDefault();
-                              if (!isSelectMode) {
-                                setActiveImageUrl(m.imageUrl);
-                              }
-                            }}
-                          >
-                            <img
-                              src={m.imageUrl}
-                              alt="Shared media"
-                              style={{
-                                maxWidth: '100%',
-                                maxHeight: '280px',
-                                width: '100%',
-                                objectFit: 'cover',
-                                display: 'block',
-                                transition: 'transform 0.3s ease'
+                  <div style={{ maxWidth: '100%', position: 'relative', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: isSelf ? 'flex-end' : 'flex-start' }} className="msg-wrap">
+
+                    {/* Text Bubble */}
+                    {m.text && (
+                      <div
+                        onClick={() => {
+                          if (isSelectMode) {
+                            setSelectedMsgIds(prev =>
+                              prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
+                            );
+                          }
+                        }}
+                        style={{
+                          borderRadius: isSelf ? '22px 22px 6px 22px' : '22px 22px 22px 6px',
+                          background: isSelf ? '#fad3d8' : '#e6f2fb',
+                          color: '#443c3d',
+                          fontSize: '14.5px',
+                          fontWeight: '500',
+                          lineHeight: 1.5,
+                          wordBreak: 'break-word',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                          border: isSelected ? '2px solid var(--accent-color, #b33533)' : (isSelf ? '2px solid #eab7bc' : '2px solid #b8d0e6'),
+                          cursor: isSelectMode ? 'pointer' : 'default',
+                          padding: '12px 18px',
+                          position: 'relative'
+                        }}
+                      >
+                        {formatMessageText(m.text, isSelectMode)}
+                      </div>
+                    )}
+
+                    {/* Image / Embed Bubble */}
+                    {(m.imageUrl || hasEmbed(m.text)) && (
+                      <div
+                        onClick={() => {
+                          if (isSelectMode) {
+                            setSelectedMsgIds(prev =>
+                              prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
+                            );
+                          }
+                        }}
+                        style={{
+                          borderRadius: '16px',
+                          background: (m.text && /pinterest\.com\/pin\/(\d+)/i.test(m.text)) ? 'transparent' : '#fff',
+                          border: isSelected 
+                            ? '2px solid var(--accent-color, #b33533)' 
+                            : ((m.text && /pinterest\.com\/pin\/(\d+)/i.test(m.text)) ? 'none' : '1px solid var(--library-card-border, #c8b99a)'),
+                          boxShadow: (m.text && /pinterest\.com\/pin\/(\d+)/i.test(m.text)) ? 'none' : '0 4px 12px rgba(0,0,0,0.05)',
+                          padding: (m.text && /pinterest\.com\/pin\/(\d+)/i.test(m.text)) ? '0px' : '8px',
+                          maxWidth: '260px',
+                          cursor: isSelectMode ? 'pointer' : 'default',
+                          position: 'relative',
+                          marginTop: m.text ? '4px' : '0'
+                        }}
+                      >
+                        {m.imageUrl && (
+                          <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '8px' }}>
+                            <a
+                              href={m.imageUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ display: 'block', outline: 'none', cursor: isSelectMode ? 'pointer' : 'zoom-in' }}
+                              onClick={e => {
+                                e.preventDefault();
+                                if (!isSelectMode) {
+                                  setActiveImageUrl(m.imageUrl);
+                                }
                               }}
-                              className="chat-image"
-                            />
-                          </a>
-                        </div>
-                      )}
-                      {m.text && (
-                        <div style={{ padding: m.imageUrl ? '12px 16px' : '12px 18px' }}>
-                          {formatMessageText(m.text, isSelectMode)}
-                        </div>
-                      )}
-                    </div>
+                            >
+                              <img
+                                src={m.imageUrl}
+                                alt="Shared media"
+                                style={{
+                                  maxWidth: '100%',
+                                  maxHeight: '280px',
+                                  width: '100%',
+                                  objectFit: 'cover',
+                                  display: 'block'
+                                }}
+                              />
+                            </a>
+                          </div>
+                        )}
+                        {m.text && renderParsedEmbedsOnly(m.text, isSelectMode, setActiveImageUrl)}
+                      </div>
+                    )}
 
                     {/* Inline Options Menu Trigger next to bubble */}
                     {!isSelectMode && !m.optimistic && (
@@ -766,7 +913,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
             </React.Fragment>
           );
         })}
-        <div ref={endRef} />
+        <div ref={endRef} style={{ height: '40px', flexShrink: 0 }} />
       </div>
 
       {/* Image Preview bar before sending */}
@@ -1215,6 +1362,56 @@ export default function FriendsSection({ setActiveTab }) {
       window.removeEventListener('user-switched', sync);
     };
   }, []);
+
+  // URL Hash Sync for Chat View (Back & Forth navigation support)
+  useEffect(() => {
+    if (selectedChat) {
+      window.location.hash = `library/chat/${selectedChat.id}`;
+    } else {
+      if (window.location.hash.startsWith('#library/chat/')) {
+        window.location.hash = 'library';
+      }
+    }
+  }, [selectedChat]);
+
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash.startsWith('library/chat/')) {
+        const friendId = hash.split('library/chat/')[1];
+        
+        // 1. Check if we have active chat user details cached in localStorage
+        try {
+          const storedUserRaw = localStorage.getItem('shelf_active_chat_user');
+          if (storedUserRaw) {
+            const storedUser = JSON.parse(storedUserRaw);
+            if (String(storedUser.id) === String(friendId)) {
+              setSelectedChat(storedUser);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error(e);
+        }
+
+        // 2. Fallback to list lookup
+        const found = friends.find(f => String(f.id) === String(friendId)) ||
+          teammates.find(t => String(t.id) === String(friendId));
+        if (found) {
+          setSelectedChat(found);
+        }
+      } else if (hash === 'library') {
+        setSelectedChat(null);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHash);
+
+    // Auto-open chat on mount or update
+    handleHash();
+
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, [friends, teammates]);
 
   // Handle open-direct-chat events from app
   useEffect(() => {

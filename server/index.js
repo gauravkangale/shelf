@@ -370,14 +370,14 @@ function simulateSqlInMemory(strings, values) {
         u.username && u.username.toLowerCase() === username.toLowerCase() && (!excludeId || u.id !== excludeId)
       );
     }
-    
+
     // OTP verification check
     if (query.includes('otp_code =') && query.includes('otp_expires_at > NOW()')) {
       const identifier = values[0]; // email or phone
       const otp = values[1];
       const purpose = values[2];
       const isEmail = query.includes('email =');
-      return inMemoryStore.users.filter(u => 
+      return inMemoryStore.users.filter(u =>
         (isEmail ? u.email === identifier : u.phone === identifier) &&
         u.otp_code === otp &&
         (u.otp_purpose === purpose || u.otp_purpose === 'login' || u.otp_purpose === 'signup') &&
@@ -911,6 +911,7 @@ async function initDb() {
       username        TEXT UNIQUE,
       email           TEXT UNIQUE,
       phone           TEXT UNIQUE,
+      bio             TEXT,
       avatar_url      TEXT,
       google_id       TEXT UNIQUE,
       is_verified     BOOLEAN DEFAULT false,
@@ -967,7 +968,7 @@ async function initDb() {
   `;
 
   await sql`ALTER TABLE messages ENABLE ROW LEVEL SECURITY`;
-  
+
   await sql`
     DO $$
     BEGIN
@@ -1004,13 +1005,16 @@ async function initDb() {
     )
   `;
   console.log('✅ DB tables ready');
-  
+
   try {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB DEFAULT '{}'::jsonb`;
-  } catch (err) {}
+  } catch (err) { }
   try {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS "alter" TEXT`;
-  } catch (err) {}
+  } catch (err) { }
+  try {
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`;
+  } catch (err) { }
 
   try {
     await sql`ALTER TABLE users ENABLE ROW LEVEL SECURITY`;
@@ -1111,10 +1115,10 @@ app.post('/api/auth/send-otp', async (req, res) => {
         // Let's check if the generated username is taken.
         let generatedUsername = cleanName.toLowerCase().replace(/\\s+/g, '');
         if (generatedUsername) {
-            const existingName = await sql`SELECT id FROM users WHERE LOWER(username) = LOWER(${generatedUsername})`;
-            if (existingName.length > 0) {
-              return res.status(409).json({ error: 'The generated username is already taken. Please try a different name or login.' });
-            }
+          const existingName = await sql`SELECT id FROM users WHERE LOWER(username) = LOWER(${generatedUsername})`;
+          if (existingName.length > 0) {
+            return res.status(409).json({ error: 'The generated username is already taken. Please try a different name or login.' });
+          }
         }
       }
     }
@@ -1141,7 +1145,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
     } else {
       // Generate initial username from name or email
       let initialUsername = name ? name.trim().toLowerCase().replace(/\\s+/g, '') : (isEmail ? cleanId.split('@')[0] : 'user');
-      
+
       if (isEmail) {
         await sql`
           INSERT INTO users (email, username, name, otp_code, otp_expires_at, otp_purpose, is_verified)
@@ -1244,6 +1248,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         username: updatedUser.username,
         email: updatedUser.email,
         phone: updatedUser.phone,
+        bio: updatedUser.bio,
         avatar_url: updatedUser.avatar_url,
         is_verified: updatedUser.is_verified
       }
@@ -1312,6 +1317,8 @@ app.post('/api/auth/google', async (req, res) => {
         name: user.name,
         username: user.username,
         email: user.email,
+        phone: user.phone,
+        bio: user.bio,
         avatar_url: user.avatar_url,
         is_verified: user.is_verified
       }
@@ -1384,7 +1391,7 @@ app.post('/api/auth/forgot-username', async (req, res) => {
 app.get('/api/auth/me', verifyToken, async (req, res) => {
   try {
     const [user] = await sql`
-      SELECT id, name, username, email, phone, avatar_url, is_verified, created_at
+      SELECT id, name, username, email, phone, bio, avatar_url, is_verified, created_at
       FROM users WHERE id = ${req.user.sub}
     `;
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -1397,7 +1404,7 @@ app.get('/api/auth/me', verifyToken, async (req, res) => {
 // ── PUT /api/users/profile ───────────────────────────────────────────────────
 app.put('/api/users/profile', verifyToken, async (req, res) => {
   try {
-    const { name, username, email, avatar_url } = req.body;
+    const { name, username, email, avatar_url, phone, bio } = req.body;
     const userId = req.user.sub;
 
     if (!name || !username || !email) {
@@ -1425,6 +1432,18 @@ app.put('/api/users/profile', verifyToken, async (req, res) => {
       return res.status(409).json({ error: 'Email is already taken.' });
     }
 
+    // Check if phone is already taken by another user
+    if (phone && phone.trim()) {
+      const cleanPhone = phone.trim();
+      const existingPhone = await sql`
+        SELECT id FROM users 
+        WHERE phone = ${cleanPhone} AND id != ${userId}
+      `;
+      if (existingPhone.length > 0) {
+        return res.status(409).json({ error: 'Phone number is already taken.' });
+      }
+    }
+
     // Update user in DB
     const [user] = await sql`
       UPDATE users
@@ -1432,6 +1451,8 @@ app.put('/api/users/profile', verifyToken, async (req, res) => {
           username = ${cleanUsername},
           email = ${cleanEmail},
           avatar_url = ${avatar_url ? avatar_url.trim() : null},
+          phone = ${phone ? phone.trim() : null},
+          bio = ${bio ? bio.trim() : null},
           updated_at = NOW()
       WHERE id = ${userId}
       RETURNING *
@@ -1449,6 +1470,8 @@ app.put('/api/users/profile', verifyToken, async (req, res) => {
         username: user.username,
         email: user.email,
         avatar_url: user.avatar_url,
+        phone: user.phone,
+        bio: user.bio,
         is_verified: user.is_verified
       }
     });
@@ -1532,12 +1555,12 @@ app.post('/api/preferences', verifyToken, async (req, res) => {
     if (!preferences || typeof preferences !== 'object') {
       return res.status(400).json({ error: 'preferences must be an object' });
     }
-    
+
     // Merge existing with new
     const [user] = await sql`SELECT preferences FROM users WHERE id = ${userId}`;
     const currentPrefs = (user && user.preferences) ? user.preferences : {};
     const mergedPrefs = { ...currentPrefs, ...preferences };
-    
+
     await sql`
       UPDATE users
       SET preferences = ${JSON.stringify(mergedPrefs)}::jsonb
@@ -2095,15 +2118,21 @@ app.get('/api/chat/:friendId', verifyToken, async (req, res) => {
           (m.sender_id === friendId && m.receiver_id === userId)
         )
         .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-        .map(m => ({
-          id: m.id,
-          senderId: m.sender_id,
-          receiverId: m.receiver_id,
-          text: m.message_text,
-          imageUrl: m.image_url,
-          read: m.read,
-          createdAt: m.created_at
-        }));
+        .map(m => {
+          const u = inMemoryStore.users.find(usr => usr.id === m.sender_id) || {};
+          return {
+            id: m.id,
+            senderId: m.sender_id,
+            receiverId: m.receiver_id,
+            text: m.message_text,
+            imageUrl: m.image_url,
+            read: m.read,
+            createdAt: m.created_at,
+            name: u.name,
+            username: u.username,
+            avatar_url: u.avatar_url
+          };
+        });
 
       return res.json({ messages });
     }
@@ -2116,12 +2145,14 @@ app.get('/api/chat/:friendId', verifyToken, async (req, res) => {
     `;
 
     const messages = await sql`
-      SELECT id, sender_id as "senderId", receiver_id as "receiverId", 
-             message_text as "text", image_url as "imageUrl", read, created_at as "createdAt"
-      FROM messages
-      WHERE (sender_id = ${userId} AND receiver_id = ${friendId})
-         OR (sender_id = ${friendId} AND receiver_id = ${userId})
-      ORDER BY created_at ASC
+      SELECT m.id, m.sender_id as "senderId", m.receiver_id as "receiverId", 
+             m.message_text as "text", m.image_url as "imageUrl", m.read, m.created_at as "createdAt",
+             u.name, u.username, u.avatar_url
+      FROM messages m
+      JOIN users u ON u.id = m.sender_id
+      WHERE (m.sender_id = ${userId} AND m.receiver_id = ${friendId})
+         OR (m.sender_id = ${friendId} AND m.receiver_id = ${userId})
+      ORDER BY m.created_at ASC
     `;
 
     res.json({ messages });
@@ -2136,7 +2167,7 @@ app.post('/api/chat', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
     const { receiverId, messageText, imageUrl } = req.body;
-    
+
     if (!receiverId) {
       return res.status(400).json({ error: 'receiverId is required.' });
     }
@@ -2220,7 +2251,7 @@ app.get('/api/users/search', verifyToken, async (req, res) => {
       users = inMemoryStore.users
         .filter(u => u.id !== userId &&
           ((u.username || '').toLowerCase().includes(q.trim().toLowerCase()) ||
-           (u.name || '').toLowerCase().includes(q.trim().toLowerCase())))
+            (u.name || '').toLowerCase().includes(q.trim().toLowerCase())))
         .slice(0, 10)
         .map(u => ({
           id: u.id,
@@ -2461,7 +2492,7 @@ app.get('/api/chat/cohort/:cohortId', verifyToken, async (req, res) => {
     }
 
     const messages = await sql`
-      SELECT m.id, m.sender_id as "senderId", m.message_text as "text", m.created_at as "createdAt", u.name, u.username, u.avatar_url
+      SELECT m.id, m.sender_id as "senderId", m.message_text as "text", m.image_url as "imageUrl", m.created_at as "createdAt", u.name, u.username, u.avatar_url
       FROM messages m
       JOIN users u ON u.id = m.sender_id
       WHERE m.cohort_id = ${cohortId}
@@ -2571,11 +2602,26 @@ app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
         const unreadCount = inMemoryStore.messages.filter(
           m => m.sender_id === u.id && m.receiver_id === userId && !m.read
         ).length;
+
+        // Find friendship status
+        const f = inMemoryStore.friendships.find(
+          fr => (fr.user_id_1 === userId && fr.user_id_2 === u.id) || (fr.user_id_1 === u.id && fr.user_id_2 === userId)
+        );
+        let friendship_status = 'none';
+        if (f) {
+          if (f.status === 'accepted') {
+            friendship_status = 'accepted';
+          } else if (f.status === 'pending') {
+            friendship_status = f.sender_id === userId ? 'pending_sent' : 'pending_received';
+          }
+        }
+
         return {
           id: u.id,
           name: u.name,
           username: u.username,
           avatar_url: u.avatar_url,
+          friendship_status,
           currentBook: book ? {
             title: book.title,
             author: book.author,
@@ -2592,6 +2638,8 @@ app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
 
     const teammates = await sql`
       SELECT DISTINCT u.id, u.name, u.username, u.avatar_url, u.updated_at, u.books, u.daily_notes,
+             (SELECT status FROM friendships WHERE (user_id_1 = u.id AND user_id_2 = ${userId}) OR (user_id_2 = u.id AND user_id_1 = ${userId}) LIMIT 1) as "friendship_status",
+             (SELECT sender_id::text FROM friendships WHERE (user_id_1 = u.id AND user_id_2 = ${userId}) OR (user_id_2 = u.id AND user_id_1 = ${userId}) LIMIT 1) as "friendship_sender_id",
              COALESCE((
                SELECT COUNT(*)::int 
                FROM messages m 
@@ -2620,11 +2668,19 @@ app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
       const noteTime = latestNote && latestNote.created_at ? new Date(latestNote.created_at).getTime() : 0;
       const lastActiveTime = Math.max(userTime, bookTime, noteTime);
 
+      let friendship_status = 'none';
+      if (u.friendship_status === 'accepted') {
+        friendship_status = 'accepted';
+      } else if (u.friendship_status === 'pending') {
+        friendship_status = String(u.friendship_sender_id) === String(userId) ? 'pending_sent' : 'pending_received';
+      }
+
       activities.push({
         id: u.id,
         name: u.name,
         username: u.username,
         avatar_url: u.avatar_url,
+        friendship_status,
         currentBook: book ? {
           title: book.title,
           author: book.author,

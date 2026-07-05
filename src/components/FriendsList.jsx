@@ -24,6 +24,105 @@ function formatRelativeTime(dateString) {
   return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
 }
 
+// Format text to make links clickable
+function formatMessageText(text) {
+  if (!text) return '';
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, index) => {
+    if (part.startsWith('http://') || part.startsWith('https://')) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: 'inherit',
+            textDecoration: 'underline',
+            wordBreak: 'break-all',
+            fontWeight: '600'
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
+function hasEmbed(text) {
+  if (!text) return false;
+  const imageRegex = /\.(jpeg|jpg|gif|png|webp)($|\?)/i;
+  const pinterestRegex = /pinterest\.com\/pin\/(\d+)/i;
+  return imageRegex.test(text) || pinterestRegex.test(text);
+}
+
+function renderParsedEmbedsOnly(text) {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  const imageRegex = /\.(jpeg|jpg|gif|png|webp)($|\?)/i;
+  const pinterestRegex = /pinterest\.com\/pin\/(\d+)/i;
+
+  let embeds = [];
+
+  parts.forEach((part, index) => {
+    if (part.startsWith('http://') || part.startsWith('https://')) {
+      // Check for image embed
+      if (imageRegex.test(part)) {
+        embeds.push(
+          <div key={`img-${index}`} style={{ marginTop: index > 0 ? '6px' : '0' }}>
+            <img
+              src={part}
+              alt="Shared media"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '180px',
+                borderRadius: '8px',
+                display: 'block',
+                cursor: 'zoom-in'
+              }}
+              onClick={e => {
+                e.stopPropagation();
+                window.open(part, '_blank');
+              }}
+            />
+          </div>
+        );
+      }
+
+      // Check for Pinterest embed
+      const pinMatch = part.match(pinterestRegex);
+      if (pinMatch && pinMatch[1]) {
+        const pinId = pinMatch[1];
+        embeds.push(
+          <div key={`pin-${index}`} style={{ marginTop: index > 0 ? '6px' : '0' }}>
+            <iframe
+              src={`https://assets.pinterest.com/ext/embed.html?id=${pinId}`}
+              height="250"
+              width="210"
+              frameBorder="0"
+              scrolling="no"
+              style={{
+                border: 'none',
+                borderRadius: '8px',
+                display: 'block',
+                background: 'transparent'
+              }}
+            />
+          </div>
+        );
+      }
+    }
+  });
+
+  return embeds.length > 0 ? <div>{embeds}</div> : null;
+}
+
 
 // WingIcon removed since it is no longer used in chat layout.
 
@@ -40,6 +139,7 @@ export default function FriendsList() {
   const [chatMessages, setChatMessages] = useState([]);
   const [newMessageText, setNewMessageText] = useState('');
   const chatEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
 
   // Quick reply and dismiss state
   const [replyingChatId, setReplyingChatId] = useState(null);
@@ -186,9 +286,54 @@ export default function FriendsList() {
     }
   }, [activeChat, chatMessages.length]);
 
+  // Scroll to bottom on initial load of activeChat
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
+    if (activeChat) {
+      const scroll = () => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+      };
+      scroll();
+      const t1 = setTimeout(scroll, 100);
+      const t2 = setTimeout(scroll, 500);
+      const t3 = setTimeout(scroll, 1200);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    }
+  }, [activeChat?.id]);
+
+  // Scroll to bottom when new messages are added, but only if user was already at the bottom or sent it
+  const prevMessagesLengthRef = useRef(0);
+  useEffect(() => {
+    if (!activeChat || chatMessages.length === 0) {
+      prevMessagesLengthRef.current = 0;
+      return;
+    }
+
+    const prevLength = prevMessagesLengthRef.current;
+    prevMessagesLengthRef.current = chatMessages.length;
+
+    if (prevLength > 0 && chatMessages.length > prevLength) {
+      const container = chatContainerRef.current;
+      if (container) {
+        const lastMsg = chatMessages[chatMessages.length - 1];
+        const isSelf = lastMsg.senderId === currentUserId;
+
+        // If the user is already near the bottom (within 120px) or they sent the message, scroll to bottom
+        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+        if (isSelf || isNearBottom) {
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }
+    }
+  }, [chatMessages, activeChat?.id, currentUserId]);
 
   // ── Send message ──────────────────────────────────────────────────────────
   const handleSendMessage = async (e) => {
@@ -375,7 +520,7 @@ export default function FriendsList() {
                 const displayName = isCohort ? `[Cohort] ${chat.name}` : chat.name;
                 const displayAvatar = isCohort
                   ? (chat.lastMessageSenderAvatarUrl ? { avatar_url: chat.lastMessageSenderAvatarUrl, name: chat.lastMessageSenderName } : { name: chat.name })
-                  : { avatar_url: chat.avatarUrl, name: chat.name };
+                  : { id: chat.id, avatar_url: chat.avatarUrl, name: chat.name, username: chat.username };
 
                 let previewText = '';
                 if (chat.lastMessageText) {
@@ -400,11 +545,17 @@ export default function FriendsList() {
                       const targetUser = {
                         id: chat.id,
                         name: chat.name,
-                        username: chat.username,
-                        avatar_url: chat.avatarUrl
+                        username: chat.username || '',
+                        avatar_url: chat.avatarUrl || chat.avatar_url || '',
+                        friendship_status: 'accepted'
                       };
-                      localStorage.setItem('shelf_pending_chat_target', JSON.stringify(targetUser));
+                      try {
+                        localStorage.setItem('shelf_active_chat_user', JSON.stringify(targetUser));
+                      } catch (e) {
+                        console.warn('LocalStorage error:', e);
+                      }
                       window.dispatchEvent(new CustomEvent('open-direct-chat', { detail: { user: targetUser } }));
+                      window.location.hash = `library/chat/${chat.id}`;
                     }}
                     style={{
                       display: 'flex',
@@ -645,12 +796,7 @@ export default function FriendsList() {
               display: 'flex', alignItems: 'center', justifyContent: 'space-between'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{
-                  width: '28px', height: '28px', borderRadius: '50%',
-                  background: 'var(--rust)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--button-text)'
-                }}>
-                  <MessageSquare size={14} />
-                </div>
+                <Avatar user={{ id: activeChat.id, name: activeChat.name, avatar_url: activeChat.avatarUrl }} size={28} />
                 <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--ink)' }}>
                   {activeChat.name}
                 </span>
@@ -664,10 +810,13 @@ export default function FriendsList() {
             </div>
 
             {/* Messages */}
-            <div style={{
-              flex: 1, overflowY: 'auto', padding: '16px',
-              display: 'flex', flexDirection: 'column', gap: '12px'
-            }}>
+            <div
+              ref={chatContainerRef}
+              style={{
+                flex: 1, overflowY: 'auto', padding: '16px',
+                display: 'flex', flexDirection: 'column', gap: '12px'
+              }}
+            >
               {chatMessages.length === 0 ? (
                 <p style={{ textAlign: 'center', color: 'var(--brass)', fontSize: '12px', fontStyle: 'italic', marginTop: '40px' }}>
                   No messages yet. Send a note to connect!
@@ -675,9 +824,11 @@ export default function FriendsList() {
               ) : (
                 chatMessages.map((m, i) => {
                   const isSelf = m.senderId === currentUserId;
+                  const isCohort = activeChat.type === 'cohort';
                   const senderName = m.name || m.username || 'Member';
                   const prevMsg = chatMessages[i - 1];
-                  const showLabel = !isSelf && (!prevMsg || prevMsg.senderId !== m.senderId);
+                  const showLabel = isCohort && !isSelf && (!prevMsg || prevMsg.senderId !== m.senderId);
+                  const showAvatar = isCohort && !isSelf;
 
                   return (
                     <div key={m.id} style={{
@@ -686,9 +837,9 @@ export default function FriendsList() {
                       alignSelf: isSelf ? 'flex-end' : 'flex-start',
                       maxWidth: '85%', margin: '4px 0'
                     }}>
-                      {!isSelf && (
+                      {showAvatar && (
                         <div style={{ flexShrink: 0, alignSelf: 'flex-end' }}>
-                          <Avatar user={{ name: senderName, username: m.username, avatar_url: m.avatar_url }} size={24} />
+                          <Avatar user={{ id: m.senderId, name: senderName, username: m.username, avatar_url: m.avatar_url }} size={24} />
                         </div>
                       )}
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: isSelf ? 'flex-end' : 'flex-start' }}>
@@ -697,25 +848,58 @@ export default function FriendsList() {
                             {senderName}
                           </span>
                         )}
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                          <div style={{
-                            padding: '10px 16px', borderRadius: '18px',
-                            background: isSelf ? 'var(--message-self-bg)' : 'var(--message-other-bg)',
-                            color: isSelf ? 'var(--message-self-text)' : 'var(--message-other-text)',
-                            fontSize: '13px', lineHeight: '1.4',
-                            border: isSelf ? '1px solid var(--message-self-bg)' : '1px solid var(--library-card-border)',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-                            wordBreak: 'break-word', position: 'relative', minWidth: '50px'
-                          }}>
-                            {m.text}
-                          </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: isSelf ? 'flex-end' : 'flex-start', gap: '4px' }}>
+                          {m.text && (
+                            <div style={{
+                              padding: '10px 16px', borderRadius: '18px',
+                              background: isSelf ? 'var(--message-self-bg)' : 'var(--message-other-bg)',
+                              color: isSelf ? 'var(--message-self-text)' : 'var(--message-other-text)',
+                              fontSize: '13px', lineHeight: '1.4',
+                              border: isSelf ? '1px solid var(--message-self-bg)' : '1px solid var(--library-card-border)',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                              wordBreak: 'break-word', position: 'relative', minWidth: '50px'
+                            }}>
+                              {formatMessageText(m.text)}
+                            </div>
+                          )}
+
+                          {(m.imageUrl || hasEmbed(m.text)) && (
+                            <div style={{
+                              padding: (m.text && /pinterest\.com\/pin\/(\d+)/i.test(m.text)) ? '0px' : '8px',
+                              borderRadius: '12px',
+                              background: (m.text && /pinterest\.com\/pin\/(\d+)/i.test(m.text)) ? 'transparent' : '#fff',
+                              border: (m.text && /pinterest\.com\/pin\/(\d+)/i.test(m.text)) ? 'none' : '1px solid var(--library-card-border, #c8b99a)',
+                              boxShadow: (m.text && /pinterest\.com\/pin\/(\d+)/i.test(m.text)) ? 'none' : '0 4px 12px rgba(0,0,0,0.05)',
+                              maxWidth: '230px',
+                              marginTop: m.text ? '4px' : '0'
+                            }}>
+                              {m.imageUrl && (
+                                <img
+                                  src={m.imageUrl}
+                                  alt="Shared media"
+                                  style={{
+                                    maxWidth: '100%',
+                                    maxHeight: '180px',
+                                    borderRadius: '8px',
+                                    display: 'block',
+                                    cursor: 'zoom-in'
+                                  }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    window.open(m.imageUrl, '_blank');
+                                  }}
+                                />
+                              )}
+                              {m.text && renderParsedEmbedsOnly(m.text)}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
                   );
                 })
               )}
-              <div ref={chatEndRef} />
+              <div ref={chatEndRef} style={{ height: '30px', flexShrink: 0 }} />
             </div>
 
             {/* Input Footer */}

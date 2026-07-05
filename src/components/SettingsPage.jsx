@@ -3,7 +3,8 @@ import { LogOut, Shield, Palette, Bell, Lock, Trash2, ChevronRight, Settings as 
 import { THEME_LIST, THEME_COLOR_ROLES, applyTheme, DEFAULT_THEME_KEY, getSavedThemeOverrides } from '../utils/themePresets';
 
 export default function SettingsPage({ activeProfile, updateActiveProfile, profileAccounts, deleteProfileAccount, switchProfileAccount }) {
-  const [settingSection, setSettingSection] = useState('profile');
+  const isLoggedIn = !!localStorage.getItem('shelf_auth_token');
+  const [settingSection, setSettingSection] = useState(isLoggedIn ? 'profile' : 'appearance');
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState('');
 
@@ -44,9 +45,39 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
   }, [themeKey, textTone, themeOverrides]);
 
   useEffect(() => {
+    if (!isLoggedIn && settingSection !== 'appearance') {
+      setSettingSection('appearance');
+    }
+  }, [isLoggedIn, settingSection]);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = themeMode;
     localStorage.setItem('shelf_theme_mode', themeMode);
   }, [themeMode]);
+
+  // URL Hash Sync for Settings Sections (Back & Forth navigation support)
+  useEffect(() => {
+    if (settingSection) {
+      window.location.hash = `more/${settingSection}`;
+    }
+  }, [settingSection]);
+
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash.startsWith('more/')) {
+        const section = hash.split('more/')[1];
+        const validSections = ['profile', 'appearance', 'notifications', 'privacy', 'account'];
+        if (validSections.includes(section)) {
+          setSettingSection(section);
+        }
+      }
+    };
+
+    window.addEventListener('hashchange', handleHash);
+    handleHash(); // Run on mount
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -102,7 +133,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
       return;
     }
 
-    const result = await updateActiveProfile(name, username, email, avatar);
+    const result = await updateActiveProfile(name, username, email, avatar, phone, bio);
     if (result?.success) {
       setFeedback('success: Profile updated successfully');
       setTimeout(() => setFeedback(''), 3000);
@@ -814,7 +845,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
     { id: 'notifications', label: 'Notifications', icon: Bell, render: renderNotificationsSection },
     { id: 'privacy', label: 'Privacy & Security', icon: Shield, render: renderPrivacySection },
     { id: 'account', label: 'Account', icon: Lock, render: renderAccountSection }
-  ];
+  ].filter(sec => isLoggedIn || sec.id === 'appearance');
 
   return (
     <div style={{

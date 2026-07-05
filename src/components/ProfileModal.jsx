@@ -15,18 +15,18 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
       try {
         const tk = localStorage.getItem('shelf_auth_token');
         if (!tk || user.id === currentUserId) return;
-        
+
         const res = await fetch('/api/friends/status', {
           headers: { Authorization: `Bearer ${tk}` }
         });
-        
+
         if (res.ok) {
           const data = await res.json();
-          if (data.friends?.some(f => f.id === user.id)) {
+          if (data.friends?.some(f => String(f.id) === String(user.id))) {
             setFriendStatus('accepted');
-          } else if (data.pendingIncoming?.some(f => f.id === user.id)) {
+          } else if (data.pendingIncoming?.some(f => String(f.id) === String(user.id))) {
             setFriendStatus('pending_received');
-          } else if (data.pendingOutgoing?.some(f => f.id === user.id)) {
+          } else if (data.pendingOutgoing?.some(f => String(f.id) === String(user.id))) {
             setFriendStatus('pending_sent');
           } else {
             setFriendStatus('none');
@@ -36,9 +36,11 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
         console.error('Failed to fetch friend status', e);
       }
     };
-    
-    fetchStatus();
-  }, [user.id, currentUserId]);
+
+    if (user.friendship_status === undefined) {
+      fetchStatus();
+    }
+  }, [user.id, currentUserId, user.friendship_status]);
 
   const handleAdd = async () => {
     setLoading(true);
@@ -54,7 +56,7 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
         setFriendStatus('pending_sent');
         onFriendAction?.(user.id, 'pending_sent');
       }
-    } catch {} finally { setLoading(false); }
+    } catch { } finally { setLoading(false); }
   };
 
   const handleCancel = async () => {
@@ -71,7 +73,7 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
         setFriendStatus('none');
         onFriendAction?.(user.id, 'none');
       }
-    } catch {} finally { setLoading(false); }
+    } catch { } finally { setLoading(false); }
   };
 
   const book = user.currentBook || null;
@@ -182,10 +184,16 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
                           id: user.id,
                           name: user.name || user.username,
                           username: user.username,
-                          avatar_url: user.avatar_url || user.avatar
+                          avatar_url: user.avatar_url || user.avatar,
+                          friendship_status: friendStatus
                         };
-                        localStorage.setItem('shelf_pending_chat_target', JSON.stringify(targetUser));
+                        try {
+                          localStorage.setItem('shelf_active_chat_user', JSON.stringify(targetUser));
+                        } catch (e) {
+                          console.warn('LocalStorage error:', e);
+                        }
                         window.dispatchEvent(new CustomEvent('open-direct-chat', { detail: { user: targetUser } }));
+                        window.location.hash = `library/chat/${user.id}`;
                       }}
                       style={{
                         padding: '8px 18px', borderRadius: '16px', border: 'none',

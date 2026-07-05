@@ -424,8 +424,35 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
 }
 
 function App() {
-  // Navigation active tab
-  const [activeTab, setActiveTab] = useState('home');
+  // Navigation active tab with URL hash persistence
+  const [activeTab, setActiveTab] = useState(() => {
+    const hash = window.location.hash.replace('#', '').split('/')[0];
+    const validTabs = ['home', 'library', 'timer', 'bookmarks', 'settings', 'more'];
+    return validTabs.includes(hash) ? hash : 'home';
+  });
+
+  // Keep state and URL hash synchronized, supporting browser back/forth navigation
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '').split('/')[0];
+      const validTabs = ['home', 'library', 'timer', 'bookmarks', 'settings', 'more'];
+      if (validTabs.includes(hash)) {
+        setActiveTab(hash);
+      } else {
+        setActiveTab('home');
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    const currentHash = window.location.hash.replace('#', '').split('/')[0];
+    if (currentHash !== activeTab) {
+      window.location.hash = activeTab;
+    }
+  }, [activeTab]);
 
   // Global profile accounts state
   const [profileAccounts, setProfileAccounts] = useState(() => {
@@ -634,12 +661,14 @@ function App() {
   };
 
   // Update active profile details
-  const updateActiveProfile = async (name, username, email, avatar) => {
+  const updateActiveProfile = async (name, username, email, avatar, phone, bio) => {
     const token = localStorage.getItem('shelf_auth_token');
     const cleanUsername = username.trim().toLowerCase();
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name.trim();
     const cleanAvatar = avatar ? avatar.trim() : '';
+    const cleanPhone = phone ? phone.trim() : '';
+    const cleanBio = bio ? bio.trim() : '';
 
     if (token) {
       try {
@@ -653,7 +682,9 @@ function App() {
             name: cleanName,
             username: cleanUsername,
             email: cleanEmail,
-            avatar_url: cleanAvatar
+            avatar_url: cleanAvatar,
+            phone: cleanPhone,
+            bio: cleanBio
           })
         });
         const data = await res.json();
@@ -674,7 +705,9 @@ function App() {
             name: cleanName,
             username: cleanUsername,
             email: cleanEmail,
-            avatar: cleanAvatar
+            avatar: cleanAvatar,
+            phone: cleanPhone,
+            bio: cleanBio
           };
         }
         return acc;
@@ -690,7 +723,9 @@ function App() {
         username: cleanUsername,
         email: cleanEmail,
         avatar_url: cleanAvatar,
-        avatar: cleanAvatar
+        avatar: cleanAvatar,
+        phone: cleanPhone,
+        bio: cleanBio
       }));
     } catch (e) {
       console.warn("Could not save profile to localStorage, it might be too large:", e);
