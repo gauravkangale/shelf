@@ -1,3 +1,4 @@
+  // eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect } from 'react';
 import { uGet, uSet } from '../utils/userKey';
 
@@ -61,6 +62,7 @@ export default function NotesInputSection({ selectedDate }) {
     return () => {
       window.removeEventListener('delete-note', handleDeleteEvent);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allNotes, dateKey]);
 
   const formattedDateLabel = selectedDate

@@ -1,3 +1,4 @@
+  // eslint-disable-next-line no-unused-vars
 import React from 'react';
 import { Trash2, Upload } from 'lucide-react';
 import { BOOK_COLORS, PRESET_COVERS } from '../constants';

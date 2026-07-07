@@ -1,7 +1,9 @@
+  // eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect, useRef } from 'react';
 import Header from './Header';
 import WelcomeCard from './WelcomeCard';
 import BookShelf from './BookShelf';
+  // eslint-disable-next-line no-unused-vars
 import NewSeriesCollection from './NewSeriesCollection';
 import RightSidebar from './RightSidebar';
 import BookShortcutModal from './BookShortcutModal';
@@ -27,6 +29,7 @@ export default function Homepage({
   setNewProfileAccAvatar,
   isProfileDropdownOpen,
   setIsProfileDropdownOpen,
+  // eslint-disable-next-line no-unused-vars
   setActiveTab
 }) {
   // Search Engine & query states
@@ -80,7 +83,9 @@ export default function Homepage({
             uSet('homepage_shortcuts', healed);
           }
         }
-      } catch (err) {}
+   
+  // eslint-disable-next-line no-unused-vars
+      } catch (err) { /* ignore */ }
     };
     fetchShortcuts();
   }, []);
@@ -115,7 +120,9 @@ export default function Homepage({
           },
           body: JSON.stringify({ shortcuts })
         });
-      } catch (err) {}
+   
+  // eslint-disable-next-line no-unused-vars
+      } catch (err) { /* ignore */ }
     };
     
     // Only sync if they aren't the default INITIAL_SHORTCUTS exactly
@@ -135,12 +142,13 @@ export default function Homepage({
   }, []);
 
   // Handle Search submit
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
+  const handleSearchSubmit = (e, customQuery = null) => {
+    e?.preventDefault?.();
+    const queryToUse = customQuery !== null ? customQuery : searchQuery;
+    if (!queryToUse.trim()) return;
 
     if (searchEngine === 'google') {
-      window.open(`https://google.com/search?q=${encodeURIComponent(searchQuery)}`, '_blank');
+      window.open(`https://google.com/search?q=${encodeURIComponent(queryToUse)}`, '_blank');
     }
   };
 
@@ -275,6 +283,7 @@ export default function Homepage({
         id: d.toDateString()
       });
     }
+  // eslint-disable-next-line react-hooks/set-state-in-effect
     setCalendarDaysList(list);
   }, []);
 

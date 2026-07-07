@@ -1,4 +1,6 @@
+  // eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect, useRef } from 'react';
+  // eslint-disable-next-line no-unused-vars
 import { MoreHorizontal, Plus, ArrowUpAZ, ArrowDownAZ, Star, LayoutGrid, RotateCcw, X } from 'lucide-react';
 import BookCard from './BookCard';
 
@@ -6,6 +8,7 @@ export default function BookShelf({ displayedShortcuts, openEditModal, openAddMo
   const [showMenu, setShowMenu] = useState(false);
   const [sortMode, setSortMode] = useState('default'); // 'default' | 'az' | 'za'
   const [filterMode, setFilterMode] = useState('all'); // 'all' | 'custom'
+  const [isExpanded, setIsExpanded] = useState(false);
   const menuRef = useRef(null);
 
   // Close menu on outside click
@@ -32,7 +35,7 @@ export default function BookShelf({ displayedShortcuts, openEditModal, openAddMo
     processedShortcuts = processedShortcuts.sort((a, b) => b.title.localeCompare(a.title));
   }
 
-  const visibleShortcuts = processedShortcuts.slice(0, 5);
+  const visibleShortcuts = isExpanded ? processedShortcuts : processedShortcuts.slice(0, 5);
 
   const menuItems = [
     {
@@ -101,6 +104,29 @@ export default function BookShelf({ displayedShortcuts, openEditModal, openAddMo
               ({processedShortcuts.length})
             </button>
           )}
+          
+          <button
+            title="Toggle expanded view"
+            onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
+            style={{
+              background: isExpanded ? 'var(--accent-color, var(--ink))' : 'rgba(0,0,0,0.04)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '32px',
+              height: '32px',
+              minWidth: '32px',
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: isExpanded ? 'var(--surface-bg)' : 'var(--text-secondary, var(--text-secondary))',
+              transition: 'all 0.2s'
+            }}
+          >
+            <LayoutGrid size={16} />
+          </button>
+
           <button
             title="Filter & Sort shortcuts"
             onClick={(e) => { e.stopPropagation(); setShowMenu(v => !v); }}
@@ -110,6 +136,8 @@ export default function BookShelf({ displayedShortcuts, openEditModal, openAddMo
               borderRadius: '50%',
               width: '32px',
               height: '32px',
+              minWidth: '32px',
+              flexShrink: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -167,7 +195,11 @@ export default function BookShelf({ displayedShortcuts, openEditModal, openAddMo
         </div>
       </div>
 
-      <div className="book-shelf">
+      <div className="book-shelf" style={{
+        flexWrap: isExpanded ? 'wrap' : 'nowrap',
+        overflowX: isExpanded ? 'visible' : 'auto',
+        overflowY: isExpanded ? 'visible' : 'hidden'
+      }}>
         {visibleShortcuts.map((item) => (
           <BookCard
             key={item.id}

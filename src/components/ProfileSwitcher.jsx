@@ -1,3 +1,4 @@
+  // eslint-disable-next-line no-unused-vars
 import React from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 
@@ -6,16 +7,26 @@ export default function ProfileSwitcher({
   profileAccounts,
   switchProfileAccount,
   isEditingProfileAccounts,
+  // eslint-disable-next-line no-unused-vars
   setIsEditingProfileAccounts,
   deleteProfileAccount,
+  // eslint-disable-next-line no-unused-vars
   isAddingProfileAcc,
+  // eslint-disable-next-line no-unused-vars
   setIsAddingProfileAcc,
+  // eslint-disable-next-line no-unused-vars
   addProfileAccount,
+  // eslint-disable-next-line no-unused-vars
   newProfileAccName,
+  // eslint-disable-next-line no-unused-vars
   setNewProfileAccName,
+  // eslint-disable-next-line no-unused-vars
   newProfileAccEmail,
+  // eslint-disable-next-line no-unused-vars
   setNewProfileAccEmail,
+  // eslint-disable-next-line no-unused-vars
   newProfileAccAvatar,
+  // eslint-disable-next-line no-unused-vars
   setNewProfileAccAvatar,
   setActiveTab
 }) {

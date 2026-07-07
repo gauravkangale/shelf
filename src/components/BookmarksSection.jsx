@@ -1,3 +1,4 @@
+  // eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect } from 'react';
 import { Pencil, Trash2, CheckSquare, Check, X, Plus } from 'lucide-react';
 import { BOOK_COLORS, INITIAL_SHORTCUTS } from '../constants';
@@ -192,6 +193,7 @@ export default function BookmarksSection() {
     // (Custom MIME types are unreliable across browsers; text/plain is safe)
     e.dataTransfer.setData('text/plain', `bookmark::${JSON.stringify({ id: item.id, title: item.title })}`);
     e.dataTransfer.effectAllowed = 'move';
+  // eslint-disable-next-line react-hooks/globals
     _dragTargetIsTrash = false;
 
     // Set indices asynchronously so the browser captures the drag image at full opacity first

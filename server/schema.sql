@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_verified   BOOLEAN DEFAULT false,
   preferences   JSONB DEFAULT '{}'::jsonb,
   "alter"       TEXT,
+  password_hash TEXT,
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );

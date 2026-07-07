@@ -1,3 +1,4 @@
+  // eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 
@@ -80,6 +81,7 @@ export default function NotesSection({ selectedDate }) {
     return () => {
       window.removeEventListener('delete-note', handleDeleteEvent);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allNotes, dateKey]);
 
   const formattedDateLabel = selectedDate

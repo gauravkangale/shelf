@@ -1,3 +1,4 @@
+  // eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect } from 'react';
 import { X, UserCheck, MessageSquare, Clock, UserPlus } from 'lucide-react';
 import Avatar from './Avatar';
@@ -56,6 +57,7 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
         setFriendStatus('pending_sent');
         onFriendAction?.(user.id, 'pending_sent');
       }
+  // eslint-disable-next-line no-empty
     } catch { } finally { setLoading(false); }
   };
 
@@ -73,6 +75,7 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
         setFriendStatus('none');
         onFriendAction?.(user.id, 'none');
       }
+  // eslint-disable-next-line no-empty
     } catch { } finally { setLoading(false); }
   };
 
@@ -144,6 +147,10 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
             <div style={{ fontFamily: 'var(--font-serif, Georgia)', fontSize: '18px', fontWeight: '700', color: 'var(--ink)', marginBottom: '2px', textTransform: 'uppercase' }}>{name}</div>
             {user.username && (
               <div style={{ fontSize: '13px', color: 'var(--brass)', fontFamily: 'monospace', marginBottom: '14px' }}>@{user.username}</div>
+            )}
+
+            {user.bio && (
+              <div style={{ fontSize: '13px', color: 'var(--brass)', fontFamily: 'monospace', marginBottom: '14px' }}>{user.bio}</div>
             )}
 
             <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>

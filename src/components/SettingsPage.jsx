@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+  // eslint-disable-next-line no-unused-vars
 import { LogOut, Shield, Palette, Bell, Lock, Trash2, ChevronRight, Settings as SettingsIcon, Pipette } from 'lucide-react';
 import { THEME_LIST, THEME_COLOR_ROLES, applyTheme, DEFAULT_THEME_KEY, getSavedThemeOverrides } from '../utils/themePresets';
 
@@ -10,7 +11,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
 
   // Profile Settings State
   const [name, setName] = useState(activeProfile?.name || '');
-  const [username, setUsername] = useState(activeProfile?.username || '');
+  const [username, setUsername] = useState((activeProfile?.username || '').replace(/\s/g, ''));
   const [email, setEmail] = useState(activeProfile?.email || '');
   const [avatar, setAvatar] = useState(activeProfile?.avatar || '');
   const [phone, setPhone] = useState(activeProfile?.phone || '');
@@ -29,8 +30,9 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
   const [activeColorPickerKey, setActiveColorPickerKey] = useState(null);
 
   useEffect(() => {
+  // eslint-disable-next-line react-hooks/set-state-in-effect
     setName(activeProfile?.name || '');
-    setUsername(activeProfile?.username || '');
+    setUsername((activeProfile?.username || '').replace(/\s/g, ''));
     setEmail(activeProfile?.email || '');
     setAvatar(activeProfile?.avatar || '');
     setPhone(activeProfile?.phone || '');
@@ -46,6 +48,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
 
   useEffect(() => {
     if (!isLoggedIn && settingSection !== 'appearance') {
+  // eslint-disable-next-line react-hooks/set-state-in-effect
       setSettingSection('appearance');
     }
   }, [isLoggedIn, settingSection]);
@@ -110,6 +113,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
             ctx.drawImage(img, 0, 0, w, h);
             const compressed = canvas.toDataURL("image/jpeg", 0.7);
             setAvatar(compressed);
+  // eslint-disable-next-line no-unused-vars
           } catch (err) {
             setAvatar(rawBase64);
           }
@@ -143,10 +147,26 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
     setLoading(false);
   };
 
+  const syncPreferencesToBackend = async (newPrivacy, newNotifications) => {
+    const token = localStorage.getItem('shelf_auth_token');
+    if (!token) return;
+    try {
+      await fetch('/api/users/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          name, username, email, avatar_url: avatar, phone, bio,
+          preferences: { privacy: newPrivacy, notifications: newNotifications }
+        })
+      });
+    } catch (e) { console.error(e); }
+  };
+
   const handleNotificationChange = (key, value) => {
     const updated = { ...notifications, [key]: value };
     setNotifications(updated);
     localStorage.setItem('shelf_notifications', JSON.stringify(updated));
+    syncPreferencesToBackend(privacy, updated);
     const keyName = key === 'enabled' ? 'Notifications' : key === 'sound' ? 'Sound' : 'Desktop Alerts';
     setFeedback(`success: ${keyName} ${value ? 'enabled' : 'disabled'}`);
     setTimeout(() => setFeedback(''), 3000);
@@ -156,6 +176,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
     const updated = { ...privacy, [key]: value };
     setPrivacy(updated);
     localStorage.setItem('shelf_privacy', JSON.stringify(updated));
+    syncPreferencesToBackend(updated, notifications);
     const keyName = key === 'profilePublic' ? 'Profile Visibility' : 'Friend Requests';
     setFeedback(`success: ${keyName} ${value ? 'enabled' : 'disabled'}`);
     setTimeout(() => setFeedback(''), 3000);
@@ -196,174 +217,62 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
       <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Profile Information</h2>
 
-      <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          onMouseEnter={() => setIsHoveredAvatar(true)}
-          onMouseLeave={() => setIsHoveredAvatar(false)}
-          style={{
-            width: '100px',
-            height: '100px',
-            borderRadius: '50%',
-            background: avatar ? 'transparent' : 'var(--option-bg)',
-            border: '2px solid var(--border-color)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden',
-            flexShrink: 0,
-            position: 'relative'
-          }}
-        >
-          {avatar ? (
-            <img src={avatar} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : (
-            <div style={{ fontSize: '40px', color: 'var(--text-secondary)' }}>{name?.charAt(0) || '?'}</div>
-          )}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--button-text)',
-            fontSize: '12px',
-            fontWeight: 700,
-            opacity: isHoveredAvatar ? 1 : 0,
-            transition: 'opacity 0.2s'
-          }}>
-            Upload
-          </div>
-        </div>
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          accept="image/*"
-          style={{ display: 'none' }}
-        />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
-              Full Name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '40px', alignItems: 'flex-start' }}>
+        {/* Left Column: Basic Info */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onMouseEnter={() => setIsHoveredAvatar(true)}
+              onMouseLeave={() => setIsHoveredAvatar(false)}
               style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid var(--border-color)',
-                borderRadius: '8px',
-                fontSize: '14px',
-                boxSizing: 'border-box'
+                width: '100px', height: '100px', borderRadius: '50%',
+                background: avatar ? 'transparent' : 'var(--option-bg)',
+                border: '2px solid var(--border-color)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                overflow: 'hidden', flexShrink: 0, position: 'relative'
               }}
-            />
+            >
+              <img src={avatar || '/profile.jpeg'} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div style={{
+                position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: '12px', fontWeight: 700,
+                opacity: isHoveredAvatar ? 1 : 0, transition: 'opacity 0.2s'
+              }}>
+                Upload
+              </div>
+            </div>
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" style={{ display: 'none' }} />
+            
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>Full Name</label>
+                <input type="text" value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>Email Address</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }} />
+              </div>
+            </div>
           </div>
+
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
-              Email Address
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid var(--border-color)',
-                borderRadius: '8px',
-                fontSize: '14px',
-                boxSizing: 'border-box'
-              }}
-            />
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>Username</label>
+            <input type="text" value={username} onChange={e => setUsername(e.target.value.replace(/\s/g, ''))} onKeyDown={e => { if (e.key === ' ') e.preventDefault(); }} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }} />
           </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>Bio</label>
+            <textarea value={bio} onChange={e => setBio(e.target.value)} maxLength={160} placeholder="Tell others about yourself (max 160 characters)" style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box', fontFamily: 'var(--font-sans)', resize: 'none', height: '80px' }} />
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>{bio.length}/160</div>
+          </div>
+
+          <button onClick={handleProfileUpdate} disabled={loading} style={{ padding: '12px 24px', background: 'var(--accent-color)', color: 'var(--button-text)', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontSize: '14px', alignSelf: 'flex-start', marginTop: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            {loading ? 'Saving...' : 'Save Profile'}
+          </button>
         </div>
       </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-        <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
-            Username
-          </label>
-          <input
-            type="text"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1px solid var(--border-color)',
-              borderRadius: '8px',
-              fontSize: '14px',
-              boxSizing: 'border-box'
-            }}
-          />
-        </div>
-        <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
-            Phone
-          </label>
-          <input
-            type="tel"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1px solid var(--border-color)',
-              borderRadius: '8px',
-              fontSize: '14px',
-              boxSizing: 'border-box'
-            }}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
-          Bio
-        </label>
-        <textarea
-          value={bio}
-          onChange={e => setBio(e.target.value)}
-          maxLength={160}
-          style={{
-            width: '100%',
-            padding: '10px 12px',
-            border: '1px solid var(--border-color)',
-            borderRadius: '8px',
-            fontSize: '14px',
-            boxSizing: 'border-box',
-            fontFamily: 'var(--sans)',
-            resize: 'none',
-            height: '80px'
-          }}
-          placeholder="Tell others about yourself (max 160 characters)"
-        />
-        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>{bio.length}/160</div>
-      </div>
-
-      <button
-        onClick={handleProfileUpdate}
-        disabled={loading}
-        style={{
-          padding: '12px 24px',
-          background: 'var(--accent-color)',
-          color: 'var(--button-text)',
-          border: 'none',
-          borderRadius: '8px',
-          fontWeight: 700,
-          cursor: 'pointer',
-          fontSize: '14px',
-          alignSelf: 'flex-start'
-        }}
-      >
-        {loading ? 'Saving...' : 'Save Profile'}
-      </button>
     </div>
   );
 

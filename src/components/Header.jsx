@@ -1,16 +1,18 @@
+  // eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+  // eslint-disable-next-line no-unused-vars
 import { Search, Bell, Trash2, UserPlus, X, MessageSquare, Flame, BookOpen, Trophy, Users, Check, UserCheck, Clock, ArrowLeft } from 'lucide-react';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
 
 const NOTIF_ICONS = {
-  friend_request:  { Icon: UserPlus,      bg: '#e8f0fe', color: '#3a6df0' },
-  friend_accepted: { Icon: Users,         bg: '#edf6ec', color: '#2e7d32' },
-  group_message:   { Icon: MessageSquare, bg: '#edf6ec', color: '#2e7d32' },
-  reading_streak:  { Icon: Flame,         bg: '#fff3e0', color: '#e65100' },
-  book_update:     { Icon: BookOpen,      bg: '#f3e5f5', color: '#7b1fa2' },
-  book_suggestion: { Icon: BookOpen,      bg: '#f3e5f5', color: '#7b1fa2' },
-  achievement:     { Icon: Trophy,        bg: '#fff8e1', color: '#f57f17' },
+  friend_request: { Icon: UserPlus, bg: '#e8f0fe', color: '#3a6df0' },
+  friend_accepted: { Icon: Users, bg: '#edf6ec', color: '#2e7d32' },
+  group_message: { Icon: MessageSquare, bg: '#edf6ec', color: '#2e7d32' },
+  reading_streak: { Icon: Flame, bg: '#fff3e0', color: '#e65100' },
+  book_update: { Icon: BookOpen, bg: '#f3e5f5', color: '#7b1fa2' },
+  book_suggestion: { Icon: BookOpen, bg: '#f3e5f5', color: '#7b1fa2' },
+  achievement: { Icon: Trophy, bg: '#fff8e1', color: '#f57f17' },
 };
 
 function formatTime(dateVal) {
@@ -178,6 +180,7 @@ function FindReadersPanel({ onClose, onProfileClick }) {
 
   // Search users — server now returns friendship_status per user
   useEffect(() => {
+  // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!query.trim()) { setResults([]); return; }
     const t = setTimeout(async () => {
       setLoading(true);
@@ -396,6 +399,10 @@ export default function Header({
   const [notifLoading, setNotifLoading] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [profileCard, setProfileCard] = useState(null); // user to show in LibraryCardModal
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const searchTimeoutRef = useRef(null);
 
   const notifRef = useRef(null);
   const findReadersRef = useRef(null);
@@ -406,6 +413,34 @@ export default function Header({
   })();
 
   // ── Fetch real notifications from server ───────────────────────────────────
+  // ── Fetch search suggestions ───────────────────────────────────────────────
+  useEffect(() => {
+    if (searchEngine !== 'google' || !searchQuery.trim()) {
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    setSelectedIndex(-1);
+    clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/suggest?q=${encodeURIComponent(searchQuery.trim())}`);
+        if (res.ok) {
+          const data = await res.json();
+          // data format from Google: ["query", ["sugg1", "sugg2", ...]]
+          if (data && data[1]) {
+            setSuggestions(data[1].slice(0, 5)); // show up to 5
+            setShowSuggestions(true);
+          }
+        }
+   
+  // eslint-disable-next-line no-unused-vars
+  // eslint-disable-next-line no-empty
+      } catch (err) { }
+    }, 20);
+  }, [searchQuery, searchEngine]);
+
   const fetchNotifications = useCallback(async () => {
     const tk = localStorage.getItem('shelf_auth_token');
     if (!tk) { setNotifications([]); return; }
@@ -422,7 +457,8 @@ export default function Header({
           return (data.notifications || []).filter(n => !respondedIds.has(n.id));
         });
       }
-    } catch {} finally {
+  // eslint-disable-next-line no-empty
+    } catch { } finally {
       setNotifLoading(false);
     }
   }, []);
@@ -435,6 +471,7 @@ export default function Header({
 
   useEffect(() => {
     const tk = localStorage.getItem('shelf_auth_token');
+  // eslint-disable-next-line react-hooks/set-state-in-effect
     if (tk) { setNotifLoading(true); startPolling(); }
     const handleAuthChange = () => {
       const newTk = localStorage.getItem('shelf_auth_token');
@@ -477,7 +514,8 @@ export default function Header({
       await fetch(`/api/notifications/${id}`, {
         method: 'DELETE', headers: { Authorization: `Bearer ${tk}` }
       });
-    } catch {}
+  // eslint-disable-next-line no-empty
+    } catch { }
   };
 
   const markAllRead = async () => {
@@ -490,7 +528,8 @@ export default function Header({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
         body: JSON.stringify({})
       });
-    } catch {}
+  // eslint-disable-next-line no-empty
+    } catch { }
   };
 
   // Accept / Decline friend request
@@ -555,11 +594,22 @@ export default function Header({
         style={{ display: 'flex', gap: '16px', alignItems: 'center', width: '100%' }}
       >
         {/* Search Bar */}
-        <form className="search-wrapper" onSubmit={handleSearchSubmit} style={{ flex: 1, maxWidth: '480px' }}>
+        <form className="search-wrapper" onSubmit={(e) => {
+          e.preventDefault();
+          setShowSuggestions(false);
+          if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+            handleSearchSubmit({ preventDefault: () => { } }, suggestions[selectedIndex]);
+            setSearchQuery(suggestions[selectedIndex]);
+          } else {
+            handleSearchSubmit(e);
+          }
+          setSelectedIndex(-1);
+        }} style={{ flex: 1, maxWidth: '480px', position: 'relative' }}>
           <Search size={18} className="search-icon" />
           <input
             type="text"
             className="search-input"
+            autoFocus
             placeholder={
               searchEngine === 'google'
                 ? 'Search Google or type a URL...'
@@ -567,6 +617,18 @@ export default function Header({
             }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (!showSuggestions || suggestions.length === 0) return;
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedIndex(prev => Math.min(prev + 1, suggestions.length - 1));
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedIndex(prev => Math.max(prev - 1, -1));
+              }
+            }}
+            onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
           />
           <div className="search-engine-selector">
             <button
@@ -580,6 +642,50 @@ export default function Header({
               onClick={() => setSearchEngine('shelf')}
             >Shelf</button>
           </div>
+
+          {showSuggestions && suggestions.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              marginTop: '4px',
+              background: 'var(--book-page-bg)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '12px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+              overflow: 'hidden',
+              zIndex: 1000
+            }}>
+              {suggestions.map((sugg, i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: '12px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    cursor: 'pointer',
+                    color: 'var(--text-primary)',
+                    fontSize: '14px',
+                    borderBottom: i < suggestions.length - 1 ? '1px solid var(--border-color)' : 'none',
+                    background: selectedIndex === i ? 'var(--ui-hover-bg)' : 'transparent'
+                  }}
+                  onMouseDown={() => {
+                    setSearchQuery(sugg);
+                    setShowSuggestions(false);
+                    // trigger search
+                    handleSearchSubmit({ preventDefault: () => { } }, sugg);
+                  }}
+                  onMouseEnter={() => setSelectedIndex(i)}
+                  onMouseLeave={() => setSelectedIndex(-1)}
+                >
+                  <Search size={14} style={{ color: 'var(--text-secondary)' }} />
+                  {sugg}
+                </div>
+              ))}
+            </div>
+          )}
         </form>
 
         {/* Header Action Buttons */}

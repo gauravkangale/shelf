@@ -43,6 +43,35 @@ function loadDb() {
   }
 }
 
+// ─── Local File Storage for Heavy Data (Books, Daily Notes) ─────────
+const shelfBooksDir = path.join(__dirname, 'shelf-books');
+if (!fs.existsSync(shelfBooksDir)) {
+  fs.mkdirSync(shelfBooksDir, { recursive: true });
+}
+
+function readUserData(username) {
+  if (!username) return { books: {}, daily_notes: [] };
+  const userFilePath = path.join(shelfBooksDir, `${username}.json`);
+  if (fs.existsSync(userFilePath)) {
+    try {
+      return JSON.parse(fs.readFileSync(userFilePath, 'utf8'));
+    } catch (e) {
+      console.error(`Error reading data for ${username}:`, e);
+    }
+  }
+  return { books: {}, daily_notes: [] };
+}
+
+function writeUserData(username, data) {
+  if (!username) return;
+  const userFilePath = path.join(shelfBooksDir, `${username}.json`);
+  try {
+    fs.writeFileSync(userFilePath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {
+    console.error(`Error writing data for ${username}:`, e);
+  }
+}
+
 // ─── DB & Email clients ───────────────────────────────────────────────────────
 let isInMemory = false;
 const inMemoryStore = {
@@ -919,8 +948,6 @@ async function initDb() {
       otp_expires_at  TIMESTAMPTZ,
       otp_purpose     TEXT,
       shortcuts       JSONB DEFAULT '[]'::jsonb,
-      daily_notes     JSONB DEFAULT '[]'::jsonb,
-      books           JSONB DEFAULT '{}'::jsonb,
       preferences     JSONB DEFAULT '{}'::jsonb,
       "alter"         TEXT,
       created_at      TIMESTAMPTZ DEFAULT NOW(),
@@ -1008,12 +1035,21 @@ async function initDb() {
 
   try {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB DEFAULT '{}'::jsonb`;
+   
+  // eslint-disable-next-line no-unused-vars
+  // eslint-disable-next-line no-empty
   } catch (err) { }
   try {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS "alter" TEXT`;
+   
+  // eslint-disable-next-line no-unused-vars
+  // eslint-disable-next-line no-empty
   } catch (err) { }
   try {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`;
+   
+  // eslint-disable-next-line no-unused-vars
+  // eslint-disable-next-line no-empty
   } catch (err) { }
 
   try {
@@ -1081,6 +1117,178 @@ async function initDb() {
 // ══════════════════════════════════════════════════════════════════════════════
 // ROUTES
 // ══════════════════════════════════════════════════════════════════════════════
+
+
+// ── POST /api/auth/forgot-password/send-otp ────────────────────────────────────────────
+app.post('/api/auth/forgot-password/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    const cleanId = email.trim().toLowerCase();
+    
+    const users = await sql`SELECT id FROM users WHERE email = ${cleanId} OR username = ${cleanId}`;
+    if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+    
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+    
+    await sql`
+      UPDATE users 
+      SET otp_code = ${otp}, otp_purpose = 'reset', otp_expires_at = ${expiresAt.toISOString()}
+      WHERE id = ${users[0].id}
+    `;
+    
+    console.log(`\n\n=== PASSWORD RESET OTP for ${cleanId}: ${otp} ===\n\n`);
+    
+    res.json({ success: true, message: 'OTP sent' });
+  } catch (err) {
+    console.error('send-otp error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── POST /api/auth/forgot-password/verify-reset ────────────────────────────────────────────
+app.post('/api/auth/forgot-password/verify-reset', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) return res.status(400).json({ error: 'Missing fields' });
+    if (newPassword.length < 8) return res.status(400).json({ error: 'Password too short' });
+    
+    const cleanId = email.trim().toLowerCase();
+    
+    const users = await sql`
+      SELECT id FROM users 
+      WHERE (email = ${cleanId} OR username = ${cleanId})
+        AND otp_code = ${otp}
+        AND otp_purpose = 'reset'
+        AND otp_expires_at > NOW()
+    `;
+    
+    if (users.length === 0) return res.status(400).json({ error: 'Invalid or expired OTP' });
+    
+    const bcrypt = require('bcrypt');
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(newPassword, salt);
+    
+    await sql`
+      UPDATE users 
+      SET password_hash = ${hash}, otp_code = NULL, otp_purpose = NULL, otp_expires_at = NULL
+      WHERE id = ${users[0].id}
+    `;
+    
+    res.json({ success: true, message: 'Password reset successful' });
+  } catch (err) {
+    console.error('verify-reset error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── POST /api/auth/login-password ─────────────────────────────────────────────
+app.post('/api/auth/login-password', async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'identifier and password are required' });
+    }
+
+    const isEmail = identifier.includes('@');
+    const cleanId = identifier.trim().toLowerCase();
+
+    const users = isEmail
+      ? await sql`SELECT id, name, username, email, avatar_url, is_verified, password_hash FROM users WHERE email = ${cleanId}`
+      : await sql`SELECT id, name, username, phone as email, avatar_url, is_verified, password_hash FROM users WHERE phone = ${cleanId} OR username = ${cleanId}`;
+
+    const user = users[0];
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (!user.password_hash) {
+      return res.status(401).json({ error: 'Password not set for this account. Try OTP or Google.' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // create token
+    const token = jwt.sign(
+      { sub: user.id, email: user.email, username: user.username },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    const tokenHash = await bcrypt.hash(token, 10);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await sql`INSERT INTO sessions (user_id, token_hash, expires_at) VALUES (${user.id}, ${tokenHash}, ${expiresAt.toISOString()})`;
+
+    return res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        avatar_url: user.avatar_url,
+        is_verified: user.is_verified
+      }
+    });
+  } catch (err) {
+    console.error('Password login error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── POST /api/auth/set-password ─────────────────────────────────────────────
+app.post('/api/auth/set-password', async (req, res) => {
+  try {
+    const { identifier, password, otp_code } = req.body;
+    // To set a password, we either need a valid OTP or an already authenticated token.
+    // For simplicity, we allow setting password with OTP or Token.
+    // If token provided:
+    let userId;
+    const auth = req.headers.authorization;
+    if (auth && auth.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(auth.slice(7), JWT_SECRET);
+        userId = decoded.sub;
+   
+  // eslint-disable-next-line no-unused-vars
+      } catch(e) { /* ignore */ }
+    }
+
+    if (!userId) {
+      if (!identifier || !otp_code || !password) {
+        return res.status(400).json({ error: 'Requires auth token or valid OTP/identifier to set password' });
+      }
+      const cleanId = identifier.trim().toLowerCase();
+      const validOtps = await sql`SELECT * FROM otp_tokens WHERE identifier = ${cleanId} AND otp_code = ${otp_code} AND expires_at > NOW() AND used = false ORDER BY created_at DESC LIMIT 1`;
+      if (validOtps.length === 0) return res.status(400).json({ error: 'Invalid or expired OTP for password reset' });
+      
+      const isEmail = identifier.includes('@');
+      const users = isEmail ? await sql`SELECT id FROM users WHERE email = ${cleanId}` : await sql`SELECT id FROM users WHERE phone = ${cleanId}`;
+      if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+      userId = users[0].id;
+      
+      await sql`UPDATE otp_tokens SET used = true WHERE id = ${validOtps[0].id}`;
+    } else {
+      if (!password) return res.status(400).json({ error: 'password required' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters long.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(password, salt);
+
+    await sql`UPDATE users SET password_hash = ${hash} WHERE id = ${userId}`;
+    return res.json({ message: 'Password set successfully.' });
+  } catch (err) {
+    console.error('Set password error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // ── POST /api/auth/send-otp ───────────────────────────────────────────────────
 // Body: { identifier: "email@x.com" | "+91XXXXXXXXXX", purpose: "signup"|"login", name?: string }
@@ -1191,7 +1399,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
 // Body: { identifier, otp, purpose, name? (for signup) }
 app.post('/api/auth/verify-otp', async (req, res) => {
   try {
-    const { identifier, otp, purpose, name } = req.body;
+    const { identifier, otp, purpose, name, password } = req.body;
     if (!identifier || !otp || !purpose) {
       return res.status(400).json({ error: 'identifier, otp, and purpose are required' });
     }
@@ -1225,13 +1433,20 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
     // Mark OTP as verified (clear it) and set name if signup
     const nameUpdate = (purpose === 'signup' && name) ? name.trim() : user.name;
+    let passwordHashUpdate = null;
+    if (password && password.length >= 8) {
+      const bcrypt = require('bcrypt');
+      passwordHashUpdate = await bcrypt.hash(password, 10);
+    }
+    
     const [updatedUser] = await sql`
       UPDATE users
       SET otp_code = NULL,
           otp_expires_at = NULL,
           otp_purpose = NULL,
           is_verified = true,
-          name = COALESCE(${nameUpdate}, name)
+          name = COALESCE(${nameUpdate}, name),
+          password_hash = COALESCE(${passwordHashUpdate}, password_hash)
       WHERE id = ${user.id}
       RETURNING *
     `;
@@ -1391,11 +1606,12 @@ app.post('/api/auth/forgot-username', async (req, res) => {
 app.get('/api/auth/me', verifyToken, async (req, res) => {
   try {
     const [user] = await sql`
-      SELECT id, name, username, email, phone, bio, avatar_url, is_verified, created_at
+      SELECT id, name, username, email, phone, bio, avatar_url, is_verified, preferences, created_at
       FROM users WHERE id = ${req.user.sub}
     `;
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({ user });
+  // eslint-disable-next-line no-unused-vars
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch user' });
   }
@@ -1404,7 +1620,7 @@ app.get('/api/auth/me', verifyToken, async (req, res) => {
 // ── PUT /api/users/profile ───────────────────────────────────────────────────
 app.put('/api/users/profile', verifyToken, async (req, res) => {
   try {
-    const { name, username, email, avatar_url, phone, bio } = req.body;
+    const { name, username, email, avatar_url, phone, bio, password, preferences } = req.body;
     const userId = req.user.sub;
 
     if (!name || !username || !email) {
@@ -1413,6 +1629,10 @@ app.put('/api/users/profile', verifyToken, async (req, res) => {
 
     const cleanUsername = username.trim().toLowerCase();
     const cleanEmail = email.trim().toLowerCase();
+
+    if (cleanUsername.includes(' ')) {
+      return res.status(400).json({ error: 'Username cannot contain spaces.' });
+    }
 
     // Check if username is already taken by another user
     const existingUser = await sql`
@@ -1444,19 +1664,48 @@ app.put('/api/users/profile', verifyToken, async (req, res) => {
       }
     }
 
+    let passwordHashUpdate = undefined;
+    if (password && password.length >= 8) {
+       const bcrypt = require('bcrypt');
+       const salt = await bcrypt.genSalt(10);
+       passwordHashUpdate = await bcrypt.hash(password, salt);
+    }
+    
     // Update user in DB
-    const [user] = await sql`
-      UPDATE users
-      SET name = ${name.trim()},
-          username = ${cleanUsername},
-          email = ${cleanEmail},
-          avatar_url = ${avatar_url ? avatar_url.trim() : null},
-          phone = ${phone ? phone.trim() : null},
-          bio = ${bio ? bio.trim() : null},
-          updated_at = NOW()
-      WHERE id = ${userId}
-      RETURNING *
-    `;
+    let userRecord;
+    if (passwordHashUpdate) {
+      const rows = await sql`
+        UPDATE users
+        SET name = ${name.trim()},
+            username = ${cleanUsername},
+            email = ${cleanEmail},
+            avatar_url = ${avatar_url ? avatar_url.trim() : null},
+            phone = ${phone ? phone.trim() : null},
+            bio = ${bio ? bio.trim() : null},
+            preferences = ${preferences ? JSON.stringify(preferences) : '{}'}::jsonb,
+            updated_at = NOW(),
+            password_hash = ${passwordHashUpdate}
+        WHERE id = ${userId}
+        RETURNING *
+      `;
+      userRecord = rows[0];
+    } else {
+      const rows = await sql`
+        UPDATE users
+        SET name = ${name.trim()},
+            username = ${cleanUsername},
+            email = ${cleanEmail},
+            avatar_url = ${avatar_url ? avatar_url.trim() : null},
+            phone = ${phone ? phone.trim() : null},
+            bio = ${bio ? bio.trim() : null},
+            preferences = ${preferences ? JSON.stringify(preferences) : '{}'}::jsonb,
+            updated_at = NOW()
+        WHERE id = ${userId}
+        RETURNING *
+      `;
+      userRecord = rows[0];
+    }
+    const user = userRecord;
 
     if (!user) {
       return res.status(404).json({ error: 'User not found in database. Please sign out and sign in again.' });
@@ -1573,14 +1822,32 @@ app.post('/api/preferences', verifyToken, async (req, res) => {
   }
 });
 
+// ── DELETE /api/local-data ───────────────────────────────────────────────────
+app.delete('/api/local-data', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const [user] = await sql`SELECT username FROM users WHERE id = ${userId}`;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const filePath = path.join(shelfBooksDir, `${user.username}.json`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    res.json({ message: 'Local data deleted successfully' });
+  } catch (err) {
+    console.error('Delete local data error:', err);
+    res.status(500).json({ error: 'Failed to delete local data.' });
+  }
+});
+
 // ── GET /api/notes ────────────────────────────────────────────────────────────
 app.get('/api/notes', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const [user] = await sql`
-      SELECT daily_notes FROM users WHERE id = ${userId}
-    `;
-    const rawNotes = (user && user.daily_notes) || [];
+    const [user] = await sql`SELECT username FROM users WHERE id = ${userId}`;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const localData = readUserData(user.username);
+    const rawNotes = localData.daily_notes || [];
     const notes = rawNotes.map(n => ({
       id: n.id,
       dateKey: n.dateKey || n.date_key,
@@ -1603,10 +1870,10 @@ app.post('/api/notes', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'id, dateKey, and text are required' });
     }
 
-    const [user] = await sql`
-      SELECT daily_notes FROM users WHERE id = ${userId}
-    `;
-    let notes = (user && user.daily_notes) || [];
+    const [user] = await sql`SELECT username FROM users WHERE id = ${userId}`;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const localData = readUserData(user.username);
+    let notes = localData.daily_notes || [];
     if (!Array.isArray(notes)) notes = [];
 
     const existingIndex = notes.findIndex(n => n.id === id);
@@ -1623,13 +1890,8 @@ app.post('/api/notes', verifyToken, async (req, res) => {
     } else {
       notes.push(newNote);
     }
-
-    await sql`
-      UPDATE users
-      SET daily_notes = ${JSON.stringify(notes)},
-          updated_at = NOW()
-      WHERE id = ${userId}
-    `;
+    localData.daily_notes = notes;
+    writeUserData(user.username, localData);
     res.json({ success: true });
   } catch (err) {
     console.error('Save note error:', err);
@@ -1643,20 +1905,17 @@ app.delete('/api/notes/:id', verifyToken, async (req, res) => {
     const userId = req.user.sub;
     const noteId = req.params.id;
 
-    const [user] = await sql`
-      SELECT daily_notes FROM users WHERE id = ${userId}
-    `;
-    let notes = (user && user.daily_notes) || [];
+    const [user] = await sql`SELECT username FROM users WHERE id = ${userId}`;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const localData = readUserData(user.username);
+    let notes = localData.daily_notes || [];
     if (!Array.isArray(notes)) notes = [];
 
     notes = notes.filter(n => n.id !== noteId);
+    localData.daily_notes = notes;
+    writeUserData(user.username, localData);
 
-    await sql`
-      UPDATE users
-      SET daily_notes = ${JSON.stringify(notes)},
-          updated_at = NOW()
-      WHERE id = ${userId}
-    `;
     res.json({ success: true });
   } catch (err) {
     console.error('Delete note error:', err);
@@ -1668,10 +1927,11 @@ app.delete('/api/notes/:id', verifyToken, async (req, res) => {
 app.get('/api/books/current', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const [user] = await sql`
-      SELECT books FROM users WHERE id = ${userId}
-    `;
-    const book = (user && user.books && user.books.title) ? user.books : null;
+    const [user] = await sql`SELECT username FROM users WHERE id = ${userId}`;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const localData = readUserData(user.username);
+    const book = (localData.books && localData.books.title) ? localData.books : null;
     res.json({ book });
   } catch (err) {
     console.error('Fetch current book error:', err);
@@ -1697,12 +1957,36 @@ app.post('/api/books/current', verifyToken, async (req, res) => {
       updated_at: new Date().toISOString()
     };
 
-    await sql`
-      UPDATE users
-      SET books = ${JSON.stringify(book)},
-          updated_at = NOW()
-      WHERE id = ${userId}
-    `;
+    const [user] = await sql`SELECT name, username FROM users WHERE id = ${userId}`;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const localData = readUserData(user.username);
+    const isNewBook = !localData.books || localData.books.title !== book.title;
+    localData.books = book;
+    writeUserData(user.username, localData);
+    
+    if (isNewBook && !isInMemory) {
+      try {
+        const friends = await sql`
+          SELECT CASE WHEN user_id_1 = ${userId} THEN user_id_2 ELSE user_id_1 END AS friend_id
+          FROM friendships
+          WHERE (user_id_1 = ${userId} OR user_id_2 = ${userId}) AND status = 'accepted'
+        `;
+        const senderName = user.name || user.username || 'A friend';
+        for (const f of friends) {
+          await createNotification({
+            recipientId: f.friend_id,
+            type: 'book_update',
+            title: 'New Book Started',
+            body: `${senderName} started reading "${book.title}".`,
+            senderId: userId
+          });
+        }
+      } catch(err) {
+        console.error('Error notifying friends of new book:', err);
+      }
+    }
+    
     res.json({ success: true });
   } catch (err) {
     console.error('Save current book error:', err);
@@ -1799,7 +2083,7 @@ app.get('/api/friends', verifyToken, async (req, res) => {
           m => m.sender_id === otherId && m.receiver_id === userId && !m.read
         ).length;
         return {
-          id: u.id, name: u.name, username: u.username, avatar_url: u.avatar_url,
+          id: u.id, name: u.name, username: u.username, avatar_url: u.avatar_url, bio: u.bio,
           currentBook: u.books && u.books.title ? {
             title: u.books.title, author: u.books.author,
             currentPage: u.books.currentPage || u.books.current_page,
@@ -1811,7 +2095,7 @@ app.get('/api/friends', verifyToken, async (req, res) => {
       }).filter(Boolean);
     } else {
       const rows = await sql`
-        SELECT u.id, u.name, u.username, u.avatar_url, u.books, u.updated_at,
+        SELECT u.id, u.name, u.username, u.avatar_url, u.bio, u.books, u.updated_at,
                COALESCE((
                  SELECT COUNT(*)::int 
                  FROM messages m 
@@ -1862,14 +2146,18 @@ app.post('/api/friends/request', verifyToken, async (req, res) => {
         target = inMemoryStore.users.find(u => (u.username || '').toLowerCase() === cleanUsername);
       }
     } else if (friendId) {
-      [target] = await sql`SELECT id, name, username FROM users WHERE id = ${friendId}`;
+      [target] = await sql`SELECT id, name, username, preferences FROM users WHERE id = ${friendId}`;
     } else {
       const cleanUsername = username.trim().toLowerCase();
-      [target] = await sql`SELECT id, name, username FROM users WHERE LOWER(username) = ${cleanUsername}`;
+      [target] = await sql`SELECT id, name, username, preferences FROM users WHERE LOWER(username) = ${cleanUsername}`;
     }
 
     if (!target) return res.status(404).json({ error: 'User not found.' });
     if (target.id === userId) return res.status(400).json({ error: 'You cannot add yourself.' });
+    
+    if (target.preferences?.privacy?.allowFriendRequests === false) {
+      return res.status(403).json({ error: 'This user is not accepting friend requests.' });
+    }
 
     const id1 = userId < target.id ? userId : target.id;
     const id2 = userId < target.id ? target.id : userId;
@@ -2033,6 +2321,7 @@ app.get('/api/users/activity', async (req, res) => {
       try {
         const decoded = jwt.verify(auth.slice(7), JWT_SECRET);
         userId = decoded.sub;
+  // eslint-disable-next-line no-unused-vars
       } catch (e) {
         // ignore invalid token
       }
@@ -2041,7 +2330,7 @@ app.get('/api/users/activity', async (req, res) => {
     if (userId) {
       // Return only accepted friends
       activeUsers = await sql`
-        SELECT u.id, u.name, u.username, u.avatar_url, u.updated_at, u.books, u.daily_notes
+        SELECT u.id, u.name, u.username, u.avatar_url, u.updated_at
         FROM friendships f
         JOIN users u ON (u.id = f.user_id_1 OR u.id = f.user_id_2)
         WHERE (f.user_id_1 = ${userId} OR f.user_id_2 = ${userId})
@@ -2056,10 +2345,11 @@ app.get('/api/users/activity', async (req, res) => {
 
     const activities = [];
     for (const u of activeUsers) {
-      const book = u.books && u.books.title ? u.books : null;
+      const localData = readUserData(u.username);
+      const book = localData.books && localData.books.title ? localData.books : null;
       let latestNote = null;
-      if (Array.isArray(u.daily_notes) && u.daily_notes.length > 0) {
-        const sortedNotes = [...u.daily_notes].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      if (Array.isArray(localData.daily_notes) && localData.daily_notes.length > 0) {
+        const sortedNotes = [...localData.daily_notes].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
         latestNote = sortedNotes[0];
       }
 
@@ -2258,11 +2548,11 @@ app.get('/api/users/search', verifyToken, async (req, res) => {
           name: u.name,
           username: u.username,
           avatar_url: u.avatar_url,
-          books: u.books || {}
+          bio: u.bio
         }));
     } else {
       users = await sql`
-        SELECT id, name, username, avatar_url, books
+        SELECT id, name, username, avatar_url, bio, preferences
         FROM users
         WHERE id != ${userId}
           AND (LOWER(username) ILIKE ${pattern} OR LOWER(name) ILIKE ${pattern})
@@ -2296,19 +2586,25 @@ app.get('/api/users/search', verifyToken, async (req, res) => {
       fsMap.set(otherId, status);
     });
 
-    const enriched = users.map(u => ({
-      id: u.id,
-      name: u.name,
-      username: u.username,
-      avatar_url: u.avatar_url,
-      friendship_status: fsMap.get(u.id) || 'none',
-      currentBook: u.books && u.books.title ? {
-        title: u.books.title,
-        author: u.books.author,
-        currentPage: u.books.currentPage || u.books.current_page,
-        totalPages: u.books.totalPages || u.books.total_pages
-      } : null
-    }));
+    const enriched = users.map(u => {
+      const localData = readUserData(u.username);
+      const userBooks = localData.books || null;
+      const isPublic = u.preferences?.privacy?.profilePublic !== false;
+      return {
+        id: u.id,
+        name: u.name,
+        username: u.username,
+        avatar_url: u.avatar_url,
+        bio: isPublic ? u.bio : null,
+        friendship_status: fsMap.get(u.id) || 'none',
+        currentBook: isPublic && userBooks && userBooks.title ? {
+          title: userBooks.title,
+          author: userBooks.author,
+          currentPage: userBooks.currentPage || userBooks.current_page,
+          totalPages: userBooks.totalPages || userBooks.total_pages
+        } : null
+      };
+    });
 
     res.json({ users: enriched });
   } catch (err) {
@@ -2376,7 +2672,7 @@ app.get('/api/cohorts', verifyToken, async (req, res) => {
     if (cohorts.length === 0) return res.json({ groups: [] }); // map to groups for compatibility
 
     const members = await sql`
-      SELECT gm.cohort_id, u.id, u.name, u.username, u.avatar_url, u.books, u.created_at
+      SELECT gm.cohort_id, u.id, u.name, u.username, u.avatar_url, u.created_at
       FROM cohort_members gm
       JOIN users u ON u.id = gm.user_id
       WHERE gm.cohort_id IN (
@@ -2404,6 +2700,8 @@ app.get('/api/cohorts', verifyToken, async (req, res) => {
 
     const membersByCohort = new Map();
     members.forEach(({ cohort_id, ...member }) => {
+      const localData = readUserData(member.username);
+      member.books = localData.books;
       if (!membersByCohort.has(cohort_id)) membersByCohort.set(cohort_id, []);
       membersByCohort.get(cohort_id).push(member);
     });
@@ -2637,7 +2935,7 @@ app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
     }
 
     const teammates = await sql`
-      SELECT DISTINCT u.id, u.name, u.username, u.avatar_url, u.updated_at, u.books, u.daily_notes,
+      SELECT DISTINCT u.id, u.name, u.username, u.avatar_url, u.updated_at,
              (SELECT status FROM friendships WHERE (user_id_1 = u.id AND user_id_2 = ${userId}) OR (user_id_2 = u.id AND user_id_1 = ${userId}) LIMIT 1) as "friendship_status",
              (SELECT sender_id::text FROM friendships WHERE (user_id_1 = u.id AND user_id_2 = ${userId}) OR (user_id_2 = u.id AND user_id_1 = ${userId}) LIMIT 1) as "friendship_sender_id",
              COALESCE((
@@ -2656,10 +2954,11 @@ app.get('/api/teammates/mutual', verifyToken, async (req, res) => {
 
     const activities = [];
     for (const u of teammates) {
-      const book = u.books && u.books.title ? u.books : null;
+      const localData = readUserData(u.username);
+      const book = localData.books && localData.books.title ? localData.books : null;
       let latestNote = null;
-      if (Array.isArray(u.daily_notes) && u.daily_notes.length > 0) {
-        const sortedNotes = [...u.daily_notes].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      if (Array.isArray(localData.daily_notes) && localData.daily_notes.length > 0) {
+        const sortedNotes = [...localData.daily_notes].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
         latestNote = sortedNotes[0];
       }
 
@@ -3018,6 +3317,13 @@ async function createNotification({ recipientId, type, title, body, senderId, re
     if (isInMemory) {
       return createInMemoryNotification({ recipientId, type, title, body, senderId, refId });
     }
+
+    // Check if recipient has disabled notifications
+    const [recipient] = await sql`SELECT preferences FROM users WHERE id = ${recipientId}`;
+    if (recipient && recipient.preferences?.notifications?.enabled === false) {
+      return; // Do not send notification
+    }
+
     await sql`
       INSERT INTO notifications (recipient_id, sender_id, type, title, body, ref_id)
       VALUES (${recipientId}, ${senderId || null}, ${type}, ${title}, ${body}, ${refId || null})
@@ -3125,6 +3431,21 @@ app.delete('/api/notifications/:id', verifyToken, async (req, res) => {
 
 // ── GET /api/health ───────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'Shelf Auth API' }));
+
+// ── GET /api/suggest ──────────────────────────────────────────────────────────
+app.get('/api/suggest', async (req, res) => {
+  try {
+    const query = req.query.q;
+    if (!query) return res.json([query, []]);
+    const response = await fetch(`http://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(query)}`);
+    if (!response.ok) throw new Error('Suggest API failed');
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('Suggest API error:', err);
+    res.status(500).json({ error: 'Failed to fetch suggestions' });
+  }
+});
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 initDb().then(() => {

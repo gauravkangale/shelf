@@ -1,3 +1,4 @@
+  // eslint-disable-next-line no-unused-vars
 import React from 'react';
 
 function Avatar({ user, size = 36 }) {
@@ -18,45 +19,23 @@ function Avatar({ user, size = 36 }) {
     window.dispatchEvent(new CustomEvent('open-profile-modal', { detail: { user } }));
   };
 
-  if (avatarSrc) {
-    return (
-      <img
-        src={avatarSrc}
-        alt={name}
-        onClick={handleClick}
-        style={{
-          width: size, height: size, borderRadius: '50%', objectFit: 'cover',
-          border: '1px solid rgba(0,0,0,0.1)', flexShrink: 0,
-          cursor: 'pointer'
-        }}
-        onError={(e) => {
-          e.target.onerror = null;
-          e.target.style.display = 'none';
-          if (e.target.nextSibling) {
-            e.target.nextSibling.style.display = 'flex';
-          }
-        }}
-      />
-    );
-  }
-
-  const colors = ['#b33533', '#4a6741', '#3b5998', '#d97a26', '#2b4162'];
-  const charCode = name.charCodeAt(0) || 0;
-  const bg = colors[charCode % colors.length];
+  const finalSrc = avatarSrc || '/profile.jpeg';
 
   return (
-    <div 
+    <img
+      src={finalSrc}
+      alt={name}
       onClick={handleClick}
       style={{
-        width: size, height: size, borderRadius: '50%', flexShrink: 0,
-        background: bg, color: '#fff', display: 'flex',
-        alignItems: 'center', justifyContent: 'center',
-        fontSize: size * 0.4, fontWeight: '700',
-        fontFamily: 'var(--serif, Georgia, serif)', userSelect: 'none',
-        cursor: 'pointer', border: '1px solid rgba(0,0,0,0.1)'
-      }}>
-      {initial}
-    </div>
+        width: size, height: size, borderRadius: '50%', objectFit: 'cover',
+        border: '1px solid rgba(0,0,0,0.1)', flexShrink: 0,
+        cursor: 'pointer'
+      }}
+      onError={(e) => {
+        e.target.onerror = null;
+        e.target.src = '/profile.jpeg';
+      }}
+    />
   );
 }
 

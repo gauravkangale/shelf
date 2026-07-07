@@ -17,6 +17,44 @@ const DECORATION_IMAGES = [
   { src: '/fan.png', label: 'Fan' },
 ];
 
+const MenuButton = ({ icon, label, onClick, color }) => {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        width: "100%",
+        padding: "10px 10px",
+        borderRadius: "10px",
+        border: "none",
+        background: "transparent",
+        cursor: "pointer",
+        fontSize: "13px",
+        fontWeight: 500,
+        color: 'var(--text-primary)',
+        transition: "all 0.15s ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'var(--bg-color)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+      onMouseDown={(e) => {
+        e.currentTarget.style.transform = "scale(0.98)";
+      }}
+      onMouseUp={(e) => {
+        e.currentTarget.style.transform = "translateY(-1px)";
+      }}
+    >
+      <span style={{ color }}>{icon}</span>
+      {label}
+    </button>
+  );
+};
+
 export default function WelcomeCard({ activeProfileName, setActiveTab }) {
   const graphicRef = useRef(null);
   const uploadRef = useRef(null);
@@ -33,6 +71,8 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
   const [uploadedResource, setUploadedResource] = useState(() => uGet(UPLOADED_RESOURCE_KEY) || null);
 
   const fetchPrefs = async (isUserSwitch = false) => {
+   
+   
     // If triggered by a user switch, temporarily clear state
     if (isUserSwitch) {
       setDecoIndex(0);
@@ -47,6 +87,7 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
       const savedDeco = uGet(STORAGE_KEY);
       setDecoIndex(savedDeco !== null ? parseInt(savedDeco, 10) : 0);
       setCustomImg(uGet(CUSTOM_IMG_KEY) || null);
+   
       return;
     }
 
@@ -63,6 +104,8 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
           uSet(STORAGE_KEY, String(p.decoIndex));
         }
         if (p.customImg !== undefined) {
+   
+   
           setCustomImg(p.customImg);
           uSet(CUSTOM_IMG_KEY, p.customImg);
         }
@@ -71,6 +114,8 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
           uSet(UPLOADED_RESOURCE_KEY, p.uploadedResource);
         }
       }
+  // eslint-disable-next-line no-empty
+  // eslint-disable-next-line no-unused-vars
     } catch (err) { }
   };
 
@@ -85,6 +130,7 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
 
   // Fetch from /api/preferences on mount
   useEffect(() => {
+  // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchPrefs();
   }, []);
 
@@ -101,6 +147,8 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
         },
         body: JSON.stringify({ preferences: newPrefs })
       });
+  // eslint-disable-next-line no-empty
+  // eslint-disable-next-line no-unused-vars
     } catch (err) { }
   };
 
@@ -208,43 +256,6 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
     syncPrefs({ uploadedResource: null });
   };
 
-  const MenuButton = ({ icon, label, onClick, color }) => {
-    return (
-      <button
-        onClick={onClick}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-          width: "100%",
-          padding: "10px 10px",
-          borderRadius: "10px",
-          border: "none",
-          background: "transparent",
-          cursor: "pointer",
-          fontSize: "13px",
-          fontWeight: 500,
-          color: 'var(--text-primary)',
-          transition: "all 0.15s ease",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'var(--bg-color)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-        }}
-        onMouseDown={(e) => {
-          e.currentTarget.style.transform = "scale(0.98)";
-        }}
-        onMouseUp={(e) => {
-          e.currentTarget.style.transform = "translateY(-1px)";
-        }}
-      >
-        <span style={{ color }}>{icon}</span>
-        {label}
-      </button>
-    );
-  };
   return (
     <section className="welcome-card-container">
 

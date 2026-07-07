@@ -26,11 +26,11 @@ export function uGet(key, fallback = null) {
 export function uSet(key, value) {
   try {
     localStorage.setItem(userKey(key), JSON.stringify(value));
-  } catch {}
+  } catch { /* ignore */ }
 }
 
 export function uRemove(key) {
   try {
     localStorage.removeItem(userKey(key));
-  } catch {}
+  } catch { /* ignore */ }
 }

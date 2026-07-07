@@ -1,0 +1,56 @@
+{
+  "users": [
+    {
+      "id": "b5d6bef3-6b28-4dac-bdda-d314a382d7be",
+      "email": "gaurav.kangale24@pccoepune.org",
+      "phone": null,
+      "name": "163 gaurav",
+      "username": "gaurav.kangale24",
+      "avatar_url": "163 GAURAV",
+      "google_id": "https://lh3.googleusercontent.com/a/ACg8ocJkuljwGAPoXkmtYI4U6lTAWQwytHCmYSyF3I0dqWp6Lmx0TsU=s96-c",
+      "is_verified": true,
+      "created_at": "2026-07-06T11:24:49.044Z",
+      "updated_at": "2026-07-06T11:24:49.044Z"
+    },
+    {
+      "id": "490d8d46-46df-4c18-b5f1-8f7e1bf6a530",
+      "email": "boltenaop@gmail.com",
+      "phone": null,
+      "name": "op boltena",
+      "username": "opboltena",
+      "avatar_url": "Op Boltena",
+      "google_id": "https://lh3.googleusercontent.com/a/ACg8ocJ3spa10-VhPrlrQxg1gL9flFFRBq1OE2t6Ecrz6SUWAnT5n70=s96-c",
+      "is_verified": true,
+      "created_at": "2026-07-06T11:31:14.378Z",
+      "updated_at": "2026-07-06T11:31:14.378Z"
+    }
+  ],
+  "otp_tokens": [],
+  "sessions": [],
+  "messages": [],
+  "cohorts": [
+    {
+      "id": "g1",
+      "name": "Design Systems",
+      "description": "Visual design, layout components, and branding aesthetics."
+    },
+    {
+      "id": "g2",
+      "name": "Engineering Core",
+      "description": "Database performance, API endpoints, and system architecture."
+    },
+    {
+      "id": "g3",
+      "name": "Product Planning",
+      "description": "Roadmaps, feature specifications, and timeline coordination."
+    },
+    {
+      "id": "g4",
+      "name": "General Assembly",
+      "description": "All-hands discussion, general announcements, and casual chats."
+    }
+  ],
+  "cohort_members": [],
+  "friendships": [],
+  "notifications": []
+}

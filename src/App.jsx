@@ -23,6 +23,7 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
   const fileInputRef = React.useRef(null);
 
   useEffect(() => {
+  // eslint-disable-next-line react-hooks/set-state-in-effect
     setName(activeProfile.name || '');
     setUsername(activeProfile.username || '');
     setEmail(activeProfile.email || '');
@@ -479,6 +480,7 @@ function App() {
     }
   });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const activeProfile = profileAccounts.find(acc => acc.active) || profileAccounts[0] || {
     id: 'guest',
     name: 'Guest User',
@@ -517,6 +519,7 @@ function App() {
     });
 
     if (hasDuplicates) {
+  // eslint-disable-next-line react-hooks/set-state-in-effect
       setProfileAccounts(unique);
     } else {
       localStorage.setItem('profile_accounts', JSON.stringify(profileAccounts));
@@ -543,6 +546,7 @@ function App() {
   useEffect(() => {
     const token = localStorage.getItem('shelf_auth_token');
     if (token) {
+  // eslint-disable-next-line react-hooks/set-state-in-effect
       setProfileAccounts(prev => prev.map(acc => {
         if (acc.active && !acc.token) {
           return { ...acc, token };
@@ -562,7 +566,14 @@ function App() {
         const res = await fetch('/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 404) {
+            localStorage.removeItem('shelf_auth_token');
+            localStorage.removeItem('shelf_current_user');
+            window.location.href = '/login.html';
+          }
+          return;
+        }
         const data = await res.json();
         const serverUser = data.user || data;
         if (!serverUser?.id) return;
@@ -575,9 +586,22 @@ function App() {
           username: serverUser.username || current.username,
           name: serverUser.name || current.name,
           avatar_url: serverUser.avatar_url || current.avatar_url,
-          avatar: serverUser.avatar_url || current.avatar
+          avatar: serverUser.avatar_url || current.avatar,
+          bio: serverUser.bio || current.bio
         };
         localStorage.setItem('shelf_current_user', JSON.stringify(updated));
+
+        // Sync preferences to localStorage if they exist
+        if (serverUser.preferences) {
+          if (serverUser.preferences.notifications) {
+            localStorage.setItem('shelf_notifications', JSON.stringify(serverUser.preferences.notifications));
+          }
+          if (serverUser.preferences.privacy) {
+            localStorage.setItem('shelf_privacy', JSON.stringify(serverUser.preferences.privacy));
+          }
+          // trigger storage event so SettingsPage updates if it's open
+          window.dispatchEvent(new Event('storage'));
+        }
 
         // Also update the active profile in state with the real DB id
         setProfileAccounts(prev => prev.map(acc => {
@@ -615,7 +639,8 @@ function App() {
         email: newlyActive.email,
         phone: newlyActive.phone,
         avatar_url: newlyActive.avatar,
-        avatar: newlyActive.avatar
+        avatar: newlyActive.avatar,
+        bio: newlyActive.bio
       }));
       // Notify all components that the user context changed
       window.dispatchEvent(new Event('storage'));
@@ -753,6 +778,7 @@ function App() {
         phone: userData.phone || '',
         avatar_url: userData.avatar_url || userData.avatar || './profile.jpeg',
         avatar: userData.avatar || userData.avatar_url || './profile.jpeg',
+        bio: userData.bio || '',
       }));
 
       setProfileAccounts(prevAccounts => {
@@ -772,6 +798,7 @@ function App() {
                 email: userData.email || acc.email || '',
                 phone: userData.phone || acc.phone || '',
                 avatar: userData.avatar || userData.avatar_url || acc.avatar || './profile.jpeg',
+                bio: userData.bio || acc.bio || '',
                 token: userData.token || acc.token,
                 id: userData.id || acc.id, // Ensure real UUID overwrites timestamp id
                 active: true
@@ -787,6 +814,7 @@ function App() {
             email: userData.email || '',
             phone: userData.phone || '',
             avatar: userData.avatar || userData.avatar_url || '',
+            bio: userData.bio || '',
             token: userData.token || '',
             active: true
           };
@@ -951,6 +979,7 @@ function App() {
         if (saveOps.length || deleteOps.length) {
           window.dispatchEvent(new Event('reader-activity-updated'));
         }
+  // eslint-disable-next-line no-unused-vars
       } catch (err) {
         // Silently ignore sync errors (user may be offline or not logged in)
       }

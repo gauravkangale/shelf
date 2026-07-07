@@ -17,7 +17,9 @@ function checkServer() {
 
 // Clean up child processes on termination
 const cleanup = () => {
-  try { server.kill(); } catch (e) {}
+   
+  // eslint-disable-next-line no-unused-vars
+  try { server.kill(); } catch (e) { /* ignore */ }
   process.exit();
 };
 

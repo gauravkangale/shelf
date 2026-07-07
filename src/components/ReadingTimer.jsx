@@ -24,6 +24,7 @@ export default function DesktopNeumorphicDashboard({ username }) {
                 body: JSON.stringify({ preferences: newPrefs })
             });
             return res.ok;
+  // eslint-disable-next-line no-unused-vars
         } catch (err) {
             return false;
         }
@@ -101,6 +102,9 @@ export default function DesktopNeumorphicDashboard({ username }) {
                         uSet('dashboard_image', data.preferences.dashboard_image);
                     }
                 }
+   
+  // eslint-disable-next-line no-unused-vars
+  // eslint-disable-next-line no-empty
             } catch (err) { }
         };
         fetchPrefs();

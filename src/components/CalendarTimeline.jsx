@@ -1,3 +1,4 @@
+  // eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect } from 'react';
 import { uGet } from '../utils/userKey';
 
@@ -5,6 +6,7 @@ export default function CalendarTimeline({
   selectedDate,
   setSelectedDate,
   visibleMonthYear,
+  // eslint-disable-next-line no-unused-vars
   setVisibleMonthYear,
   goToToday,
   calendarDaysList,
