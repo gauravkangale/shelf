@@ -10,6 +10,7 @@ import BookShortcutModal from './BookShortcutModal';
 import NotesInputSection from './NotesInputSection';
 import { BOOK_COLORS, INITIAL_SHORTCUTS } from '../constants';
 import { uGet, uSet } from '../utils/userKey';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 export default function Homepage({
   activeProfile,
@@ -32,6 +33,7 @@ export default function Homepage({
   // eslint-disable-next-line no-unused-vars
   setActiveTab
 }) {
+  const isMobile = useIsMobile();
   // Search Engine & query states
   const [searchEngine, setSearchEngine] = useState('google'); // 'google' or 'shelf'
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,7 +74,7 @@ export default function Homepage({
       const token = localStorage.getItem('shelf_auth_token');
       if (!token) return;
       try {
-        const res = await fetch('/api/shortcuts', {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/shortcuts`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -112,7 +114,7 @@ export default function Homepage({
       const token = localStorage.getItem('shelf_auth_token');
       if (!token) return;
       try {
-        await fetch('/api/shortcuts', {
+        await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/shortcuts`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -321,6 +323,70 @@ export default function Homepage({
       setSelectedDate(new Date());
     }
   };
+
+  if (isMobile) {
+    return (
+      <>
+        <div className="mobile-browser-layout" style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          padding: '32px 16px', height: '100%', gap: '32px', width: '100%',
+          boxSizing: 'border-box'
+        }}>
+          {/* Logo / Branding */}
+          <div style={{
+            fontFamily: 'var(--serif)', fontSize: '42px', fontWeight: '700',
+            color: 'var(--rust)', marginTop: '6vh', letterSpacing: '0.02em'
+          }}>
+            Shelf
+          </div>
+
+          {/* Search Header (Minimal Mode) */}
+          <div style={{ width: '100%' }}>
+            <Header
+              searchEngine={searchEngine}
+              setSearchEngine={setSearchEngine}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              handleSearchSubmit={handleSearchSubmit}
+              mobileMinimal={true}
+            />
+          </div>
+
+          {/* Shortcuts Grid */}
+          <div style={{ width: '100%', marginTop: '8px' }}>
+            <BookShelf
+              displayedShortcuts={displayedShortcuts}
+              openEditModal={openEditModal}
+              openAddModal={openAddModal}
+            />
+          </div>
+        </div>
+
+        {/* Modal Dialog for Adding / Editing Website Shortcut book cover */}
+        <BookShortcutModal
+          isModalOpen={isModalOpen}
+          setIsModalOpen={setIsModalOpen}
+          editId={editId}
+          saveShortcut={saveShortcut}
+          shortcutTitle={shortcutTitle}
+          setShortcutTitle={setShortcutTitle}
+          shortcutSubtitle={shortcutSubtitle}
+          setShortcutSubtitle={setShortcutSubtitle}
+          shortcutAuthor={shortcutAuthor}
+          setShortcutAuthor={setShortcutAuthor}
+          shortcutUrl={shortcutUrl}
+          setShortcutUrl={setShortcutUrl}
+          shortcutKey={shortcutKey}
+          setShortcutKey={setShortcutKey}
+          selectedGradient={selectedGradient}
+          setSelectedGradient={setSelectedGradient}
+          shortcutCustomImage={shortcutCustomImage}
+          setShortcutCustomImage={setShortcutCustomImage}
+          deleteShortcut={deleteShortcut}
+        />
+      </>
+    );
+  }
 
   return (
     <>

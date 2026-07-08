@@ -4,6 +4,7 @@ import { Pencil, Trash2, CheckSquare, Check, X, Plus } from 'lucide-react';
 import { BOOK_COLORS, INITIAL_SHORTCUTS } from '../constants';
 import BookShortcutModal from './BookShortcutModal';
 import { uGet, uSet } from '../utils/userKey';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const SHORTCUTS_KEY = 'homepage_shortcuts';
 
@@ -229,22 +230,28 @@ export default function BookmarksSection() {
     e.preventDefault();
   };
 
+  const isMobile = useIsMobile();
+
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--surface-bg)', marginLeft: '80px' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: isMobile ? 'calc(100vh - 62px)' : '100vh', overflow: 'hidden', background: 'var(--surface-bg)', marginLeft: isMobile ? '0' : '80px', paddingBottom: isMobile ? '80px' : '0' }}>
       {/* Header bar */}
       <header style={{
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '24px 40px',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        padding: isMobile ? '16px' : '24px 40px',
         borderBottom: '1px solid var(--border-color)',
-        background: 'var(--bg-color)'
+        background: 'var(--bg-color)',
+        flexWrap: isMobile ? 'wrap' : 'nowrap',
+        gap: isMobile ? '10px' : '0'
       }}>
         <div>
-          <h1 style={{ fontFamily: 'var(--serif)', fontSize: '28px', color: 'var(--forest-deep)', margin: 0 }}>Saved Bookmarks</h1>
+          <h1 style={{ fontFamily: 'var(--serif)', fontSize: isMobile ? '22px' : '28px', color: 'var(--forest-deep)', margin: 0 }}>Saved Bookmarks</h1>
+          {!isMobile && (
           <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--brass)', margin: '4px 0 0' }}>
             Arrange your digital bookshelf by dragging, editing, or managing bookmarks.
           </p>
+          )}
         </div>
 
         {/* Action Controls */}
@@ -344,7 +351,7 @@ export default function BookmarksSection() {
       </header>
 
       {/* Main Bookshelf Scroll Area */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '40px' }} className="library-shelf-container">
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px' : '40px' }} className="library-shelf-container">
         {bookmarks.length === 0 ? (
           <div style={{
             display: 'flex',
@@ -361,8 +368,8 @@ export default function BookmarksSection() {
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, 135px)',
-            gap: '32px',
+            gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(100px, 1fr))' : 'repeat(auto-fill, 135px)',
+            gap: isMobile ? '16px' : '32px',
             maxWidth: '1200px',
             margin: '0 auto'
           }}>

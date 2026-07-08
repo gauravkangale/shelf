@@ -17,7 +17,7 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
         const tk = localStorage.getItem('shelf_auth_token');
         if (!tk || user.id === currentUserId) return;
 
-        const res = await fetch('/api/friends/status', {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/friends/status`, {
           headers: { Authorization: `Bearer ${tk}` }
         });
 
@@ -48,7 +48,7 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
     try {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
-      const res = await fetch('/api/friends/request', {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/friends/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
         body: JSON.stringify({ friendId: user.id }),
@@ -66,7 +66,7 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
     try {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
-      const res = await fetch('/api/friends/cancel', {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/friends/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
         body: JSON.stringify({ friendId: user.id }),

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Search, Send, ArrowLeft, BookOpen, Trash2, Users, MessageSquare, Image, X, MoreVertical, BookUser, MessageCircle, ExternalLink, Download } from 'lucide-react';
+import { Search, Send, ArrowLeft, BookOpen, Trash2, Users, MessageSquare, Image, X, MoreVertical, BookUser, MessageCircle, ExternalLink, Download, UserMinus } from 'lucide-react';
 import Avatar from './Avatar';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatTime(dateVal) {
@@ -230,7 +231,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
       return;
     }
     try {
-      const res = await fetchWithTimeout(`/api/chat/${friend.id}`, {
+      const res = await fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/api/chat/${friend.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       }, 10000);
 
@@ -387,7 +388,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
     setMessages(prev => [...prev, optimistic]);
 
     try {
-      const res = await fetchWithTimeout('/api/chat', {
+      const res = await fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ receiverId: friend.id, messageText: text, imageUrl: image })
@@ -416,7 +417,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
     if (!window.confirm('Delete this message?')) return;
     setMessages(prev => prev.filter(m => m.id !== msgId));
     try {
-      await fetchWithTimeout(`/api/chat/message/${msgId}`, {
+      await fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/api/chat/message/${msgId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -435,7 +436,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
 
     try {
       await Promise.all(ids.map(id =>
-        fetchWithTimeout(`/api/chat/message/${id}`, {
+        fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/api/chat/message/${id}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` }
         }, 8000)
@@ -452,7 +453,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
     try {
       const ids = messages.map(m => m.id);
       await Promise.all(ids.map(id =>
-        fetchWithTimeout(`/api/chat/message/${id}`, {
+        fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/api/chat/message/${id}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` }
         }, 8000)
@@ -1238,10 +1239,11 @@ function ChatView({ friend, currentUser, token, onBack }) {
 }
 
 // ─── Friend Card (list item) ──────────────────────────────────────────────────
-function FriendCard({ friend, active, onClick }) {
+function FriendCard({ friend, active, onClick, isFriend, onUnfriend }) {
   const name = friend.name || friend.username || 'Reader';
   const book = friend.currentBook;
   const isUnseen = friend.unreadCount > 0;
+  const [hovered, setHovered] = useState(false);
 
   return (
     <div
@@ -1252,15 +1254,18 @@ function FriendCard({ friend, active, onClick }) {
         background: active ? 'rgba(0,0,0,0.04)' : 'var(--surface-bg)',
         border: active ? '1.5px solid var(--accent-color)' : '1.5px solid var(--border-color)',
         cursor: 'pointer', transition: 'all 0.2s',
-        boxShadow: active ? '0 4px 12px rgba(0,0,0,0.05)' : '0 2px 6px rgba(0,0,0,0.02)'
+        boxShadow: active ? '0 4px 12px rgba(0,0,0,0.05)' : '0 2px 6px rgba(0,0,0,0.02)',
+        position: 'relative'
       }}
       onMouseEnter={e => {
+        setHovered(true);
         if (!active) {
           e.currentTarget.style.borderColor = 'var(--accent-color)';
           e.currentTarget.style.transform = 'translateY(-1px)';
         }
       }}
       onMouseLeave={e => {
+        setHovered(false);
         if (!active) {
           e.currentTarget.style.borderColor = 'var(--border-color)';
           e.currentTarget.style.transform = '';
@@ -1307,7 +1312,29 @@ function FriendCard({ friend, active, onClick }) {
       </div>
 
       {/* Message action/badge count container */}
-      <div style={{ flexShrink: 0 }}>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {isFriend && hovered && (
+          <button
+            title="Unfriend Reader"
+            onClick={(e) => {
+              e.stopPropagation();
+              onUnfriend(friend.id);
+            }}
+            style={{
+              width: '28px', height: '28px', borderRadius: '50%',
+              background: 'rgba(211, 47, 47, 0.1)',
+              border: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', transition: 'all 0.2s',
+              zIndex: 10
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211, 47, 47, 0.2)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211, 47, 47, 0.1)'; }}
+          >
+            <UserMinus size={13} style={{ color: '#d32f2f' }} />
+          </button>
+        )}
+
         {isUnseen ? (
           <div style={{
             minWidth: '22px', height: '22px', padding: '0 6px', borderRadius: '11px',
@@ -1320,13 +1347,15 @@ function FriendCard({ friend, active, onClick }) {
             {friend.unreadCount}
           </div>
         ) : (
-          <div style={{
-            width: '28px', height: '28px', borderRadius: '50%',
-            background: 'var(--accent-light, rgba(179,53,51,0.05))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <MessageSquare size={13} style={{ color: 'var(--accent-color)' }} />
-          </div>
+          (!isFriend || !hovered) && (
+            <div style={{
+              width: '28px', height: '28px', borderRadius: '50%',
+              background: 'var(--accent-light, rgba(179,53,51,0.05))',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <MessageSquare size={13} style={{ color: 'var(--accent-color)' }} />
+            </div>
+          )
         )}
       </div>
     </div>
@@ -1351,6 +1380,32 @@ export default function FriendsSection({ setActiveTab }) {
   const [currentUser, setCurrentUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem('shelf_current_user') || 'null'); } catch { return null; }
   });
+
+  const handleUnfriend = async (friendId) => {
+    if (!window.confirm("Are you sure you want to remove this friend?")) return;
+    try {
+      const res = await fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/api/friends/remove`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ friendId })
+      }, 8000);
+      if (res.ok) {
+        setFriends(prev => prev.filter(f => f.id !== friendId));
+        if (selectedChat?.id === friendId) {
+          setSelectedChat(null);
+        }
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to remove friend');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to connect to the server');
+    }
+  };
 
   const debouncedSearch = useDebounce(searchQuery, 350);
 
@@ -1443,7 +1498,7 @@ export default function FriendsSection({ setActiveTab }) {
   const fetchFriends = useCallback(async () => {
     if (!token) { setFriends([]); setFriendsLoading(false); return; }
     try {
-      const res = await fetchWithTimeout('/api/friends', {
+      const res = await fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/api/friends`, {
         headers: { Authorization: `Bearer ${token}` }
       }, 8000);
       if (res.ok) {
@@ -1461,7 +1516,7 @@ export default function FriendsSection({ setActiveTab }) {
   const fetchTeammates = useCallback(async () => {
     if (!token) { setTeammates([]); setTeammatesLoading(false); return; }
     try {
-      const res = await fetchWithTimeout('/api/teammates/mutual', {
+      const res = await fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/api/teammates/mutual`, {
         headers: { Authorization: `Bearer ${token}` }
       }, 8000);
       if (res.ok) {
@@ -1497,7 +1552,7 @@ export default function FriendsSection({ setActiveTab }) {
     if (debouncedSearch.length < 2) { setSearchResults([]); return; }
     let cancelled = false;
     setSearchLoading(true);
-    fetchWithTimeout(`/api/users/search?q=${encodeURIComponent(debouncedSearch)}`, {
+    fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/api/users/search?q=${encodeURIComponent(debouncedSearch)}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     }, 8000)
       .then(r => r.ok ? r.json() : { users: [] })
@@ -1541,12 +1596,14 @@ export default function FriendsSection({ setActiveTab }) {
     setTeammates(prev => prev.map(t => t.id === friend.id ? { ...t, unreadCount: 0 } : t));
   };
 
+  const isMobile = useIsMobile();
+
   return (
     <div style={{
-      marginLeft: '80px',
+      marginLeft: isMobile ? '0' : '80px',
       flex: 1,
-      width: 'calc(100% - 80px)',
-      height: '100vh',
+      width: isMobile ? '100%' : 'calc(100% - 80px)',
+      height: isMobile ? 'calc(100vh - 62px)' : '100vh',
       background: 'var(--bg-color, #f5f4ee)',
       fontFamily: 'var(--font-sans)',
       display: 'flex',
@@ -1555,10 +1612,10 @@ export default function FriendsSection({ setActiveTab }) {
 
       {/* LEFT SIDEBAR PANEL (Contacts/List) */}
       <div style={{
-        width: '360px',
-        borderRight: '1px solid var(--border-color)',
+        width: isMobile ? '100%' : '360px',
+        borderRight: isMobile ? 'none' : '1px solid var(--border-color)',
         background: 'var(--surface-bg)',
-        display: 'flex',
+        display: selectedChat && isMobile ? 'none' : 'flex',
         flexDirection: 'column',
         height: '100%',
         flexShrink: 0
@@ -1566,7 +1623,7 @@ export default function FriendsSection({ setActiveTab }) {
 
         {/* Sidebar Header */}
         <div style={{
-          padding: '24px 20px 16px',
+          padding: isMobile ? '16px 14px 12px' : '24px 20px 16px',
           borderBottom: '1px solid var(--border-color)',
           background: 'var(--surface-bg)',
           flexShrink: 0
@@ -1641,6 +1698,8 @@ export default function FriendsSection({ setActiveTab }) {
                     friend={u}
                     active={selectedChat?.id === u.id}
                     onClick={() => handleSelectChat(u)}
+                    isFriend={friends.some(f => f.id === u.id)}
+                    onUnfriend={handleUnfriend}
                   />
                 ))
               )}
@@ -1670,6 +1729,8 @@ export default function FriendsSection({ setActiveTab }) {
                 friend={u}
                 active={selectedChat?.id === u.id}
                 onClick={() => handleSelectChat(u)}
+                isFriend={friends.some(f => f.id === u.id)}
+                onUnfriend={handleUnfriend}
               />
             ))
           )}
@@ -1680,7 +1741,7 @@ export default function FriendsSection({ setActiveTab }) {
       <div style={{
         flex: 1,
         height: '100%',
-        display: 'flex',
+        display: !selectedChat && isMobile ? 'none' : 'flex',
         flexDirection: 'column'
       }} className={`chat-right-pane ${!selectedChat ? 'chat-pane-hidden-mobile' : ''}`}>
         {selectedChat ? (

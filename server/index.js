@@ -105,6 +105,29 @@ try {
 
 const resend = new Resend(process.env.RESEND_API_KEY || 'dummy_key');
 
+async function sendOtpEmail(email, otp, purpose) {
+  let subject = 'Your Shelf OTP';
+  let html = `<p>Your code is: <strong>${otp}</strong></p>`;
+  
+  if (purpose === 'signup') {
+    subject = 'Welcome to Shelf! Verify your email';
+    html = `<p>Thanks for joining Shelf! Your verification code is: <strong>${otp}</strong></p>`;
+  } else if (purpose === 'reset') {
+    subject = 'Reset Your Shelf Password';
+    html = `<p>You requested a password reset. Your OTP is: <strong>${otp}</strong></p><p>If you didn't request this, ignore this email.</p>`;
+  } else {
+    subject = 'Your Shelf Login Code';
+    html = `<p>Your login code is: <strong>${otp}</strong></p>`;
+  }
+
+  await resend.emails.send({
+    from: process.env.FROM_EMAIL || 'Shelf <onboarding@resend.dev>',
+    to: email,
+    subject,
+    html
+  });
+}
+
 async function sql(strings, ...values) {
   if (!isInMemory && neonClient) {
     try {
@@ -761,8 +784,22 @@ function getInMemoryNotifications(userId) {
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://shelf-books.web.app',
+  'https://shelf-books.firebaseapp.com',
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+];
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g., curl, mobile apps)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    }
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -999,14 +1036,20 @@ async function initDb() {
   await sql`
     DO $$
     BEGIN
-      IF NOT EXISTS (
+      -- Drop old broken JWT-based policy if it exists
+      IF EXISTS (
         SELECT 1 FROM pg_policies WHERE tablename = 'messages' AND policyname = 'Messages privacy policy'
       ) THEN
-        CREATE POLICY "Messages privacy policy" ON messages
-          USING (
-            sender_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid 
-            OR receiver_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid
-          );
+        DROP POLICY "Messages privacy policy" ON messages;
+      END IF;
+      -- Service-role (neondb_owner) bypasses RLS as a superuser.
+      -- Security is enforced at Express middleware level via JWT.
+      -- This policy allows the service role full access.
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'messages' AND policyname = 'Service role full access'
+      ) THEN
+        CREATE POLICY "Service role full access" ON messages
+          USING (true) WITH CHECK (true);
       END IF;
     END
     $$;
@@ -1057,17 +1100,24 @@ async function initDb() {
     await sql`
       DO $$
       BEGIN
+        -- Drop old broken policy if it exists
+        IF EXISTS (
+          SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can update own profile'
+        ) THEN
+          DROP POLICY "Users can update own profile" ON users;
+        END IF;
+        -- Allow reading all profiles (public info)
         IF NOT EXISTS (
           SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can read all profiles'
         ) THEN
           CREATE POLICY "Users can read all profiles" ON users FOR SELECT USING (true);
         END IF;
+        -- Service role has full access (neondb_owner bypasses as superuser anyway)
         IF NOT EXISTS (
-          SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can update own profile'
+          SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Service full access users'
         ) THEN
-          CREATE POLICY "Users can update own profile" ON users FOR UPDATE 
-            USING (id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid)
-            WITH CHECK (id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid);
+          CREATE POLICY "Service full access users" ON users
+            USING (true) WITH CHECK (true);
         END IF;
       END
       $$;
@@ -1138,7 +1188,12 @@ app.post('/api/auth/forgot-password/send-otp', async (req, res) => {
       WHERE id = ${users[0].id}
     `;
     
-    console.log(`\n\n=== PASSWORD RESET OTP for ${cleanId}: ${otp} ===\n\n`);
+    try {
+      await sendOtpEmail(cleanId, otp, 'reset');
+    } catch (emailErr) {
+      console.error('📧 Resend email send failed. Logging OTP to console instead:', emailErr.message);
+      console.log(`\n\n=== PASSWORD RESET OTP for ${cleanId}: ${otp} ===\n\n`);
+    }
     
     res.json({ success: true, message: 'OTP sent' });
   } catch (err) {
@@ -1318,16 +1373,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
     // For signup: verify username is unique
     if (purpose === 'signup') {
       if (name) {
-        const cleanName = name.trim();
-        // Assume username will be based on name or provided by user later.
-        // Let's check if the generated username is taken.
-        let generatedUsername = cleanName.toLowerCase().replace(/\\s+/g, '');
-        if (generatedUsername) {
-          const existingName = await sql`SELECT id FROM users WHERE LOWER(username) = LOWER(${generatedUsername})`;
-          if (existingName.length > 0) {
-            return res.status(409).json({ error: 'The generated username is already taken. Please try a different name or login.' });
-          }
-        }
+        // We no longer block OTP here. The user will select a final username in Step 3.
       }
     }
 
@@ -1351,8 +1397,9 @@ app.post('/api/auth/send-otp', async (req, res) => {
         WHERE id = ${existing[0].id}
       `;
     } else {
-      // Generate initial username from name or email
-      let initialUsername = name ? name.trim().toLowerCase().replace(/\\s+/g, '') : (isEmail ? cleanId.split('@')[0] : 'user');
+      // Generate initial username from name or email and append random suffix
+      let baseName = name ? name.trim().toLowerCase().replace(/\s+/g, '') : (isEmail ? cleanId.split('@')[0] : 'user');
+      let initialUsername = baseName + '_' + crypto.randomUUID().slice(0, 6);
 
       if (isEmail) {
         await sql`
@@ -1510,14 +1557,16 @@ app.post('/api/auth/google', async (req, res) => {
 
     let initialUsername = payload.name ? payload.name.trim().toLowerCase().replace(/\\s+/g, '') : payload.email.split('@')[0];
 
-    // Upsert user
+    // Upsert user — INSERT for new users, UPDATE only google_id link for existing ones.
+    // NEVER overwrite name/username/avatar that the user has personally set.
     const [user] = await sql`
       INSERT INTO users (email, username, name, avatar_url, google_id, is_verified)
       VALUES (${payload.email}, ${initialUsername}, ${payload.name}, ${payload.picture}, ${payload.sub}, true)
       ON CONFLICT (email) DO UPDATE
         SET google_id   = EXCLUDED.google_id,
-            avatar_url  = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
             is_verified = true
+            -- name, username, avatar_url are intentionally NOT updated on conflict
+            -- so users who've personalised their profile keep their changes
       RETURNING *
     `;
 
@@ -3446,6 +3495,148 @@ app.get('/api/suggest', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch suggestions' });
   }
 });
+// ── DELETE /api/friends/remove ────────────────────────────────────────────────
+app.delete('/api/friends/remove', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const { friendId } = req.body;
+    if (!friendId) return res.status(400).json({ error: 'friendId is required.' });
+
+    const id1 = userId < friendId ? userId : friendId;
+    const id2 = userId < friendId ? friendId : userId;
+
+    if (isInMemory) {
+      inMemoryStore.friendships = inMemoryStore.friendships.filter(
+        f => !((f.user_id_1 === id1 && f.user_id_2 === id2))
+      );
+      saveDb();
+    } else {
+      await sql`
+        DELETE FROM friendships
+        WHERE user_id_1 = ${id1} AND user_id_2 = ${id2}
+      `;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Remove friend error:', err);
+    res.status(500).json({ error: 'Failed to remove friend.' });
+  }
+});
+
+// ── GET /api/users/profile/:username ──────────────────────────────────────────
+app.get('/api/users/profile/:username', async (req, res) => {
+  try {
+    const username = req.params.username.trim().toLowerCase();
+    
+    let target;
+    if (isInMemory) {
+      target = inMemoryStore.users.find(u => (u.username || '').toLowerCase() === username);
+    } else {
+      const rows = await sql`
+        SELECT id, name, username, avatar_url, bio
+        FROM users
+        WHERE LOWER(username) = ${username}
+      `;
+      target = rows[0];
+    }
+
+    if (!target) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const publicUser = {
+      id: target.id,
+      name: target.name,
+      username: target.username,
+      avatar_url: target.avatar_url || target.avatar,
+      bio: target.bio
+    };
+
+    let friendshipStatus = 'none';
+    let senderId = null;
+    const auth = req.headers.authorization;
+    if (auth && auth.startsWith('Bearer ')) {
+      const token = auth.slice(7).trim();
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const visitorId = decoded.sub;
+
+        if (visitorId && visitorId !== target.id) {
+          const id1 = visitorId < target.id ? visitorId : target.id;
+          const id2 = visitorId < target.id ? target.id : visitorId;
+
+          let friendship;
+          if (isInMemory) {
+            friendship = inMemoryStore.friendships.find(f => f.user_id_1 === id1 && f.user_id_2 === id2);
+          } else {
+            const rows = await sql`
+              SELECT status, sender_id 
+              FROM friendships 
+              WHERE user_id_1 = ${id1} AND user_id_2 = ${id2}
+            `;
+            friendship = rows[0];
+          }
+
+          if (friendship) {
+            senderId = friendship.sender_id;
+            if (friendship.status === 'accepted') {
+              friendshipStatus = 'accepted';
+            } else if (friendship.status === 'pending') {
+              friendshipStatus = friendship.sender_id === visitorId ? 'pending_outgoing' : 'pending_incoming';
+            }
+          }
+        }
+      } catch (err) {
+        // ignore invalid token for public profile lookup
+      }
+    }
+
+    res.json({
+      user: publicUser,
+      friendshipStatus,
+      senderId
+    });
+  } catch (err) {
+    console.error('Fetch public profile error:', err);
+    res.status(500).json({ error: 'Failed to fetch profile.' });
+  }
+});
+
+// ── DELETE /api/users/account ────────────────────────────────────────────────
+app.delete('/api/users/account', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+
+    if (isInMemory) {
+      inMemoryStore.users = inMemoryStore.users.filter(u => u.id !== userId);
+      inMemoryStore.friendships = inMemoryStore.friendships.filter(
+        f => f.user_id_1 !== userId && f.user_id_2 !== userId
+      );
+      inMemoryStore.messages = inMemoryStore.messages.filter(
+        m => m.sender_id !== userId && m.receiver_id !== userId
+      );
+      inMemoryStore.notifications = inMemoryStore.notifications.filter(
+        n => n.recipient_id !== userId && n.sender_id !== userId
+      );
+      saveDb();
+    } else {
+      await sql`
+        DELETE FROM users WHERE id = ${userId}
+      `;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete account error:', err);
+    res.status(500).json({ error: 'Failed to delete account.' });
+  }
+});
+// ─── Serve Static Frontend (For Production Deployment) ──────────
+const distPath = path.join(__dirname, '../dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('/login.html', (req, res) => res.sendFile(path.join(distPath, 'login.html')));
+  app.get('/*path', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+}
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 initDb().then(() => {

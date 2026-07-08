@@ -92,7 +92,7 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
     }
 
     try {
-      const res = await fetch('/api/preferences', {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/preferences`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -139,7 +139,7 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
     const token = localStorage.getItem('shelf_auth_token');
     if (!token) return;
     try {
-      await fetch('/api/preferences', {
+      await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/preferences`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

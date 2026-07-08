@@ -5,14 +5,17 @@ import BookmarksSection from './components/BookmarksSection';
 import FriendsSection from './components/FriendsSection';
 import SettingsPage from './components/SettingsPage';
 import ReadingTimer from './components/ReadingTimer';
+import UserProfilePage from './components/UserProfilePage';
 import './App.css';
 import { userKey } from './utils/userKey';
 import { cachedFetch } from './utils/apiCache';
 import { applyTheme, DEFAULT_THEME_KEY } from './utils/themePresets';
 import ProfileModal from './components/ProfileModal';
+import { useIsMobile } from './hooks/useIsMobile';
 
 // ── Profile Settings Sub-component ──
 function ProfileSettings({ activeProfile, updateActiveProfile }) {
+  const isMobile = useIsMobile();
   const [name, setName] = useState(activeProfile.name || '');
   const [username, setUsername] = useState(activeProfile.username || '');
   const [email, setEmail] = useState(activeProfile.email || '');
@@ -82,14 +85,15 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
       maxHeight: '100vh',
       overflowY: 'auto',
       width: '100%',
-      padding: '40px',
-      marginLeft: '80px',
+      padding: isMobile ? '20px' : '40px',
+      marginLeft: isMobile ? '0' : '80px',
       boxSizing: 'border-box',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
       background: 'var(--bg-color)',
-      minHeight: '100vh'
+      minHeight: isMobile ? 'auto' : '100vh',
+      paddingBottom: isMobile ? '120px' : '40px'
     }}>
       <div style={{ maxWidth: '520px', width: '100%' }}>
 
@@ -398,7 +402,26 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
             )}
 
             {/* Retro Action Button */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+              <button
+                type="button"
+                onClick={() => window.open(profileUrl, '_blank')}
+                style={{
+                  padding: '12px 24px',
+                  fontFamily: 'var(--serif)',
+                  fontWeight: '600',
+                  fontSize: '15px',
+                  letterSpacing: '0.02em',
+                  background: 'transparent',
+                  color: 'var(--rust)',
+                  border: '1px solid var(--rust)',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                View Public Card
+              </button>
               <button type="submit" className="stamp-btn" style={{
                 padding: '12px 28px',
                 fontFamily: 'var(--serif)',
@@ -425,6 +448,17 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
 }
 
 function App() {
+  const isMobile = useIsMobile();
+
+  // If path is a public profile card /u/username, render UserProfilePage directly
+  const path = window.location.pathname;
+  if (path.startsWith('/u/')) {
+    const targetUsername = path.split('/u/')[1]?.trim();
+    if (targetUsername) {
+      return <UserProfilePage targetUsername={targetUsername} />;
+    }
+  }
+
   // Navigation active tab with URL hash persistence
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.replace('#', '').split('/')[0];
@@ -563,7 +597,7 @@ function App() {
       const token = localStorage.getItem('shelf_auth_token');
       if (!token) return;
       try {
-        const res = await fetch('/api/auth/me', {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (!res.ok) {
@@ -579,15 +613,18 @@ function App() {
         if (!serverUser?.id) return;
 
         // Update localStorage with real server data
+        // IMPORTANT: Only sync the server UUID (id) and fill missing fields.
+        // NEVER overwrite fields the user has personally set (name, username, avatar, bio).
         const current = JSON.parse(localStorage.getItem('shelf_current_user') || '{}');
         const updated = {
           ...current,
-          id: serverUser.id,
-          username: serverUser.username || current.username,
-          name: serverUser.name || current.name,
-          avatar_url: serverUser.avatar_url || current.avatar_url,
-          avatar: serverUser.avatar_url || current.avatar,
-          bio: serverUser.bio || current.bio
+          id: serverUser.id, // Always sync the real DB UUID
+          // Only fill in fields that are completely absent locally
+          username: current.username || serverUser.username,
+          name: current.name || serverUser.name,
+          avatar_url: current.avatar_url || serverUser.avatar_url,
+          avatar: current.avatar || serverUser.avatar_url,
+          bio: current.bio || serverUser.bio
         };
         localStorage.setItem('shelf_current_user', JSON.stringify(updated));
 
@@ -697,7 +734,7 @@ function App() {
 
     if (token) {
       try {
-        const res = await fetch('/api/users/profile', {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/profile`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -873,7 +910,7 @@ function App() {
       if (!token) return;
 
       try {
-        const data = await cachedFetch('/api/notes', {
+        const data = await cachedFetch(`${import.meta.env.VITE_API_BASE_URL}/api/notes`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }, 15000);
 
@@ -944,7 +981,7 @@ function App() {
           const oldItem = oldFlat.find(x => x.id === item.id);
           if (!oldItem || oldItem.text !== item.text || oldItem.completed !== item.completed || oldItem.dateKey !== item.dateKey) {
             saveOps.push(
-              fetch('/api/notes', {
+              fetch(`${import.meta.env.VITE_API_BASE_URL}/api/notes`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -967,7 +1004,7 @@ function App() {
           const newItem = newFlat.find(x => x.id === item.id);
           if (!newItem) {
             deleteOps.push(
-              fetch(`/api/notes/${item.id}`, {
+              fetch(`${import.meta.env.VITE_API_BASE_URL}/api/notes/${item.id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
               })
@@ -1024,7 +1061,7 @@ function App() {
   const renderContent = () => {
     const placeholderStyle = {
       flex: 1,
-      padding: '40px',
+      padding: isMobile ? '20px' : '40px',
       fontFamily: 'var(--sans)',
       color: 'var(--ink)',
       display: 'flex',
@@ -1032,9 +1069,9 @@ function App() {
       justifyContent: 'center',
       alignItems: 'center',
       textAlign: 'center',
-      height: '100vh',
+      height: isMobile ? 'calc(100vh - 62px)' : '100vh',
       boxSizing: 'border-box',
-      marginLeft: '80px'
+      marginLeft: isMobile ? '0' : '80px'
     };
 
     const headingStyle = {

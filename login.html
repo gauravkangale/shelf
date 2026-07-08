@@ -76,7 +76,7 @@
     .drawer {
       width: 100%;
       max-width: 520px;
-      min-width: 360px;
+      min-width: 300px;
     }
 
     .tabs {
@@ -557,10 +557,18 @@
       }
 
       .stamp {
-        width: 66px;
-        height: 66px;
-        top: 18px;
-        right: 16px
+        width: 56px;
+        height: 56px;
+        top: 14px;
+        right: 12px;
+      }
+      
+      .stamp-inner {
+        font-size: 7px;
+      }
+      
+      .stamp-inner b {
+        font-size: 8px;
       }
 
       h1.heading {
@@ -606,6 +614,7 @@
         <div class="step-dots" id="stepDots">
           <div class="dot active" id="dot0"></div>
           <div class="dot" id="dot1"></div>
+          <div class="dot" id="dot2"></div>
         </div>
 
         <!-- ── STEP 1: Identifier + (signup: name) ── -->
@@ -960,7 +969,8 @@
       });
     });
 
-    const API = '/api';
+    const RAILWAY_URL = "https://shelf-backend-production-872d.up.railway.app";
+    const API = RAILWAY_URL + "/api";
     let mode = 'signin'; // 'signin' | 'signup'
     let currentStep = 1;
     let resendTimer = null;
@@ -984,7 +994,7 @@
     const step2Success = document.getElementById('step2Success');
     const sendBtnText = document.getElementById('sendBtnText');
     const sendSpinner = document.getElementById('sendSpinner');
-    const sendOtpBtn = document.getElementById('sendOtpBtn');
+    const sendOtpBtn = document.getElementById('authSubmitBtn');
     const verifyBtnText = document.getElementById('verifyBtnText');
     const verifySpinner = document.getElementById('verifySpinner');
     const verifyOtpBtn = document.getElementById('verifyOtpBtn');
@@ -996,6 +1006,7 @@
     const switchBtn = document.getElementById('switchBtn');
     const dot0 = document.getElementById('dot0');
     const dot1 = document.getElementById('dot1');
+    const dot2 = document.getElementById('dot2');
     const googleWrap = document.getElementById('googleWrap');
     const orDivider = document.getElementById('orDivider');
     const formContentWrapper = document.getElementById('formContentWrapper');
@@ -1042,7 +1053,7 @@
         return;
       }
 
-      if (!password || password.length < 8) {
+      if (!isSignup && (!password || password.length < 8)) {
         showError(step1Error, step1ErrorMsg, 'Password must be at least 8 characters.');
         return;
       }
@@ -1099,18 +1110,22 @@
           heading.textContent = 'Set up your library card';
           stampText.innerHTML = '<b>SHELF</b>NEW<br>CARD';
           nameField.classList.remove('hidden');
-          document.getElementById('passwordFieldContainer').classList.remove('hidden');
+          document.getElementById('passwordFieldContainer').classList.add('hidden');
+          document.getElementById('forgotContainer').classList.add('hidden');
+          if (dot2) dot2.style.display = 'block';
           switchPrompt.textContent = 'Already a member?';
           switchBtn.textContent = 'Check in instead';
         } else {
-        eyebrow.textContent = 'Returning member';
-        heading.textContent = 'Welcome back to your shelf';
-        stampText.innerHTML = '<b>SHELF</b>MEMBER<br>ACCESS';
-        nameField.classList.add('hidden');
-        document.getElementById('passwordFieldContainer').classList.remove('hidden');
-        switchPrompt.textContent = 'New here?';
-        switchBtn.textContent = 'Get a library card';
-      }
+          eyebrow.textContent = 'Returning member';
+          heading.textContent = 'Welcome back to your shelf';
+          stampText.innerHTML = '<b>SHELF</b>MEMBER<br>ACCESS';
+          nameField.classList.add('hidden');
+          document.getElementById('passwordFieldContainer').classList.remove('hidden');
+          document.getElementById('forgotContainer').classList.remove('hidden');
+          if (dot2) dot2.style.display = 'none';
+          switchPrompt.textContent = 'New here?';
+          switchBtn.textContent = 'Get a library card';
+        }
 
 
         // Clean up classes after animation runs
@@ -1133,6 +1148,7 @@
       }
       dot0.className = 'dot active';
       dot1.className = 'dot';
+      if (dot2) dot2.className = 'dot';
       clearMsg(step1Error);
       clearMsg(step2Error);
       clearMsg(step2Success);
@@ -1147,6 +1163,7 @@
       orDivider.classList.add('hidden');
       dot0.className = 'dot done';
       dot1.className = 'dot active';
+      if (dot2) dot2.className = 'dot';
       const isEmail = identifier.includes('@');
       const masked = isEmail
         ? identifier.replace(/(.{2})(.*)(@.*)/, '$1****$3')
@@ -1347,41 +1364,43 @@
     }
 
     // ── Google OAuth ──────────────────────────────────────────────────────────
+    // Google Client ID is public and safe to hardcode in frontend
+    const GOOGLE_CLIENT_ID = "395473790381-h57840f5n5gj5snaalcioovi3hm6ks50.apps.googleusercontent.com";
+
     async function initGoogleSignIn() {
-      const { res, data, error } = await safeFetchJson(`${API}/auth/config`);
-      if (!error && res && res.ok && data.googleClientId) {
-        googleEnabled = true;
-        try {
-          google.accounts.id.initialize({
-            client_id: data.googleClientId,
-            callback: handleCredentialResponse,
-            context: 'signin',
-            ux_mode: 'popup',
-            auto_prompt: false
-          });
-          google.accounts.id.renderButton(
-            document.getElementById('googleButton'),
-            {
-              type: 'standard',
-              shape: 'rectangular',
-              theme: 'outline',
-              text: 'signin_with',
-              size: 'large',
-              logo_alignment: 'left',
-              width: 280
-            }
-          );
-          if (currentStep === 1) {
-            googleWrap.classList.remove('hidden');
-            orDivider.classList.remove('hidden');
+      if (!GOOGLE_CLIENT_ID) {
+        googleEnabled = false;
+        googleWrap.classList.add('hidden');
+        orDivider.classList.add('hidden');
+        return;
+      }
+      googleEnabled = true;
+      try {
+        google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleCredentialResponse,
+          context: 'signin',
+          ux_mode: 'popup',
+          auto_prompt: false
+        });
+        google.accounts.id.renderButton(
+          document.getElementById('googleButton'),
+          {
+            type: 'standard',
+            shape: 'rectangular',
+            theme: 'outline',
+            text: 'signin_with',
+            size: 'large',
+            logo_alignment: 'left',
+            width: 280
           }
-        } catch (e) {
-          console.error('Failed to initialize Google Sign-In:', e);
-          googleEnabled = false;
-          googleWrap.classList.add('hidden');
-          orDivider.classList.add('hidden');
+        );
+        if (currentStep === 1) {
+          googleWrap.classList.remove('hidden');
+          orDivider.classList.remove('hidden');
         }
-      } else {
+      } catch (e) {
+        console.error('Failed to initialize Google Sign-In:', e);
         googleEnabled = false;
         googleWrap.classList.add('hidden');
         orDivider.classList.add('hidden');
@@ -1430,7 +1449,16 @@
       step2El.classList.add('hidden');
       googleWrap.classList.add('hidden');
       orDivider.classList.add('hidden');
-      document.getElementById('stepDots').style.display = 'none';
+      
+      if (mode === 'signup') {
+        document.getElementById('stepDots').style.display = 'flex';
+        dot0.className = 'dot done';
+        dot1.className = 'dot done';
+        if (dot2) dot2.className = 'dot active';
+      } else {
+        document.getElementById('stepDots').style.display = 'none';
+      }
+
       document.getElementById('step3').classList.remove('hidden');
       document.getElementById('switchLine').style.display = 'none';
 
@@ -1503,7 +1531,7 @@
       setBtnLoading(btn, btnText, spinner, true);
       clearMsg(errorEl);
 
-      const { res, data, error } = await safeFetchJson('/api/users/profile', {
+      const { res, data, error } = await safeFetchJson(API + '/users/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1570,7 +1598,7 @@
       setBtnLoading(btn, btnText, spinner, true);
       clearMsg(errorEl, successEl);
 
-      const { res, data, error } = await safeFetchJson('/api/auth/forgot-username', {
+      const { res, data, error } = await safeFetchJson(API + '/auth/forgot-username', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })

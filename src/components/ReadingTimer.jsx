@@ -15,7 +15,7 @@ export default function DesktopNeumorphicDashboard({ username }) {
         const token = localStorage.getItem('shelf_auth_token');
         if (!token) return false;
         try {
-            const res = await fetch('/api/preferences', {
+            const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/preferences`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -24,7 +24,7 @@ export default function DesktopNeumorphicDashboard({ username }) {
                 body: JSON.stringify({ preferences: newPrefs })
             });
             return res.ok;
-  // eslint-disable-next-line no-unused-vars
+            // eslint-disable-next-line no-unused-vars
         } catch (err) {
             return false;
         }
@@ -92,7 +92,7 @@ export default function DesktopNeumorphicDashboard({ username }) {
             const token = localStorage.getItem('shelf_auth_token');
             if (!token) return;
             try {
-                const res = await fetch('/api/preferences', {
+                const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/preferences`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -102,9 +102,9 @@ export default function DesktopNeumorphicDashboard({ username }) {
                         uSet('dashboard_image', data.preferences.dashboard_image);
                     }
                 }
-   
-  // eslint-disable-next-line no-unused-vars
-  // eslint-disable-next-line no-empty
+
+                // eslint-disable-next-line no-unused-vars
+                // eslint-disable-next-line no-empty
             } catch (err) { }
         };
         fetchPrefs();

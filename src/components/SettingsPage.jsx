@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
   // eslint-disable-next-line no-unused-vars
 import { LogOut, Shield, Palette, Bell, Lock, Trash2, ChevronRight, Settings as SettingsIcon, Pipette } from 'lucide-react';
 import { THEME_LIST, THEME_COLOR_ROLES, applyTheme, DEFAULT_THEME_KEY, getSavedThemeOverrides } from '../utils/themePresets';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 export default function SettingsPage({ activeProfile, updateActiveProfile, profileAccounts, deleteProfileAccount, switchProfileAccount }) {
   const isLoggedIn = !!localStorage.getItem('shelf_auth_token');
@@ -151,7 +152,7 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
     const token = localStorage.getItem('shelf_auth_token');
     if (!token) return;
     try {
-      await fetch('/api/users/profile', {
+      await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
@@ -202,14 +203,39 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
     }, 1000);
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
     if (window.confirm('Are you absolutely sure? This action cannot be undone.')) {
+      const token = localStorage.getItem('shelf_auth_token');
+      if (token) {
+        try {
+          setLoading(true);
+          const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/account`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (!res.ok) {
+            const d = await res.json();
+            setFeedback(`error: ${d.error || 'Failed to delete account on server'}`);
+            setLoading(false);
+            return;
+          }
+        } catch (err) {
+          console.error(err);
+          setFeedback('error: Failed to contact the server');
+          setLoading(false);
+          return;
+        }
+      }
+
       deleteProfileAccount({ stopPropagation: () => { } }, activeProfile.id);
       if (profileAccounts.length > 1) {
         const remaining = profileAccounts.filter(p => p.id !== activeProfile.id);
         switchProfileAccount(remaining[0].id);
       }
       setFeedback('success: Account deleted');
+      setLoading(false);
     }
   };
 
@@ -756,13 +782,17 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
     { id: 'account', label: 'Account', icon: Lock, render: renderAccountSection }
   ].filter(sec => isLoggedIn || sec.id === 'appearance');
 
+  const isMobile = useIsMobile();
+
   return (
     <div style={{
       display: 'flex',
-      gap: '24px',
-      padding: '32px',
-      marginLeft: '80px',
-      minHeight: '100vh',
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: isMobile ? '16px' : '24px',
+      padding: isMobile ? '16px' : '32px',
+      marginLeft: isMobile ? '0' : '80px',
+      minHeight: isMobile ? 'auto' : '100vh',
+      paddingBottom: isMobile ? '90px' : '32px',
       background: 'var(--bg-color)',
       boxSizing: 'border-box'
     }}>
@@ -780,11 +810,13 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
       `}</style>
       {/* Sidebar Navigation */}
       <div style={{
-        width: '220px',
+        width: isMobile ? '100%' : '220px',
         flexShrink: 0,
         display: 'flex',
-        flexDirection: 'column',
-        gap: '8px'
+        flexDirection: isMobile ? 'row' : 'column',
+        gap: '8px',
+        overflowX: isMobile ? 'auto' : 'visible',
+        paddingBottom: isMobile ? '8px' : '0'
       }}>
         <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '12px' }}>Settings</div>
         {sections.map(section => {
@@ -823,8 +855,9 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
         background: 'var(--panel-bg)',
         border: '1px solid var(--border-color)',
         borderRadius: '12px',
-        padding: '32px',
-        width: '1000px'
+        padding: isMobile ? '16px' : '32px',
+        maxWidth: isMobile ? '100%' : '1000px',
+        width: isMobile ? '100%' : '1000px'
       }}>
         {feedback && (
           <div style={{

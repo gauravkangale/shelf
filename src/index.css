@@ -1835,3 +1835,285 @@ body {
   box-shadow: 0 2px 4px rgba(179, 57, 51, 0.2) !important;
   opacity: 1;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   ██  MOBILE VIEW  ██  (< 768px)
+   Desktop CSS above this line is NEVER touched.
+   ══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Bottom Navigation Bar ────────────────────────────────────── */
+  .sidebar {
+    position: fixed;
+    width: calc(100vw - 32px);
+    height: 64px;
+    top: auto;
+    bottom: 24px;
+    left: 16px;
+    flex-direction: row;
+    padding: 0 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    background-color: var(--sidebar-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+    z-index: 9999;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    width: 100%;
+    justify-content: space-evenly;
+    align-items: center;
+    gap: 0;
+    margin: 0;
+    padding: 0 4px;
+  }
+
+  /* Settings icon flows into the bottom bar */
+  .sidebar-bottom {
+    display: contents !important;
+  }
+
+  .nav-item {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    padding: 0;
+    border-radius: 14px;
+  }
+
+  .logo-container,
+  .vertical-sidebar-clock {
+    display: none !important;
+  }
+
+  /* Hide collapse button inside sidebar-bottom on mobile */
+  .collapse-btn {
+    display: none !important;
+  }
+
+  /* ── Main Layout ──────────────────────────────────────────────── */
+  .app-container {
+    flex-direction: column;
+    padding: 0;
+  }
+
+  .main-layout {
+    margin-left: 0 !important;
+    grid-template-columns: 1fr !important;
+    padding-bottom: 120px;
+    min-height: auto;
+  }
+
+  /* ── Content Area ─────────────────────────────────────────────── */
+  .content-area {
+    padding: 20px 20px 24px;
+    gap: 18px;
+  }
+
+  /* ── Header / Search ──────────────────────────────────────────── */
+  .top-header {
+    flex-wrap: wrap;
+    gap: 10px;
+    height: auto;
+    padding: 0;
+  }
+
+  .search-wrapper {
+    max-width: 100% !important;
+    order: 2;
+    flex: 1 1 100% !important;
+  }
+
+  .search-input {
+    font-size: 14px;
+    padding: 10px 80px 10px 40px;
+    border-radius: 20px;
+  }
+
+  .search-icon {
+    left: 14px;
+  }
+
+  .search-engine-selector {
+    right: 6px;
+  }
+
+  .engine-pill {
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+
+  .profile-area {
+    order: 1;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  /* ── Welcome Card ─────────────────────────────────────────────── */
+  .welcome-card-container {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .welcome-title {
+    font-size: 24px;
+    margin-bottom: 10px;
+    line-height: 1.25;
+  }
+
+  .welcome-name {
+    font-size: inherit;
+  }
+
+  .welcome-text {
+    font-size: 13px;
+    max-width: 100%;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  .primary-btn {
+    padding: 10px 20px;
+    font-size: 13px;
+    border-radius: 20px;
+  }
+
+  /* Decoration image — compact on mobile */
+  .open-book-banner {
+    min-height: 120px;
+    border-radius: 12px;
+  }
+
+  .open-book-graphic {
+    width: 200px;
+    height: 120px;
+  }
+
+  /* ── Book Shelf Grid ──────────────────────────────────────────── */
+  .book-shelf {
+    gap: 14px;
+    padding: 10px 2px 18px 2px;
+    scroll-snap-type: x mandatory;
+  }
+
+  .book-card, .add-book-card {
+    flex: 0 0 105px;
+    scroll-snap-align: start;
+  }
+
+  .book-cover-wrapper {
+    border-radius: 5px;
+  }
+
+  .book-card-title {
+    font-size: 11px !important;
+  }
+
+  .book-card-subtitle {
+    font-size: 10px !important;
+  }
+
+  .section-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .section-title {
+    font-size: 17px !important;
+  }
+
+  .section-actions {
+    gap: 6px !important;
+  }
+
+  /* ── Right Sidebar (stacks below on mobile) ───────────────────── */
+  .info-sidebar {
+    padding: 18px 14px;
+    gap: 18px;
+    border-left: none !important;
+    border-top: 1px solid var(--border-color);
+  }
+
+  /* ── Current Book Card ────────────────────────────────────────── */
+  .current-book-card {
+    padding: 14px;
+  }
+
+  /* ── Calendar Timeline ────────────────────────────────────────── */
+  .calendar-header {
+    padding: 0;
+    gap: 6px;
+  }
+
+  .calendar-scroll-container {
+    padding: 8px 0;
+  }
+
+  /* ── Notification Panel — fullscreen on mobile ────────────────── */
+  .notif-panel {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 62px !important;
+    width: 100vw !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+    z-index: 10000 !important;
+    animation: mobileSlideUp 0.25s ease-out !important;
+  }
+
+  .notif-panel-list {
+    max-height: none !important;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  /* ── Find Readers Panel — fullscreen on mobile ────────────────── */
+  .find-readers-panel {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 62px !important;
+    width: 100vw !important;
+    border-radius: 0 !important;
+    z-index: 10000 !important;
+    animation: mobileSlideUp 0.25s ease-out !important;
+  }
+
+  .find-readers-list {
+    max-height: none !important;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  /* ── Profile Modal — better on mobile ─────────────────────────── */
+  .profile-modal-overlay {
+    padding: 12px !important;
+    align-items: flex-end !important;
+  }
+
+  /* ── Modals / Overlays ────────────────────────────────────────── */
+  .delete-confirm-overlay {
+    padding: 16px;
+  }
+
+  .delete-confirm-dialog {
+    max-width: 92vw;
+  }
+
+  /* ── Notes Section ────────────────────────────────────────────── */
+  .notes-input-section {
+    padding: 10px;
+  }
+
+  /* ── Mobile Slide Up Animation ────────────────────────────────── */
+  @keyframes mobileSlideUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}

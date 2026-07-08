@@ -64,7 +64,7 @@ export default function RightSidebar({
     if (!token) return;
 
     try {
-      const res = await fetch('/api/local-data', {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/local-data`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -118,7 +118,7 @@ export default function RightSidebar({
       const token = localStorage.getItem('shelf_auth_token');
       if (!token) return;
       try {
-        const res = await fetch('/api/books/current', {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/books/current`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -164,7 +164,7 @@ export default function RightSidebar({
     const token = localStorage.getItem('shelf_auth_token');
     if (token) {
       try {
-        await fetch('/api/books/current', {
+        await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/books/current`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

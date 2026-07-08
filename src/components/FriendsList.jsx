@@ -193,8 +193,8 @@ export default function FriendsList() {
     const headers = { 'Authorization': `Bearer ${authToken}` };
 
     // Instant hydrate from memory cache while network refreshes
-    const cachedChats = getCached('/api/chats/recent', { headers });
-    const cachedTeammates = getCached('/api/teammates/mutual', { headers });
+    const cachedChats = getCached(`${import.meta.env.VITE_API_BASE_URL}/api/chats/recent`, { headers });
+    const cachedTeammates = getCached(`${import.meta.env.VITE_API_BASE_URL}/api/teammates/mutual`, { headers });
     if (cachedChats) {
       setRecentChats(cachedChats.chats || []);
     }
@@ -204,8 +204,8 @@ export default function FriendsList() {
 
     try {
       const [chatsData, teammatesData] = await Promise.all([
-        cachedFetch('/api/chats/recent', { headers }, 25000, signal),
-        cachedFetch('/api/teammates/mutual', { headers }, 25000, signal)
+        cachedFetch(`${import.meta.env.VITE_API_BASE_URL}/api/chats/recent`, { headers }, 25000, signal),
+        cachedFetch(`${import.meta.env.VITE_API_BASE_URL}/api/teammates/mutual`, { headers }, 25000, signal)
       ]);
       const filteredChats = (chatsData.chats || []).filter(c => c.type !== 'cohort');
       setRecentChats(filteredChats);
@@ -241,7 +241,7 @@ export default function FriendsList() {
         setTeammates(JSON.parse(localStorage.getItem(userKey(TM_CACHE)) || '[]'));
   // eslint-disable-next-line no-empty
       } catch { }
-      invalidateCache('/api/teammates');
+      invalidateCache(`${import.meta.env.VITE_API_BASE_URL}/api/teammates`);
       handleActivityUpdate();
     };
 
@@ -265,8 +265,8 @@ export default function FriendsList() {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
       const endpoint = chat.type === 'cohort'
-        ? `/api/chat/cohort/${chat.id}`
-        : `/api/chat/${chat.id}`;
+        ? `${import.meta.env.VITE_API_BASE_URL}/api/chat/cohort/${chat.id}`
+        : `${import.meta.env.VITE_API_BASE_URL}/api/chat/${chat.id}`;
       const res = await fetch(endpoint, {
         headers: { 'Authorization': `Bearer ${tk}` }
       });
@@ -354,8 +354,8 @@ export default function FriendsList() {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
       const endpoint = activeChat.type === 'cohort'
-        ? '/api/chat/cohort'
-        : '/api/chat';
+        ? `${import.meta.env.VITE_API_BASE_URL}/api/chat/cohort`
+        : `${import.meta.env.VITE_API_BASE_URL}/api/chat`;
       const body = activeChat.type === 'cohort'
         ? { groupId: activeChat.id, messageText: text }
         : { receiverId: activeChat.id, messageText: text };
@@ -396,7 +396,7 @@ export default function FriendsList() {
     try {
       const tk = localStorage.getItem('shelf_auth_token');
       const headers = tk ? { 'Authorization': `Bearer ${tk}` } : {};
-      const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}&limit=8`, { headers });
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/search?q=${encodeURIComponent(q)}&limit=8`, { headers });
       if (res.ok) {
         const data = await res.json();
         setSuggestResults(data.users || []);
@@ -424,7 +424,7 @@ export default function FriendsList() {
     try {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) { setSentRequests(p => new Set([...p, userId])); return; }
-      await fetch('/api/friends/request', {
+      await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/friends/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tk}` },
         body: JSON.stringify({ friendId: userId }),
@@ -454,8 +454,8 @@ export default function FriendsList() {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
       const endpoint = chat.type === 'cohort'
-        ? '/api/chat/cohort'
-        : '/api/chat';
+        ? `${import.meta.env.VITE_API_BASE_URL}/api/chat/cohort`
+        : `${import.meta.env.VITE_API_BASE_URL}/api/chat`;
       const body = chat.type === 'cohort'
         ? { groupId: chat.id, messageText: text }
         : { receiverId: chat.id, messageText: text };

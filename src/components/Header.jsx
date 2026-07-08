@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Bell, Trash2, UserPlus, X, MessageSquare, Flame, BookOpen, Trophy, Users, Check, UserCheck, Clock, ArrowLeft } from 'lucide-react';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const NOTIF_ICONS = {
   friend_request: { Icon: UserPlus, bg: '#e8f0fe', color: '#3a6df0' },
@@ -188,7 +189,7 @@ function FindReadersPanel({ onClose, onProfileClick }) {
         const tk = localStorage.getItem('shelf_auth_token');
         const headers = tk ? { Authorization: `Bearer ${tk}` } : {};
         const res = await fetch(
-          `/api/users/search?q=${encodeURIComponent(query.trim())}&limit=8`,
+          `${import.meta.env.VITE_API_BASE_URL}/api/users/search?q=${encodeURIComponent(query.trim())}&limit=8`,
           { headers }
         );
         if (res.ok) {
@@ -217,7 +218,7 @@ function FindReadersPanel({ onClose, onProfileClick }) {
     try {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
-      const res = await fetch('/api/friends/request', {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/friends/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
         body: JSON.stringify({ friendId: userId }),
@@ -391,6 +392,7 @@ export default function Header({
   searchQuery,
   setSearchQuery,
   handleSearchSubmit,
+  mobileMinimal = false,
 }) {
   const [isDragOverTrash, setIsDragOverTrash] = useState(false);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
@@ -407,6 +409,28 @@ export default function Header({
   const notifRef = useRef(null);
   const findReadersRef = useRef(null);
   const pollIntervalRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  // ── Cmd+X / Ctrl+X → instantly focus & select the search bar ───────────────
+  useEffect(() => {
+    const handleGlobalKey = (e) => {
+      // navigator.platform is deprecated — use userAgent for reliable Mac detection
+      const isMac = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent);
+      const trigger = isMac ? (e.metaKey && e.key === 'x') : (e.ctrlKey && e.key === 'x');
+      if (!trigger || !searchInputRef.current) return;
+      // Don't steal X from text editing in OTHER inputs/textareas
+      const tag = document.activeElement?.tagName;
+      const isEditingElsewhere =
+        (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) &&
+        document.activeElement !== searchInputRef.current;
+      if (isEditingElsewhere) return;
+      e.preventDefault();
+      searchInputRef.current.focus();
+      searchInputRef.current.select();
+    };
+    document.addEventListener('keydown', handleGlobalKey);
+    return () => document.removeEventListener('keydown', handleGlobalKey);
+  }, []);
 
   const currentUser = (() => {
     try { return JSON.parse(localStorage.getItem('shelf_current_user') || 'null'); } catch { return null; }
@@ -423,29 +447,38 @@ export default function Header({
     }
     setSelectedIndex(-1);
     clearTimeout(searchTimeoutRef.current);
-    searchTimeoutRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/suggest?q=${encodeURIComponent(searchQuery.trim())}`);
-        if (res.ok) {
-          const data = await res.json();
-          // data format from Google: ["query", ["sugg1", "sugg2", ...]]
+    searchTimeoutRef.current = setTimeout(() => {
+      // Use JSONP approach to call Google suggestions directly from the browser
+      // This avoids needing a backend proxy and works on deployed sites
+      const callbackName = `_gsugg_${Date.now()}`;
+      const script = document.createElement('script');
+      script.src = `https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(searchQuery.trim())}&callback=${callbackName}`;
+
+      window[callbackName] = (data) => {
+        try {
           if (data && data[1]) {
-            setSuggestions(data[1].slice(0, 5)); // show up to 5
+            setSuggestions(data[1].slice(0, 5));
             setShowSuggestions(true);
           }
-        }
-   
-  // eslint-disable-next-line no-unused-vars
-  // eslint-disable-next-line no-empty
-      } catch (err) { }
-    }, 20);
+        } catch (_) { /* ignore */ }
+        delete window[callbackName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+      };
+
+      script.onerror = () => {
+        delete window[callbackName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+      };
+
+      document.head.appendChild(script);
+    }, 200);
   }, [searchQuery, searchEngine]);
 
   const fetchNotifications = useCallback(async () => {
     const tk = localStorage.getItem('shelf_auth_token');
     if (!tk) { setNotifications([]); return; }
     try {
-      const res = await fetch('/api/notifications', {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/notifications`, {
         headers: { Authorization: `Bearer ${tk}` }
       });
       if (res.ok) {
@@ -504,6 +537,7 @@ export default function Header({
   }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
+  const isMobile = useIsMobile();
 
   // Dismiss a notification
   const dismissNotification = async (id) => {
@@ -511,7 +545,7 @@ export default function Header({
     try {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
-      await fetch(`/api/notifications/${id}`, {
+      await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/notifications/${id}`, {
         method: 'DELETE', headers: { Authorization: `Bearer ${tk}` }
       });
   // eslint-disable-next-line no-empty
@@ -523,7 +557,7 @@ export default function Header({
     try {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
-      await fetch('/api/notifications/mark-read', {
+      await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/notifications/mark-read`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
         body: JSON.stringify({})
@@ -540,7 +574,7 @@ export default function Header({
     try {
       const tk = localStorage.getItem('shelf_auth_token');
       if (!tk) return;
-      await fetch('/api/friends/respond', {
+      await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/friends/respond`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
         body: JSON.stringify({
@@ -607,6 +641,7 @@ export default function Header({
         }} style={{ flex: 1, maxWidth: '480px', position: 'relative' }}>
           <Search size={18} className="search-icon" />
           <input
+            ref={searchInputRef}
             type="text"
             className="search-input"
             autoFocus
@@ -689,9 +724,11 @@ export default function Header({
         </form>
 
         {/* Header Action Buttons */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
+        {!mobileMinimal && (
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
 
-          {/* Trash Drop Zone */}
+            {/* Trash Drop Zone — hidden on mobile (no drag & drop on touch) */}
+            {!isMobile && (
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragOverTrash(true); }}
             onDragLeave={() => setIsDragOverTrash(false)}
@@ -709,6 +746,7 @@ export default function Header({
           >
             <Trash2 size={17} />
           </div>
+          )}
 
           {/* Notification Bell */}
           <div ref={notifRef} style={{ position: 'relative' }}>
@@ -789,7 +827,8 @@ export default function Header({
               />
             )}
           </div>
-        </div>
+          </div>
+        )}
       </header>
 
       {/* Delete Confirmation Dialog */}
