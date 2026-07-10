@@ -1074,6 +1074,74 @@ async function initDb() {
       created_at    TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS notes (
+      id          TEXT PRIMARY KEY,
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      date_key    TEXT NOT NULL,
+      text        TEXT NOT NULL,
+      completed   BOOLEAN DEFAULT false,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
+  try {
+    await sql`ALTER TABLE notes ENABLE ROW LEVEL SECURITY`;
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE tablename = 'notes' AND policyname = 'Users can read own notes'
+        ) THEN
+          CREATE POLICY "Users can read own notes" ON notes FOR SELECT
+            USING (user_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid);
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE tablename = 'notes' AND policyname = 'Users can insert own notes'
+        ) THEN
+          CREATE POLICY "Users can insert own notes" ON notes FOR INSERT
+            WITH CHECK (user_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid);
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE tablename = 'notes' AND policyname = 'Users can update own notes'
+        ) THEN
+          CREATE POLICY "Users can update own notes" ON notes FOR UPDATE
+            USING (user_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid)
+            WITH CHECK (user_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid);
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE tablename = 'notes' AND policyname = 'Users can delete own notes'
+        ) THEN
+          CREATE POLICY "Users can delete own notes" ON notes FOR DELETE
+            USING (user_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid);
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE tablename = 'notes' AND policyname = 'Service full access notes'
+        ) THEN
+          CREATE POLICY "Service full access notes" ON notes
+            USING (true) WITH CHECK (true);
+        END IF;
+      END
+      $$;
+    `;
+  } catch (err) {
+    console.error('⚠️ Notes RLS policy warning:', err.message);
+  }
+
+  try {
+    await sql`DROP TRIGGER IF EXISTS trigger_notes_updated_at ON notes`;
+    await sql`
+      CREATE TRIGGER trigger_notes_updated_at
+        BEFORE UPDATE ON notes
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+    `;
+  } catch (e) {}
+
   console.log('✅ DB tables ready');
 
   try {
@@ -1090,9 +1158,11 @@ async function initDb() {
   } catch (err) { }
   try {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`;
-   
   // eslint-disable-next-line no-unused-vars
-  // eslint-disable-next-line no-empty
+  } catch (err) { }
+  try {
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS bookmarks JSONB DEFAULT '[]'::jsonb`;
+  // eslint-disable-next-line no-unused-vars
   } catch (err) { }
 
   try {
@@ -1830,6 +1900,52 @@ app.post('/api/shortcuts', verifyToken, async (req, res) => {
   }
 });
 
+// ── GET /api/bookmarks ────────────────────────────────────────────────────────
+app.get('/api/bookmarks', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const [user] = await sql`
+      SELECT bookmarks FROM users WHERE id = ${userId}
+    `;
+    const raw = (user && user.bookmarks) || [];
+    const bookmarks = raw.map(b => ({
+      id: b.id,
+      title: b.title,
+      url: b.url,
+      subtitle: b.subtitle || null,
+      author: b.author || null,
+      gradient: b.gradient || null,
+      shortcutKey: b.shortcutKey || b.shortcut_key || null,
+      customImage: b.customImage || b.custom_image || null,
+      coverImage: b.coverImage || b.cover_image || null
+    }));
+    res.json({ bookmarks });
+  } catch (err) {
+    console.error('Fetch bookmarks error:', err);
+    res.status(500).json({ error: 'Failed to fetch bookmarks.' });
+  }
+});
+
+// ── POST /api/bookmarks ───────────────────────────────────────────────────────
+app.post('/api/bookmarks', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const { bookmarks } = req.body;
+    if (!Array.isArray(bookmarks)) {
+      return res.status(400).json({ error: 'bookmarks must be an array' });
+    }
+    await sql`
+      UPDATE users
+      SET bookmarks = ${JSON.stringify(bookmarks)}::jsonb
+      WHERE id = ${userId}
+    `;
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Save bookmarks error:', err);
+    res.status(500).json({ error: 'Failed to save bookmarks.' });
+  }
+});
+
 // ── GET /api/preferences ────────────────────────────────────────────────────────
 app.get('/api/preferences', verifyToken, async (req, res) => {
   try {
@@ -1882,6 +1998,10 @@ app.delete('/api/local-data', verifyToken, async (req, res) => {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
+    
+    // Also delete notes from DB
+    await sql`DELETE FROM notes WHERE user_id = ${userId}`;
+
     res.json({ message: 'Local data deleted successfully' });
   } catch (err) {
     console.error('Delete local data error:', err);
@@ -1893,17 +2013,12 @@ app.delete('/api/local-data', verifyToken, async (req, res) => {
 app.get('/api/notes', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const [user] = await sql`SELECT username FROM users WHERE id = ${userId}`;
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const localData = readUserData(user.username);
-    const rawNotes = localData.daily_notes || [];
-    const notes = rawNotes.map(n => ({
-      id: n.id,
-      dateKey: n.dateKey || n.date_key,
-      text: n.text || n.note_text,
-      completed: !!n.completed
-    }));
-    res.json({ notes });
+    const dbNotes = await sql`
+      SELECT id, date_key as "dateKey", text, completed 
+      FROM notes 
+      WHERE user_id = ${userId}
+    `;
+    res.json({ notes: dbNotes });
   } catch (err) {
     console.error('Fetch notes error:', err);
     res.status(500).json({ error: 'Failed to fetch notes.' });
@@ -1919,28 +2034,16 @@ app.post('/api/notes', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'id, dateKey, and text are required' });
     }
 
-    const [user] = await sql`SELECT username FROM users WHERE id = ${userId}`;
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const localData = readUserData(user.username);
-    let notes = localData.daily_notes || [];
-    if (!Array.isArray(notes)) notes = [];
-
-    const existingIndex = notes.findIndex(n => n.id === id);
-    const newNote = {
-      id: String(id),
-      dateKey,
-      text,
-      completed: !!completed,
-      created_at: existingIndex >= 0 ? (notes[existingIndex].created_at || new Date().toISOString()) : new Date().toISOString()
-    };
-
-    if (existingIndex >= 0) {
-      notes[existingIndex] = newNote;
-    } else {
-      notes.push(newNote);
-    }
-    localData.daily_notes = notes;
-    writeUserData(user.username, localData);
+    const noteId = String(id);
+    await sql`
+      INSERT INTO notes (id, user_id, date_key, text, completed, updated_at)
+      VALUES (${noteId}, ${userId}, ${dateKey}, ${text}, ${completed}, NOW())
+      ON CONFLICT (id) DO UPDATE
+      SET date_key = EXCLUDED.date_key,
+          text = EXCLUDED.text,
+          completed = EXCLUDED.completed,
+          updated_at = NOW()
+    `;
     res.json({ success: true });
   } catch (err) {
     console.error('Save note error:', err);
@@ -1952,19 +2055,12 @@ app.post('/api/notes', verifyToken, async (req, res) => {
 app.delete('/api/notes/:id', verifyToken, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const noteId = req.params.id;
+    const noteId = String(req.params.id);
 
-    const [user] = await sql`SELECT username FROM users WHERE id = ${userId}`;
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    
-    const localData = readUserData(user.username);
-    let notes = localData.daily_notes || [];
-    if (!Array.isArray(notes)) notes = [];
-
-    notes = notes.filter(n => n.id !== noteId);
-    localData.daily_notes = notes;
-    writeUserData(user.username, localData);
-
+    await sql`
+      DELETE FROM notes 
+      WHERE id = ${noteId} AND user_id = ${userId}
+    `;
     res.json({ success: true });
   } catch (err) {
     console.error('Delete note error:', err);

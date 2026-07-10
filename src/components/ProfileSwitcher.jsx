@@ -1,6 +1,5 @@
-  // eslint-disable-next-line no-unused-vars
-import React from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Trash2, LogOut, AlertTriangle, X, UserPlus } from 'lucide-react';
 
 export default function ProfileSwitcher({
   activeProfile,
@@ -28,93 +27,136 @@ export default function ProfileSwitcher({
   newProfileAccAvatar,
   // eslint-disable-next-line no-unused-vars
   setNewProfileAccAvatar,
-  setActiveTab
+  setActiveTab,
+  handleCompleteLogout
 }) {
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  // Only show logout for real accounts, not the default guest
+  const isLoggedIn = activeProfile && activeProfile.id !== 'guest';
+  const otherAccounts = profileAccounts.filter(acc => acc.id !== activeProfile.id);
+
+  const onLogoutConfirm = async () => {
+    setLoggingOut(true);
+    await new Promise(r => setTimeout(r, 500));
+    handleCompleteLogout();
+    // Reset in case we stayed on the page (account switched, not redirected)
+    setLoggingOut(false);
+    setShowLogoutConfirm(false);
+  };
+
   return (
-    <div className="profile-switcher-popup" onClick={(e) => e.stopPropagation()}>
-      <div className="active-account-header">
+    <div className="ps-popup" onClick={(e) => e.stopPropagation()}>
+
+      {/* ── Active account header ─────────────────────────────── */}
+      <div className="ps-header">
         <img
-          src={activeProfile.avatar || "profile.png"}
-          className="active-account-avatar"
+          src={activeProfile.avatar || 'profile.png'}
+          className="ps-avatar"
           alt={activeProfile.name}
+          onError={e => { e.target.src = 'profile.png'; }}
         />
-        <div className="active-account-details">
-          <div className="active-account-name">{activeProfile.name} {activeProfile.username ? `(@${activeProfile.username})` : ''}</div>
-          <div className="active-account-email">{activeProfile.email}</div>
-        </div>
-
-        {/* Pencil Edit Icon to manage accounts */}
-        <button
-          className="pencil-edit-icon"
-          style={{ position: 'absolute', top: '16px', right: '16px', opacity: 1 }}
-          title="Edit Profile"
-          onClick={() => setActiveTab('settings')}
-        >
-          <Pencil size={12} />
-        </button>
-      </div>
-
-      <div className="account-list-title">Switch Account</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {profileAccounts.filter(acc => acc.id !== activeProfile.id).map(acc => (
-          <div
-            key={acc.id}
-            className="account-option-row"
-            onClick={() => switchProfileAccount(acc.id)}
-          >
-            <div className="account-option-avatar">
-              {acc.name.charAt(0)}
-            </div>
-            <div className="account-option-info">
-              <span className="account-option-name">{acc.name} {acc.username ? `(@${acc.username})` : ''}</span>
-              <span className="account-option-email">{acc.email}</span>
-            </div>
-            {isEditingProfileAccounts && (
-              <button
-                className="btn-danger"
-                style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '10px' }}
-                onClick={(e) => deleteProfileAccount(e, acc.id)}
-              >
-                <Trash2 size={12} />
-              </button>
+        <div className="ps-header-info">
+          <div className="ps-name">
+            {activeProfile.name}
+            {activeProfile.username && (
+              <span className="ps-username"> @{activeProfile.username}</span>
             )}
           </div>
-        ))}
+          <div className="ps-email">{activeProfile.email}</div>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
+      {/* ── Other accounts ───────────────────────────────────── */}
+      {otherAccounts.length > 0 && (
+        <div className="ps-section">
+          <div className="ps-section-label">Switch account</div>
+          <div className="ps-account-list">
+            {otherAccounts.map(acc => (
+              <div
+                key={acc.id}
+                className="ps-account-row"
+                onClick={() => switchProfileAccount(acc.id)}
+              >
+                <div className="ps-acc-avatar">{acc.name.charAt(0).toUpperCase()}</div>
+                <div className="ps-acc-info">
+                  <span className="ps-acc-name">
+                    {acc.name}
+                    {acc.username && <span className="ps-acc-handle"> @{acc.username}</span>}
+                  </span>
+                  <span className="ps-acc-email">{acc.email}</span>
+                </div>
+                {isEditingProfileAccounts && (
+                  <button
+                    className="ps-delete-btn"
+                    onClick={(e) => deleteProfileAccount(e, acc.id)}
+                    title="Remove account"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Actions ──────────────────────────────────────────── */}
+      <div className="ps-actions">
+
+        {/* Add account — navigates in new tab */}
         <button
-          className="add-account-row"
-          style={{
-            width: '100%',
-            background: 'none',
-            border: 'none',
-            textAlign: 'left',
-            cursor: 'pointer',
-            padding: '8px 10px',
-            fontSize: '13px',
-            color: 'var(--accent-color)',
-            fontWeight: '600',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            transition: 'var(--transition)'
-          }}
-          onClick={() => {
-            const width = 500;
-            const height = 650;
-            const left = window.screen.width / 2 - width / 2;
-            const top = window.screen.height / 2 - height / 2;
-            window.open(
-              '/login.html',
-              'GoogleSignIn',
-              `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes,scrollbars=yes`
-            );
-          }}
+          className="ps-add-btn"
+          onClick={() => { window.open('/login.html', '_blank'); }}
         >
-          + Add Profile Account
+          <UserPlus size={14} />
+          Add account
         </button>
+
+        {/* Log out — only shown when actually logged in */}
+        {isLoggedIn && !showLogoutConfirm && (
+          <button
+            className="ps-logout-btn"
+            onClick={() => setShowLogoutConfirm(true)}
+          >
+            <LogOut size={14} />
+            Log out
+          </button>
+        )}
+
+        {/* Inline confirmation */}
+        {isLoggedIn && showLogoutConfirm && (
+          <div className="ps-logout-confirm">
+            <div className="ps-logout-confirm-top">
+              <AlertTriangle size={15} className="ps-warn-icon" />
+              <span>Log out of this account?</span>
+            </div>
+            <p className="ps-logout-confirm-desc">
+              {otherAccounts.length > 0
+                ? "You'll be switched to another account."
+                : "You'll be signed out completely."}
+            </p>
+            <div className="ps-logout-confirm-btns">
+              <button
+                className="ps-lc-cancel"
+                onClick={() => setShowLogoutConfirm(false)}
+                disabled={loggingOut}
+              >
+                <X size={12} /> Cancel
+              </button>
+              <button
+                className="ps-lc-confirm"
+                onClick={onLogoutConfirm}
+                disabled={loggingOut}
+              >
+                {loggingOut
+                  ? <><span className="ps-spinner" /> Signing out…</>
+                  : <><LogOut size={12} /> Yes, log out</>}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

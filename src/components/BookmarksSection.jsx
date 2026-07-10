@@ -34,10 +34,12 @@ export default function BookmarksSection() {
     });
   };
 
+  const API = import.meta.env.VITE_API_BASE_URL;
+
   const [bookmarks, setBookmarks] = useState(() => {
     const saved = uGet(SHORTCUTS_KEY);
-    if (saved) {
-      if (saved.some(s => s.title === 'The World of Ice and Fire' || s.title === 'Fantastic Beasts')) {
+    if (saved && saved.length > 0) {
+      if (saved.some(s => s.title === 'The World of Ice and Fire' || s.title === 'Fantastic Beasts' || s.title === 'Reddit' || s.title === 'Google Calendar' || s.title === 'WhatsApp')) {
         uSet(SHORTCUTS_KEY, INITIAL_SHORTCUTS);
         return healShortcuts(INITIAL_SHORTCUTS);
       }
@@ -47,13 +49,136 @@ export default function BookmarksSection() {
   });
 
   useEffect(() => {
-    const reload = () => {
+    const fetchBookmarks = async () => {
+      const token = localStorage.getItem('shelf_auth_token');
+      const sourceStr = JSON.stringify(INITIAL_SHORTCUTS);
+      const lastSource = localStorage.getItem('homepage_shortcuts_source_bookmarks');
+
+      if (lastSource !== sourceStr) {
+        const healedDefault = healShortcuts(INITIAL_SHORTCUTS);
+        setBookmarks(healedDefault);
+        uSet(SHORTCUTS_KEY, healedDefault);
+        localStorage.setItem('homepage_shortcuts_source_bookmarks', sourceStr);
+
+        if (token) {
+          try {
+            await fetch(`${API}/api/bookmarks`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify({ bookmarks: INITIAL_SHORTCUTS })
+            });
+          } catch (e) {}
+        }
+        return;
+      }
+
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${API}/api/bookmarks`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.bookmarks && Array.isArray(data.bookmarks) && data.bookmarks.length > 0) {
+            let healed = healShortcuts(data.bookmarks);
+            if (healed.some(s => s.title === 'Reddit' || s.title === 'Google Calendar' || s.title === 'WhatsApp')) {
+              healed = healShortcuts(INITIAL_SHORTCUTS);
+            }
+            setBookmarks(healed);
+            uSet(SHORTCUTS_KEY, healed);
+          }
+        }
+      } catch { /* offline — use localStorage */ }
+    };
+    fetchBookmarks();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-fetch when user switches account
+  useEffect(() => {
+    const reload = async () => {
+      const token = localStorage.getItem('shelf_auth_token');
+      const sourceStr = JSON.stringify(INITIAL_SHORTCUTS);
+      const lastSource = localStorage.getItem('homepage_shortcuts_source_bookmarks');
+
+      if (lastSource !== sourceStr) {
+        const healedDefault = healShortcuts(INITIAL_SHORTCUTS);
+        setBookmarks(healedDefault);
+        uSet(SHORTCUTS_KEY, healedDefault);
+        localStorage.setItem('homepage_shortcuts_source_bookmarks', sourceStr);
+
+        if (token) {
+          try {
+            await fetch(`${API}/api/bookmarks`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify({ bookmarks: INITIAL_SHORTCUTS })
+            });
+          } catch (e) {}
+        }
+        return;
+      }
+
+      if (token) {
+        try {
+          const res = await fetch(`${API}/api/bookmarks`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const list = (data.bookmarks && data.bookmarks.length > 0) ? data.bookmarks : INITIAL_SHORTCUTS;
+            let healed = healShortcuts(list);
+            if (healed.some(s => s.title === 'Reddit' || s.title === 'Google Calendar' || s.title === 'WhatsApp')) {
+              healed = healShortcuts(INITIAL_SHORTCUTS);
+            }
+            setBookmarks(healed);
+            uSet(SHORTCUTS_KEY, healed);
+            return;
+          }
+        } catch { /* fall through */ }
+      }
       const saved = uGet(SHORTCUTS_KEY);
-      setBookmarks(healShortcuts(saved || INITIAL_SHORTCUTS));
+      if (saved && saved.some(s => s.title === 'Reddit' || s.title === 'Google Calendar' || s.title === 'WhatsApp')) {
+        uSet(SHORTCUTS_KEY, INITIAL_SHORTCUTS);
+        setBookmarks(healShortcuts(INITIAL_SHORTCUTS));
+      } else {
+        setBookmarks(healShortcuts((saved && saved.length > 0) ? saved : INITIAL_SHORTCUTS));
+      }
     };
     window.addEventListener('user-switched', reload);
     return () => window.removeEventListener('user-switched', reload);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sync bookmarks to DB
+  const syncBookmarksToDB = async (list) => {
+    const token = localStorage.getItem('shelf_auth_token');
+    if (!token) return;
+    try {
+      await fetch(`${API}/api/bookmarks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ bookmarks: list })
+      });
+    } catch { /* offline — localStorage is the fallback */ }
+  };
+
+  // Save bookmarks (localStorage + DB)
+  const saveBookmarksList = (newList) => {
+    setBookmarks(newList);
+    uSet(SHORTCUTS_KEY, newList);
+    syncBookmarksToDB(newList);
+  };
 
   // Selection mode states
   const [selectMode, setSelectMode] = useState(false);
@@ -74,13 +199,9 @@ export default function BookmarksSection() {
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
-  // Save bookmarks
-  const saveBookmarksList = (newList) => {
-    setBookmarks(newList);
-    uSet(SHORTCUTS_KEY, newList);
-  };
 
   // Selection handlers
+
   const toggleSelectMode = () => {
     setSelectMode(!selectMode);
     setSelectedIds([]);

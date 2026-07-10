@@ -111,3 +111,44 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trigger_users_updated_at
   BEFORE UPDATE ON users
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================
+-- NOTES TABLE
+-- ============================================================
+CREATE TABLE IF NOT EXISTS notes (
+  id          TEXT PRIMARY KEY,
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date_key    TEXT NOT NULL,
+  text        TEXT NOT NULL,
+  completed   BOOLEAN DEFAULT false,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for user lookup
+CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);
+
+-- Enable RLS
+ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies
+CREATE POLICY "Users can read own notes" ON notes FOR SELECT
+  USING (user_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid);
+
+CREATE POLICY "Users can insert own notes" ON notes FOR INSERT
+  WITH CHECK (user_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid);
+
+CREATE POLICY "Users can update own notes" ON notes FOR UPDATE
+  USING (user_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid)
+  WITH CHECK (user_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid);
+
+CREATE POLICY "Users can delete own notes" ON notes FOR DELETE
+  USING (user_id = (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid);
+
+CREATE POLICY "Service full access notes" ON notes
+  USING (true) WITH CHECK (true);
+
+-- Auto-update updated_at trigger
+CREATE TRIGGER trigger_notes_updated_at
+  BEFORE UPDATE ON notes
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

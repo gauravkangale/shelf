@@ -61,6 +61,69 @@ export const INITIAL_SHORTCUTS = [
     author: 'Me',
     url: 'https://portfolio-grvua.web.app',
     coverImage: '/5.jpeg',
+    shortcutKey: 'A'
+  },
+  {
+    id: 6,
+    title: 'ChatGPT',
+    subtitle: 'AI Assistant',
+    author: 'OpenAI',
+    url: 'https://chatgpt.com/',
+    coverImage: '/1.jpeg',
+    shortcutKey: 'C'
+  },
+  {
+    id: 7,
+    title: 'Instagram',
+    subtitle: 'Social Media',
+    author: 'Meta',
+    url: 'https://www.instagram.com/',
+    coverImage: '/2.jpeg',
+    shortcutKey: 'I'
+  },
+  {
+    id: 8,
+    title: 'Bookmarks',
+    subtitle: 'Shelf Books',
+    author: 'Me',
+    url: 'https://shelf-books.web.app/#bookmarks',
+    coverImage: '/3.jpeg',
+    shortcutKey: 'B'
+  },
+  {
+    id: 9,
+    title: 'Pinterest',
+    subtitle: 'Ideas & Inspiration',
+    author: 'Pinterest',
+    url: 'https://www.pinterest.com/',
+    coverImage: '/4.jpeg',
     shortcutKey: 'P'
+  },
+  {
+    id: 10,
+    title: 'X',
+    subtitle: 'Social Network',
+    author: 'X',
+    url: 'https://x.com/',
+    coverImage: '/5.jpeg',
+    shortcutKey: 'X'
+  },
+  {
+    id: 11,
+    title: 'Google Drive',
+    subtitle: 'Cloud Storage',
+    author: 'Google',
+    url: 'https://drive.google.com/',
+    coverImage: '/1.jpeg',
+    shortcutKey: 'D'
+  },
+  {
+    id: 12,
+    title: 'Notion',
+    subtitle: 'Workspace',
+    author: 'Notion',
+    url: 'https://www.notion.so/',
+    coverImage: '/2.jpeg',
+    shortcutKey: 'N'
   }
 ];

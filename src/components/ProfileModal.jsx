@@ -1,6 +1,6 @@
-  // eslint-disable-next-line no-unused-vars
+// eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect } from 'react';
-import { X, UserCheck, MessageSquare, Clock, UserPlus } from 'lucide-react';
+import { X, UserCheck, IdCard, Clock, UserPlus } from 'lucide-react';
 import Avatar from './Avatar';
 
 export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
@@ -57,7 +57,7 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
         setFriendStatus('pending_sent');
         onFriendAction?.(user.id, 'pending_sent');
       }
-  // eslint-disable-next-line no-empty
+      // eslint-disable-next-line no-empty
     } catch { } finally { setLoading(false); }
   };
 
@@ -75,7 +75,7 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
         setFriendStatus('none');
         onFriendAction?.(user.id, 'none');
       }
-  // eslint-disable-next-line no-empty
+      // eslint-disable-next-line no-empty
     } catch { } finally { setLoading(false); }
   };
 
@@ -187,20 +187,7 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
                     <button
                       onClick={() => {
                         onClose();
-                        const targetUser = {
-                          id: user.id,
-                          name: user.name || user.username,
-                          username: user.username,
-                          avatar_url: user.avatar_url || user.avatar,
-                          friendship_status: friendStatus
-                        };
-                        try {
-                          localStorage.setItem('shelf_active_chat_user', JSON.stringify(targetUser));
-                        } catch (e) {
-                          console.warn('LocalStorage error:', e);
-                        }
-                        window.dispatchEvent(new CustomEvent('open-direct-chat', { detail: { user: targetUser } }));
-                        window.location.hash = `library/chat/${user.id}`;
+                        window.location.href = `/u/${(user.username || 'reader').toLowerCase()}`;
                       }}
                       style={{
                         padding: '8px 18px', borderRadius: '16px', border: 'none',
@@ -209,7 +196,7 @@ export function ProfileModal({ user, onClose, currentUserId, onFriendAction }) {
                         display: 'flex', alignItems: 'center', gap: '6px'
                       }}
                     >
-                      <MessageSquare size={14} /> Message
+                      <IdCard size={14} /> Card
                     </button>
                   </div>
                 ) : friendStatus === 'pending_sent' ? (

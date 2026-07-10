@@ -19,7 +19,7 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
   const [name, setName] = useState(activeProfile.name || '');
   const [username, setUsername] = useState(activeProfile.username || '');
   const [email, setEmail] = useState(activeProfile.email || '');
-  const [avatar, setAvatar] = useState(activeProfile.avatar || './profile.jpeg');
+  const [avatar, setAvatar] = useState(activeProfile.avatar || '/profile.jpeg');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isHoveredPhoto, setIsHoveredPhoto] = useState(false);
@@ -30,7 +30,7 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
     setName(activeProfile.name || '');
     setUsername(activeProfile.username || '');
     setEmail(activeProfile.email || '');
-    setAvatar(activeProfile.avatar || './profile.jpeg');
+    setAvatar(activeProfile.avatar || '/profile.jpeg');
     setSaveSuccess(false);
     setErrorMessage('');
   }, [activeProfile]);
@@ -519,7 +519,7 @@ function App() {
     id: 'guest',
     name: 'Guest User',
     email: 'guest@local.browser',
-    avatar: './profile.jpeg'
+    avatar: '/profile.jpeg'
   };
 
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -640,9 +640,14 @@ function App() {
           window.dispatchEvent(new Event('storage'));
         }
 
-        // Also update the active profile in state with the real DB id
         setProfileAccounts(prev => prev.map(acc => {
-          if (acc.active) return { ...acc, id: serverUser.id, username: serverUser.username || acc.username, name: serverUser.name || acc.name };
+          if (acc.active) return { 
+            ...acc, 
+            id: serverUser.id, 
+            username: serverUser.username || acc.username, 
+            name: serverUser.name || acc.name,
+            avatar: serverUser.avatar_url || acc.avatar
+          };
           return acc;
         }));
 
@@ -722,6 +727,46 @@ function App() {
     setProfileAccounts(updated);
   };
 
+  // Log out the currently active account only
+  const handleCompleteLogout = () => {
+    const remaining = profileAccounts.filter(acc => acc.id !== activeProfile.id);
+
+    if (remaining.length > 0) {
+      // Switch to the next account automatically
+      const next = { ...remaining[0], active: true };
+      const updated = [next, ...remaining.slice(1)];
+      setProfileAccounts(updated);
+
+      // Update localStorage to the next account's session
+      localStorage.removeItem('shelf_active_chat_user');
+      localStorage.removeItem('shelf_login_event');
+      if (next.token) {
+        localStorage.setItem('shelf_auth_token', next.token);
+      } else {
+        localStorage.removeItem('shelf_auth_token');
+      }
+      localStorage.setItem('shelf_current_user', JSON.stringify({
+        id: next.id,
+        name: next.name,
+        username: next.username,
+        email: next.email,
+        phone: next.phone,
+        avatar_url: next.avatar,
+        avatar: next.avatar,
+        bio: next.bio
+      }));
+      localStorage.setItem('profile_accounts', JSON.stringify(updated));
+      window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new Event('user-switched'));
+    } else {
+      // No other accounts — clear everything and go to login
+      ['shelf_auth_token', 'shelf_current_user', 'profile_accounts',
+       'shelf_login_event', 'shelf_active_chat_user'].forEach(k => localStorage.removeItem(k));
+      setProfileAccounts([]);
+      window.location.href = '/login.html';
+    }
+  };
+
   // Update active profile details
   const updateActiveProfile = async (name, username, email, avatar, phone, bio) => {
     const token = localStorage.getItem('shelf_auth_token');
@@ -732,6 +777,7 @@ function App() {
     const cleanPhone = phone ? phone.trim() : '';
     const cleanBio = bio ? bio.trim() : '';
 
+    let serverUser = null;
     if (token) {
       try {
         const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/profile`, {
@@ -753,23 +799,31 @@ function App() {
         if (!res.ok) {
           return { success: false, error: data.error || 'Failed to update database record.' };
         }
+        serverUser = data.user;
       } catch (err) {
         console.error(err);
         return { success: false, error: 'Database connection failed. Changes saved locally only.' };
       }
     }
 
+    const finalName = serverUser?.name || cleanName;
+    const finalUsername = serverUser?.username || cleanUsername;
+    const finalEmail = serverUser?.email || cleanEmail;
+    const finalAvatar = serverUser?.avatar_url || cleanAvatar;
+    const finalPhone = serverUser?.phone || cleanPhone;
+    const finalBio = serverUser?.bio || cleanBio;
+
     setProfileAccounts(prevAccounts => {
       const updated = prevAccounts.map(acc => {
         if (acc.id === activeProfile.id) {
           return {
             ...acc,
-            name: cleanName,
-            username: cleanUsername,
-            email: cleanEmail,
-            avatar: cleanAvatar,
-            phone: cleanPhone,
-            bio: cleanBio
+            name: finalName,
+            username: finalUsername,
+            email: finalEmail,
+            avatar: finalAvatar,
+            phone: finalPhone,
+            bio: finalBio
           };
         }
         return acc;
@@ -781,13 +835,13 @@ function App() {
     try {
       localStorage.setItem('shelf_current_user', JSON.stringify({
         id: activeProfile.id,
-        name: cleanName,
-        username: cleanUsername,
-        email: cleanEmail,
-        avatar_url: cleanAvatar,
-        avatar: cleanAvatar,
-        phone: cleanPhone,
-        bio: cleanBio
+        name: finalName,
+        username: finalUsername,
+        email: finalEmail,
+        avatar_url: finalAvatar,
+        avatar: finalAvatar,
+        phone: finalPhone,
+        bio: finalBio
       }));
     } catch (e) {
       console.warn("Could not save profile to localStorage, it might be too large:", e);
@@ -813,8 +867,8 @@ function App() {
         username: userData.username || '',
         email: userData.email || '',
         phone: userData.phone || '',
-        avatar_url: userData.avatar_url || userData.avatar || './profile.jpeg',
-        avatar: userData.avatar || userData.avatar_url || './profile.jpeg',
+        avatar_url: userData.avatar_url || userData.avatar || '/profile.jpeg',
+        avatar: userData.avatar || userData.avatar_url || '/profile.jpeg',
         bio: userData.bio || '',
       }));
 
@@ -834,7 +888,7 @@ function App() {
                 username: userData.username || acc.username || '',
                 email: userData.email || acc.email || '',
                 phone: userData.phone || acc.phone || '',
-                avatar: userData.avatar || userData.avatar_url || acc.avatar || './profile.jpeg',
+                avatar: userData.avatar || userData.avatar_url || acc.avatar || '/profile.jpeg',
                 bio: userData.bio || acc.bio || '',
                 token: userData.token || acc.token,
                 id: userData.id || acc.id, // Ensure real UUID overwrites timestamp id
@@ -1033,6 +1087,16 @@ function App() {
     const handleKeyDown = (e) => {
       if (e.repeat) return;
 
+      // Ignore shortcut if user is typing in an input, textarea, or content-editable area
+      const activeTag = document.activeElement?.tagName;
+      if (
+        activeTag === 'INPUT' ||
+        activeTag === 'TEXTAREA' ||
+        document.activeElement?.isContentEditable
+      ) {
+        return;
+      }
+
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const isModifierActive = isMac ? e.ctrlKey : e.altKey;
 
@@ -1111,6 +1175,7 @@ function App() {
             isProfileDropdownOpen={isProfileDropdownOpen}
             setIsProfileDropdownOpen={setIsProfileDropdownOpen}
             setActiveTab={setActiveTab}
+            handleCompleteLogout={handleCompleteLogout}
           />
         );
       case 'library':

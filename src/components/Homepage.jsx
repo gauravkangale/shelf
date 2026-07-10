@@ -31,7 +31,8 @@ export default function Homepage({
   isProfileDropdownOpen,
   setIsProfileDropdownOpen,
   // eslint-disable-next-line no-unused-vars
-  setActiveTab
+  setActiveTab,
+  handleCompleteLogout
 }) {
   const isMobile = useIsMobile();
   // Search Engine & query states
@@ -64,7 +65,13 @@ export default function Homepage({
   const [shortcuts, setShortcuts] = useState(() => {
     // Quick fallback
     const saved = uGet('homepage_shortcuts');
-    if (saved) return healShortcuts(saved);
+    if (saved && saved.length > 0) {
+      if (saved.some(s => s.title === 'Reddit' || s.title === 'Google Calendar' || s.title === 'WhatsApp')) {
+        uSet('homepage_shortcuts', INITIAL_SHORTCUTS);
+        return healShortcuts(INITIAL_SHORTCUTS);
+      }
+      return healShortcuts(saved);
+    }
     return healShortcuts(INITIAL_SHORTCUTS);
   });
 
@@ -72,7 +79,32 @@ export default function Homepage({
   useEffect(() => {
     const fetchShortcuts = async () => {
       const token = localStorage.getItem('shelf_auth_token');
+      const sourceStr = JSON.stringify(INITIAL_SHORTCUTS);
+      const lastSource = localStorage.getItem('homepage_shortcuts_source');
+
+      if (lastSource !== sourceStr) {
+        const healedDefault = healShortcuts(INITIAL_SHORTCUTS);
+        setShortcuts(healedDefault);
+        uSet('homepage_shortcuts', healedDefault);
+        localStorage.setItem('homepage_shortcuts_source', sourceStr);
+
+        if (token) {
+          try {
+            await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/shortcuts`, {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+              },
+              body: JSON.stringify({ shortcuts: INITIAL_SHORTCUTS })
+            });
+          } catch (e) {}
+        }
+        return;
+      }
+
       if (!token) return;
+
       try {
         const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/shortcuts`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -80,12 +112,15 @@ export default function Homepage({
         if (res.ok) {
           const data = await res.json();
           if (data.shortcuts && Array.isArray(data.shortcuts)) {
-            const healed = healShortcuts(data.shortcuts);
+            let healed = healShortcuts(data.shortcuts);
+            if (healed.some(s => s.title === 'Reddit' || s.title === 'Google Calendar' || s.title === 'WhatsApp')) {
+              healed = healShortcuts(INITIAL_SHORTCUTS);
+            }
             setShortcuts(healed);
             uSet('homepage_shortcuts', healed);
           }
         }
-   
+    
   // eslint-disable-next-line no-unused-vars
       } catch (err) { /* ignore */ }
     };
@@ -150,31 +185,12 @@ export default function Homepage({
     if (!queryToUse.trim()) return;
 
     if (searchEngine === 'google') {
-      window.open(`https://google.com/search?q=${encodeURIComponent(queryToUse)}`, '_blank');
+      window.location.href = `https://google.com/search?q=${encodeURIComponent(queryToUse)}`;
     }
+    setSearchQuery('');
   };
 
-  // Keyboard shortcut listener
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.repeat) return; // Prevent multiple windows from opening if the key is held down
 
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      const isModifierActive = isMac ? e.ctrlKey : e.altKey;
-
-      if (isModifierActive && e.key) {
-        const matchingShortcut = shortcuts.find(
-          s => s.shortcutKey && s.shortcutKey.toLowerCase() === e.key.toLowerCase()
-        );
-        if (matchingShortcut) {
-          e.preventDefault();
-          window.open(matchingShortcut.url, '_blank');
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts]);
 
   // Open modal for new shortcut
   const openAddModal = () => {
@@ -448,6 +464,7 @@ export default function Homepage({
           calendarDaysList={calendarDaysList}
           calendarContainerRef={calendarContainerRef}
           handleCalendarScroll={handleCalendarScroll}
+          handleCompleteLogout={handleCompleteLogout}
         />
       </div>
 

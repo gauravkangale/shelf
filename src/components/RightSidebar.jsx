@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pencil, Trash2, AlertTriangle, X } from 'lucide-react';
+import { Pencil, CircleX, AlertTriangle, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import ProfileSwitcher from './ProfileSwitcher';
 import CalendarTimeline from './CalendarTimeline';
@@ -31,7 +31,8 @@ export default function RightSidebar({
   goToToday,
   calendarDaysList,
   calendarContainerRef,
-  handleCalendarScroll
+  handleCalendarScroll,
+  handleCompleteLogout
 }) {
   const DEFAULT_BOOK = {
     title: 'The Divine Segregation',
@@ -59,7 +60,7 @@ export default function RightSidebar({
 
   const handleDeleteLocalData = async () => {
     setShowClearConfirm(false);
-    
+
     const token = localStorage.getItem('shelf_auth_token');
     if (!token) return;
 
@@ -78,7 +79,7 @@ export default function RightSidebar({
         setNotification('Failed to clear data.');
         setTimeout(() => setNotification(''), 3000);
       }
-  // eslint-disable-next-line no-unused-vars
+      // eslint-disable-next-line no-unused-vars
     } catch (err) {
       setNotification('Error clearing data.');
       setTimeout(() => setNotification(''), 3000);
@@ -91,16 +92,16 @@ export default function RightSidebar({
     try {
       const users = JSON.parse(usersJson);
       return users.some(u => u.email === activeProfile.email);
-  // eslint-disable-next-line no-unused-vars
+      // eslint-disable-next-line no-unused-vars
     } catch (e) {
       return false;
     }
   }, [activeProfile]);
 
   React.useEffect(() => {
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsEditing(false);
-    
+
     // First, try local storage as a quick fallback to avoid UI flashing
     const localBook = localStorage.getItem(`current_book_${activeProfile.email}`);
     if (localBook) {
@@ -112,7 +113,7 @@ export default function RightSidebar({
     } else {
       setBook(DEFAULT_BOOK);
     }
-    
+
     // Then, fetch real data from backend
     const fetchBook = async () => {
       const token = localStorage.getItem('shelf_auth_token');
@@ -129,14 +130,14 @@ export default function RightSidebar({
             localStorage.setItem(`current_book_${activeProfile.email}`, JSON.stringify(data.book));
           }
         }
-  // eslint-disable-next-line no-unused-vars
+        // eslint-disable-next-line no-unused-vars
       } catch (err) {
         // Silently ignore network errors
       }
     };
-    
+
     fetchBook();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProfile]);
 
   const handleSaveBook = async (e) => {
@@ -159,7 +160,7 @@ export default function RightSidebar({
     );
 
     setIsEditing(false);
-    
+
     // Save to backend
     const token = localStorage.getItem('shelf_auth_token');
     if (token) {
@@ -199,7 +200,11 @@ export default function RightSidebar({
             confirmDeleteLocalData();
           }}
         >
-          <Trash2 size={14} color="var(--forest-deep)" />
+          <CircleX
+            size={20}
+            color="#dc2626"
+            strokeWidth={3}
+          />
         </button>
         <div
           className="user-profile"
@@ -255,6 +260,7 @@ export default function RightSidebar({
             setNewProfileAccEmail={setNewProfileAccEmail}
             newProfileAccAvatar={newProfileAccAvatar}
             setNewProfileAccAvatar={setNewProfileAccAvatar}
+            handleCompleteLogout={handleCompleteLogout}
           />
         )}
       </div>
