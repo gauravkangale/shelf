@@ -4,7 +4,7 @@ import {
     Undo, Redo, Heading1, Heading2, Strikethrough,
     AlignLeft, AlignCenter, AlignRight, List, ListOrdered,
     Link, Image as LucideImage, Eraser, Download, Trash2, 
-    Calendar, CheckSquare, Code, Quote, Table, HelpCircle
+    Calendar, CheckSquare, Code, Quote, Table, RotateCcw
 } from 'lucide-react';
 import { uGet, uSet } from '../utils/userKey';
 
@@ -40,6 +40,9 @@ export default function NotebookScratchpad() {
     const [focusMode, setFocusMode] = useState(() => uGet('shelf_notebook_focusmode') || false);
     const [showWordCount, setShowWordCount] = useState(() => uGet('shelf_notebook_wordcount') || true);
     const [showCharCount, setShowCharCount] = useState(() => uGet('shelf_notebook_charcount') || true);
+
+    // Active Popover State ('size', 'height', 'letter', 'margins', 'spacing', 'opacity', 'thickness', 'position')
+    const [activePopover, setActivePopover] = useState(null);
 
     // Find & Replace Inputs
     const [findText, setFindText] = useState('');
@@ -176,7 +179,18 @@ export default function NotebookScratchpad() {
         }
     }, [content]);
 
-    // Track cursor formatting attributes
+    // Handle document-wide click to close active popovers
+    useEffect(() => {
+        const handleOutsideClick = () => {
+            setActivePopover(null);
+        };
+        document.addEventListener('click', handleOutsideClick);
+        return () => {
+            document.removeEventListener('click', handleOutsideClick);
+        };
+    }, []);
+
+    // Hook to track active styling attributes under selection
     useEffect(() => {
         const handleSelectionChange = () => {
             if (!isExpanded) return;
@@ -194,11 +208,11 @@ export default function NotebookScratchpad() {
                     alignJustify: document.queryCommandState('justifyFull'),
                     unorderedList: document.queryCommandState('insertUnorderedList'),
                     orderedList: document.queryCommandState('insertOrderedList'),
-                    foreColor: document.queryCommandValue('foreColor') || 'rgb(0,0,0)',
+                    foreColor: document.queryCommandValue('foreColor') || 'rgb(0, 0, 0)',
                     backColor: document.queryCommandValue('backColor') || 'transparent'
                 });
             } catch (e) {
-                // Out of bounds, ignore
+                // Out of range, ignore
             }
         };
 
@@ -241,7 +255,7 @@ export default function NotebookScratchpad() {
         if (activeRef.current) {
             handleInput({ currentTarget: activeRef.current });
         }
-        // Sync active states immediately
+        // Force refresh active styles
         setTimeout(() => {
             try {
                 setActiveStyles(prev => ({
@@ -265,7 +279,6 @@ export default function NotebookScratchpad() {
         }, 10);
     };
 
-    // Text Case Conversion
     const changeCase = (type) => {
         if (readOnly) return;
         const selection = window.getSelection();
@@ -318,6 +331,20 @@ export default function NotebookScratchpad() {
         }
         tableHtml += `</table>`;
         applyFormat('insertHTML', tableHtml);
+    };
+
+    const handleLink = () => {
+        const url = prompt('Enter link URL:', 'https://');
+        if (url) {
+            applyFormat('createLink', url);
+        }
+    };
+
+    const handleImage = () => {
+        const url = prompt('Enter image URL:');
+        if (url) {
+            applyFormat('insertImage', url);
+        }
     };
 
     const handleFindReplace = (all = false) => {
@@ -376,6 +403,55 @@ export default function NotebookScratchpad() {
         }
     };
 
+    const handleResetSettings = () => {
+        if (window.confirm('Reset all document settings to their default values?')) {
+            setFontFamily("'Caveat', cursive");
+            setBaseFontSize(22);
+            setLineSpacing(28);
+            setLineHeight(1.5);
+            setLetterSpacing(0);
+            setDocPadding(60);
+            setPaperColor('var(--surface-bg)');
+            setLineStyle('solid');
+            setLineOpacity(35);
+            setLineThickness(1.2);
+            setDoubleLines(false);
+            setMarginStyle('left');
+            setMarginOffset(68);
+            setMarginColor('#c83f3f');
+            setReadOnly(false);
+            setSpellcheck(true);
+            setAutoCapitalize(true);
+            setFocusMode(false);
+            setShowWordCount(true);
+            setShowCharCount(true);
+            
+            // Persist defaults
+            uSet('shelf_notebook_font_family', "'Caveat', cursive");
+            uSet('shelf_notebook_font_size', 22);
+            uSet('shelf_notebook_line_spacing', 28);
+            uSet('shelf_notebook_line_height', 1.5);
+            uSet('shelf_notebook_letter_spacing', 0);
+            uSet('shelf_notebook_doc_padding', 60);
+            uSet('shelf_notebook_paper_color', 'var(--surface-bg)');
+            uSet('shelf_notebook_line_style', 'solid');
+            uSet('shelf_notebook_line_opacity', 35);
+            uSet('shelf_notebook_line_thickness', 1.2);
+            uSet('shelf_notebook_double_lines', false);
+            uSet('shelf_notebook_margin_style', 'left');
+            uSet('shelf_notebook_margin_offset', 68);
+            uSet('shelf_notebook_margin_color', '#c83f3f');
+            uSet('shelf_notebook_readonly', false);
+            uSet('shelf_notebook_spellcheck', true);
+            uSet('shelf_notebook_autocap', true);
+            uSet('shelf_notebook_focusmode', false);
+            uSet('shelf_notebook_wordcount', true);
+            uSet('shelf_notebook_charcount', true);
+            
+            window.dispatchEvent(new Event('notebook-updated'));
+        }
+    };
+
     const getStats = (htmlContent) => {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = htmlContent;
@@ -409,10 +485,9 @@ export default function NotebookScratchpad() {
         return false;
     };
 
-    // Advanced Background Compilation supporting Seyes French ruling, Isometric layouts, line thicknesses, opacities
     const getPaperBackground = (style, spacingVal, opacityVal, styleVal, colorVal, thicknessVal) => {
         const opacityDecimal = opacityVal / 100;
-        const lineColorStr = `rgba(148, 163, 184, ${opacityDecimal})`; // Slate base
+        const lineColorStr = `rgba(148, 163, 184, ${opacityDecimal})`;
         const thicknessPx = `${thicknessVal}px`;
         const spacingPx = `${spacingVal}px`;
 
@@ -553,37 +628,19 @@ export default function NotebookScratchpad() {
             background: isActive ? 'var(--option-bg)' : 'var(--panel-bg)',
             border: isActive ? '1.5px solid var(--accent-color)' : '1px solid var(--border-color)',
             borderRadius: '6px',
-            width: '28px',
-            height: '28px',
+            width: '26px',
+            height: '26px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
             color: isActive ? 'var(--option-text)' : 'var(--text-primary)',
-            boxShadow: '0 1.5px 3px rgba(0,0,0,0.05)',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
             transition: 'all 0.15s ease'
         };
     };
 
     // Dashboard UI styles
-    const sectionHeaderStyle = {
-        margin: '0 0 8px 0',
-        fontSize: '0.72rem',
-        textTransform: 'uppercase',
-        letterSpacing: '1px',
-        color: 'var(--text-secondary)',
-        fontWeight: '800',
-        borderBottom: '1.5px solid var(--border-color)',
-        paddingBottom: '2px'
-    };
-
-    const formGroupStyle = {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '2px',
-        marginBottom: '6px'
-    };
-
     const labelStyle = {
         fontSize: '0.68rem',
         fontWeight: '600',
@@ -591,21 +648,14 @@ export default function NotebookScratchpad() {
     };
 
     const selectStyle = {
-        padding: '4px 6px',
+        padding: '3px 6px',
         borderRadius: '6px',
         border: '1px solid var(--border-color)',
         backgroundColor: 'var(--panel-bg)',
         color: 'var(--text-primary)',
         outline: 'none',
-        fontSize: '0.72rem',
+        fontSize: '0.7rem',
         cursor: 'pointer'
-    };
-
-    const checkboxContainerStyle = {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        marginBottom: '4px'
     };
 
     const checkboxLabelStyle = {
@@ -615,24 +665,98 @@ export default function NotebookScratchpad() {
         userSelect: 'none'
     };
 
+    const checkboxContainerStyle = {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px'
+    };
+
     const actionBtnStyle = {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '6px',
+        gap: '4px',
         width: '100%',
-        padding: '6px',
+        padding: '4px 8px',
         borderRadius: '6px',
         background: 'var(--option-bg)',
         color: 'var(--option-text)',
         border: '1px solid var(--border-color)',
-        fontSize: '0.72rem',
+        fontSize: '0.7rem',
         fontWeight: 'bold',
         cursor: 'pointer',
         transition: 'all 0.15s ease'
     };
 
     const stats = getStats(content);
+
+    // Popover Dropper Renderer (Down chevron button replacing raw draggable sliders)
+    const renderPopoverButton = (id, label, displayValue, min, max, step, value, onChange) => {
+        const isOpen = activePopover === id;
+        return (
+            <div style={{ position: 'relative', display: 'inline-block' }} className="notebook-popover-container">
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setActivePopover(isOpen ? null : id);
+                    }}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: isOpen ? 'var(--option-bg)' : 'var(--panel-bg)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.72rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                        transition: 'all 0.15s ease',
+                        userSelect: 'none'
+                    }}
+                >
+                    <span>{label}: <strong style={{ color: 'var(--accent-color)' }}>{displayValue}</strong></span>
+                    {/* Down chevron SVG matching user drawing */}
+                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>
+                        <path d="M1 1.5L4 4.5L7 1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </button>
+                
+                {isOpen && (
+                    <div 
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            position: 'absolute',
+                            top: 'calc(100% + 4px)',
+                            left: 0,
+                            backgroundColor: 'var(--panel-bg)',
+                            border: '1.5px solid var(--border-color)',
+                            borderRadius: '8px',
+                            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
+                            padding: '12px',
+                            zIndex: 100,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            minWidth: '155px'
+                        }}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.68rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>{label}</span>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{displayValue}</span>
+                        </div>
+                        <input 
+                            type="range" min={min} max={max} step={step} value={value} 
+                            onChange={onChange}
+                            style={{ cursor: 'pointer', width: '130px', margin: '4px 0' }}
+                        />
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     return (
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, height: '100px' }}>
@@ -900,7 +1024,7 @@ export default function NotebookScratchpad() {
                         }} />
                     )}
 
-                    {/* Highly Professional Dashboard Header Console (Openly Displayed, Arranged) */}
+                    {/* Compact, Non-shifting, Spacious Dashboard Header Console */}
                     <div style={{ 
                         display: 'flex', 
                         flexDirection: 'column',
@@ -908,21 +1032,22 @@ export default function NotebookScratchpad() {
                         borderBottom: '1.5px solid var(--border-color)',
                         backgroundColor: 'var(--panel-bg)',
                         opacity: focusMode ? 0.08 : 1,
-                        transition: 'opacity 0.3s ease'
+                        transition: 'opacity 0.3s ease',
+                        padding: '8px 40px',
+                        gap: '8px'
                     }}
                     onMouseEnter={(e) => { if(focusMode) e.currentTarget.style.opacity = 1; }}
                     onMouseLeave={(e) => { if(focusMode) e.currentTarget.style.opacity = 0.08; }}
                     >
-                        {/* ROW 1: Branding, Actions, Document Settings */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 40px', borderBottom: '1px solid var(--border-color)' }}>
-                            <h3 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: '1.35rem', color: 'var(--ink)' }}>
-                                Interactive Scratchpad
-                            </h3>
+                        {/* ROW 1: Branding, Font select, Text Size, Line Height, Letter spacing, margins and Sheet colors */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                                <h3 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: '1.25rem', color: 'var(--ink)' }}>
+                                    Interactive Scratchpad
+                                </h3>
 
-                            {/* Row 1 Settings Panel */}
-                            <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flex: 1, justifyContent: 'center', margin: '0 24px' }}>
-                                {/* Default Font Select */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {/* Font Selector */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <span style={labelStyle}>Font</span>
                                     <select 
                                         value={fontFamily} 
@@ -930,7 +1055,7 @@ export default function NotebookScratchpad() {
                                             setFontFamily(e.target.value);
                                             uSet('shelf_notebook_font_family', e.target.value);
                                         }} 
-                                        style={selectStyle}
+                                        style={{ ...selectStyle, width: '90px' }}
                                     >
                                         <option value="'Caveat', cursive">Caveat</option>
                                         <option value="'Architects Daughter', cursive">Architects</option>
@@ -939,69 +1064,41 @@ export default function NotebookScratchpad() {
                                         <option value="'Patrick Hand', cursive">Patrick Hand</option>
                                         <option value="'Shadows Into Light', cursive">Shadows</option>
                                         <option value="'Inter', sans-serif">Sans-Serif</option>
-                                        <option value="Georgia, serif">Georgia Serif</option>
+                                        <option value="Georgia, serif">Georgia</option>
                                     </select>
                                 </div>
 
-                                {/* Font Size Slider */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '130px' }}>
-                                    <span style={labelStyle}>Size ({baseFontSize}px)</span>
-                                    <input 
-                                        type="range" min="14" max="36" value={baseFontSize} 
-                                        onChange={(e) => {
-                                            const size = parseInt(e.target.value);
-                                            setBaseFontSize(size);
-                                            uSet('shelf_notebook_font_size', size);
-                                        }} 
-                                        style={{ flex: 1, cursor: 'pointer', height: '4px' }}
-                                    />
-                                </div>
+                                {/* Text size popover menu */}
+                                {renderPopoverButton('size', 'Size', `${baseFontSize}px`, 14, 36, 1, baseFontSize, (e) => {
+                                    const val = parseInt(e.target.value);
+                                    setBaseFontSize(val);
+                                    uSet('shelf_notebook_font_size', val);
+                                })}
 
-                                {/* Paragraph line-height Slider */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '120px' }}>
-                                    <span style={labelStyle}>Height ({lineHeight})</span>
-                                    <input 
-                                        type="range" min="1.1" max="2.5" step="0.1" value={lineHeight} 
-                                        onChange={(e) => {
-                                            const val = parseFloat(e.target.value);
-                                            setLineHeight(val);
-                                            uSet('shelf_notebook_line_height', val);
-                                        }} 
-                                        style={{ flex: 1, cursor: 'pointer', height: '4px' }}
-                                    />
-                                </div>
+                                {/* Line Height popover menu */}
+                                {renderPopoverButton('height', 'Height', lineHeight, 1.1, 2.5, 0.1, lineHeight, (e) => {
+                                    const val = parseFloat(e.target.value);
+                                    setLineHeight(val);
+                                    uSet('shelf_notebook_line_height', val);
+                                })}
 
-                                {/* Letter spacing Slider */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '120px' }}>
-                                    <span style={labelStyle}>Letter ({letterSpacing}px)</span>
-                                    <input 
-                                        type="range" min="-1" max="6" step="0.5" value={letterSpacing} 
-                                        onChange={(e) => {
-                                            const val = parseFloat(e.target.value);
-                                            setLetterSpacing(val);
-                                            uSet('shelf_notebook_letter_spacing', val);
-                                        }} 
-                                        style={{ flex: 1, cursor: 'pointer', height: '4px' }}
-                                    />
-                                </div>
+                                {/* Letter Spacing popover menu */}
+                                {renderPopoverButton('letter', 'Letter', `${letterSpacing}px`, -1, 6, 0.5, letterSpacing, (e) => {
+                                    const val = parseFloat(e.target.value);
+                                    setLetterSpacing(val);
+                                    uSet('shelf_notebook_letter_spacing', val);
+                                })}
 
-                                {/* Doc text Padding Slider */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '125px' }}>
-                                    <span style={labelStyle}>Margins ({docPadding}px)</span>
-                                    <input 
-                                        type="range" min="20" max="140" value={docPadding} 
-                                        onChange={(e) => {
-                                            const val = parseInt(e.target.value);
-                                            setDocPadding(val);
-                                            uSet('shelf_notebook_doc_padding', val);
-                                        }} 
-                                        style={{ flex: 1, cursor: 'pointer', height: '4px' }}
-                                    />
-                                </div>
+                                {/* Text margins padding popover menu */}
+                                {renderPopoverButton('margins', 'Margins', `${docPadding}px`, 20, 140, 1, docPadding, (e) => {
+                                    const val = parseInt(e.target.value);
+                                    setDocPadding(val);
+                                    uSet('shelf_notebook_doc_padding', val);
+                                })}
 
                                 {/* Paper Color Sheet selection */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <span style={{ ...labelStyle, marginRight: '4px' }}>Sheet</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '6px' }}>
+                                    <span style={{ ...labelStyle, marginRight: '2px' }}>Sheet</span>
                                     {[
                                         { name: 'Theme', value: 'var(--surface-bg)' },
                                         { name: 'White', value: '#ffffff' },
@@ -1018,13 +1115,13 @@ export default function NotebookScratchpad() {
                                                 uSet('shelf_notebook_paper_color', color.value);
                                             }}
                                             style={{
-                                                width: '18px',
-                                                height: '18px',
+                                                width: '16px',
+                                                height: '16px',
                                                 borderRadius: '50%',
                                                 backgroundColor: color.value.startsWith('var') ? 'var(--surface-bg)' : color.value,
                                                 border: paperColor === color.value ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
                                                 cursor: 'pointer',
-                                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                                boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
                                                 position: 'relative'
                                             }}
                                             title={color.name}
@@ -1046,23 +1143,43 @@ export default function NotebookScratchpad() {
                                 </div>
                             </div>
 
-                            {/* Header Core Close */}
+                            {/* Header Utilities Actions */}
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <button
+                                    onClick={handleResetSettings}
+                                    style={{
+                                        background: 'var(--panel-bg)',
+                                        border: '1px solid var(--border-color)',
+                                        borderRadius: '6px',
+                                        padding: '5px 10px',
+                                        fontSize: '0.75rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        cursor: 'pointer',
+                                        color: 'var(--text-primary)',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    title="Reset All Configurations to Default"
+                                >
+                                    <RotateCcw size={12} /> Reset
+                                </button>
                                 <button
                                     onClick={handleCopy}
                                     style={{
                                         background: copied ? 'var(--success-color)' : 'var(--panel-bg)',
                                         border: '1px solid var(--border-color)',
-                                        borderRadius: '8px',
-                                        padding: '6px 12px',
-                                        fontSize: '0.8rem',
+                                        borderRadius: '6px',
+                                        padding: '5px 12px',
+                                        fontSize: '0.75rem',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: '6px',
+                                        gap: '4px',
                                         cursor: 'pointer',
                                         color: copied ? '#FFFFFF' : 'var(--text-primary)',
                                         transition: 'all 0.2s ease',
-                                        boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
                                     }}
                                 >
                                     {copied ? <Check size={12} strokeWidth={3} /> : <Copy size={12} />}
@@ -1073,25 +1190,25 @@ export default function NotebookScratchpad() {
                                     style={{
                                         background: 'var(--panel-bg)',
                                         border: '1px solid var(--border-color)',
-                                        borderRadius: '8px',
-                                        padding: '6px',
+                                        borderRadius: '6px',
+                                        padding: '5px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         cursor: 'pointer',
                                         color: 'var(--text-primary)',
                                         transition: 'all 0.2s ease',
-                                        boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
                                     }}
                                 >
-                                    <X size={16} />
+                                    <X size={14} />
                                 </button>
                             </div>
                         </div>
 
-                        {/* ROW 2: Canvas Guidelines Grid Settings (Directly Open & Arranged) */}
-                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', justifyContent: 'center', padding: '8px 40px', borderBottom: '1px solid var(--border-color)', flexWrap: 'wrap', backgroundColor: 'var(--surface-bg)' }}>
-                            {/* Canvas Layout selectors */}
+                        {/* ROW 2: Layout buttons group and guideline customizers */}
+                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', justifyContent: 'flex-start', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', flexWrap: 'wrap' }}>
+                            {/* Layout Selection */}
                             <div style={{ display: 'flex', gap: '4px', alignItems: 'center', borderRight: '1.5px solid var(--border-color)', paddingRight: '12px' }}>
                                 <span style={labelStyle}>Layout</span>
                                 {['lines', 'dots', 'grid', 'seyes', 'isometric', 'blank'].map((style) => (
@@ -1103,77 +1220,60 @@ export default function NotebookScratchpad() {
                                             border: paperStyle === style ? '1.5px solid var(--accent-color)' : '1px solid var(--border-color)',
                                             borderRadius: '6px',
                                             padding: '4px 8px',
-                                            fontSize: '0.72rem',
+                                            fontSize: '0.7rem',
                                             display: 'flex',
                                             alignItems: 'center',
                                             gap: '4px',
                                             cursor: 'pointer',
                                             color: paperStyle === style ? 'var(--option-text)' : 'var(--text-secondary)',
-                                            boxShadow: '0 1.5px 3px rgba(0,0,0,0.03)',
+                                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                                             transition: 'all 0.15s ease',
                                         }}
                                         title={style.charAt(0).toUpperCase() + style.slice(1)}
                                     >
-                                        {renderStyleIcon(style, 10)}
+                                        {renderStyleIcon(style, 8)}
                                         {style.charAt(0).toUpperCase() + style.slice(1)}
                                     </button>
                                 ))}
                             </div>
 
-                            {/* Spacing & Style Customizers */}
-                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', borderRight: '1.5px solid var(--border-color)', paddingRight: '12px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '100px' }}>
-                                    <span style={labelStyle}>Spacing ({lineSpacing}px)</span>
-                                    <input 
-                                        type="range" min="20" max="48" value={lineSpacing} 
-                                        onChange={(e) => {
-                                            const spacing = parseInt(e.target.value);
-                                            setLineSpacing(spacing);
-                                            uSet('shelf_notebook_line_spacing', spacing);
-                                        }} 
-                                        style={{ flex: 1, cursor: 'pointer', height: '3px' }}
-                                    />
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '90px' }}>
-                                    <span style={labelStyle}>Opacity ({lineOpacity}%)</span>
-                                    <input 
-                                        type="range" min="10" max="100" value={lineOpacity} 
-                                        onChange={(e) => {
-                                            const val = parseInt(e.target.value);
-                                            setLineOpacity(val);
-                                            uSet('shelf_notebook_line_opacity', val);
-                                        }} 
-                                        style={{ flex: 1, cursor: 'pointer', height: '3px' }}
-                                    />
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '95px' }}>
-                                    <span style={labelStyle}>Stroke ({lineThickness}px)</span>
-                                    <input 
-                                        type="range" min="0.5" max="3" step="0.2" value={lineThickness} 
-                                        onChange={(e) => {
-                                            const val = parseFloat(e.target.value);
-                                            setLineThickness(val);
-                                            uSet('shelf_notebook_line_thickness', val);
-                                        }} 
-                                        style={{ flex: 1, cursor: 'pointer', height: '3px' }}
-                                    />
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <span style={labelStyle}>Stroke Design</span>
+                            {/* Guideline Spacing, Opacity, Thickness, Style, Double Line */}
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', borderRight: '1.5px solid var(--border-color)', paddingRight: '12px', flexWrap: 'wrap' }}>
+                                {renderPopoverButton('spacing', 'Spacing', `${lineSpacing}px`, 20, 48, 1, lineSpacing, (e) => {
+                                    const val = parseInt(e.target.value);
+                                    setLineSpacing(val);
+                                    uSet('shelf_notebook_line_spacing', val);
+                                })}
+
+                                {renderPopoverButton('opacity', 'Opacity', `${lineOpacity}%`, 10, 100, 1, lineOpacity, (e) => {
+                                    const val = parseInt(e.target.value);
+                                    setLineOpacity(val);
+                                    uSet('shelf_notebook_line_opacity', val);
+                                })}
+
+                                {renderPopoverButton('thickness', 'Stroke', `${lineThickness}px`, 0.5, 3, 0.2, lineThickness, (e) => {
+                                    const val = parseFloat(e.target.value);
+                                    setLineThickness(val);
+                                    uSet('shelf_notebook_line_thickness', val);
+                                })}
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    <span style={labelStyle}>Design</span>
                                     <select 
                                         value={lineStyle} 
                                         onChange={(e) => {
                                             setLineStyle(e.target.value);
                                             uSet('shelf_notebook_line_style', e.target.value);
                                         }} 
-                                        style={selectStyle}
+                                        style={{ ...selectStyle, width: '75px' }}
                                     >
                                         <option value="solid">Solid</option>
                                         <option value="dashed">Dashed</option>
                                         <option value="dotted">Dotted</option>
                                     </select>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                                     <input 
                                         type="checkbox" id="doubleLines" checked={doubleLines} 
                                         onChange={(e) => {
@@ -1186,9 +1286,9 @@ export default function NotebookScratchpad() {
                                 </div>
                             </div>
 
-                            {/* Margins configurator */}
-                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {/* Margins Alignments, Position offset, color */}
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                                     <span style={labelStyle}>Margin</span>
                                     <select 
                                         value={marginStyle} 
@@ -1196,252 +1296,247 @@ export default function NotebookScratchpad() {
                                             setMarginStyle(e.target.value);
                                             uSet('shelf_notebook_margin_style', e.target.value);
                                         }} 
-                                        style={selectStyle}
+                                        style={{ ...selectStyle, width: '90px' }}
                                     >
                                         <option value="left">Left Margin</option>
                                         <option value="right">Right Margin</option>
                                         <option value="none">No Margin</option>
                                     </select>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '100px' }}>
-                                    <span style={labelStyle}>Position ({marginOffset}px)</span>
-                                    <input 
-                                        type="range" min="30" max="200" value={marginOffset} 
-                                        onChange={(e) => {
-                                            const val = parseInt(e.target.value);
-                                            setMarginOffset(val);
-                                            uSet('shelf_notebook_margin_offset', val);
-                                        }} 
-                                        style={{ flex: 1, cursor: 'pointer', height: '3px' }}
-                                    />
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <span style={labelStyle}>Margin Ink</span>
+
+                                {renderPopoverButton('position', 'Position', `${marginOffset}px`, 30, 200, 1, marginOffset, (e) => {
+                                    const val = parseInt(e.target.value);
+                                    setMarginOffset(val);
+                                    uSet('shelf_notebook_margin_offset', val);
+                                })}
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    <span style={labelStyle}>Ink</span>
                                     <select 
                                         value={marginColor} 
                                         onChange={(e) => {
                                             setMarginColor(e.target.value);
                                             uSet('shelf_notebook_margin_color', e.target.value);
                                         }} 
-                                        style={selectStyle}
+                                        style={{ ...selectStyle, width: '85px' }}
                                     >
                                         <option value="#c83f3f">Crimson</option>
                                         <option value="#2a6f40">Forest</option>
                                         <option value="#2b5c8f">Navy Blue</option>
                                         <option value="#7b1fa2">Plum</option>
-                                        <option value="#94a3b8">Subtle Slate</option>
+                                        <option value="#94a3b8">Slate</option>
                                     </select>
                                 </div>
                             </div>
                         </div>
 
                         {/* ROW 3: Rich-Text Typography & Inserts controls */}
-                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', justifyContent: 'center', padding: '8px 40px', borderBottom: '1px solid var(--border-color)', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', justifyContent: 'flex-start', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', flexWrap: 'wrap' }}>
                             {/* History Actions */}
-                            <div style={{ display: 'flex', gap: '4px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
+                            <div style={{ display: 'flex', gap: '3px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('undo'); }}
                                     style={getBtnStyle(false)} title="Undo"
                                 >
-                                    <Undo size={14} />
+                                    <Undo size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('redo'); }}
                                     style={getBtnStyle(false)} title="Redo"
                                 >
-                                    <Redo size={14} />
+                                    <Redo size={12} />
                                 </button>
                             </div>
 
                             {/* Headings & Clean styling */}
-                            <div style={{ display: 'flex', gap: '4px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
+                            <div style={{ display: 'flex', gap: '3px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('formatBlock', '<h1>'); }}
                                     style={getBtnStyle(false)} title="Heading 1"
                                 >
-                                    <Heading1 size={14} />
+                                    <Heading1 size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('formatBlock', '<h2>'); }}
                                     style={getBtnStyle(false)} title="Heading 2"
                                 >
-                                    <Heading2 size={14} />
+                                    <Heading2 size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('removeFormat'); }}
                                     style={getBtnStyle(false)} title="Clear Formatting"
                                 >
-                                    <Eraser size={14} />
+                                    <Eraser size={12} />
                                 </button>
                             </div>
 
                             {/* Advanced Typography Characters */}
-                            <div style={{ display: 'flex', gap: '4px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
+                            <div style={{ display: 'flex', gap: '3px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('bold'); }}
                                     style={getBtnStyle(activeStyles.bold)} title="Bold"
                                 >
-                                    <Bold size={14} />
+                                    <Bold size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('italic'); }}
                                     style={getBtnStyle(activeStyles.italic)} title="Italic"
                                 >
-                                    <Italic size={14} />
+                                    <Italic size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('underline'); }}
                                     style={getBtnStyle(activeStyles.underline)} title="Underline"
                                 >
-                                    <Underline size={14} />
+                                    <Underline size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('strikeThrough'); }}
                                     style={getBtnStyle(activeStyles.strikethrough)} title="Strikethrough"
                                 >
-                                    <Strikethrough size={14} />
+                                    <Strikethrough size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('subscript'); }}
                                     style={getBtnStyle(activeStyles.subscript)} title="Subscript"
                                 >
-                                    <span style={{ fontSize: '10px', fontWeight: 'bold' }}>X₂</span>
+                                    <span style={{ fontSize: '8px', fontWeight: 'bold' }}>X₂</span>
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('superscript'); }}
                                     style={getBtnStyle(activeStyles.superscript)} title="Superscript"
                                 >
-                                    <span style={{ fontSize: '10px', fontWeight: 'bold' }}>X²</span>
+                                    <span style={{ fontSize: '8px', fontWeight: 'bold' }}>X²</span>
                                 </button>
                             </div>
 
                             {/* Text Case tools */}
-                            <div style={{ display: 'flex', gap: '4px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
+                            <div style={{ display: 'flex', gap: '3px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); changeCase('upper'); }}
                                     style={getBtnStyle(false)} title="Uppercase"
                                 >
-                                    <span style={{ fontSize: '10px', fontWeight: 'bold' }}>AA</span>
+                                    <span style={{ fontSize: '8px', fontWeight: 'bold' }}>AA</span>
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); changeCase('lower'); }}
                                     style={getBtnStyle(false)} title="Lowercase"
                                 >
-                                    <span style={{ fontSize: '10px', fontWeight: 'bold' }}>aa</span>
+                                    <span style={{ fontSize: '8px', fontWeight: 'bold' }}>aa</span>
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); changeCase('title'); }}
                                     style={getBtnStyle(false)} title="Title Case"
                                 >
-                                    <span style={{ fontSize: '10px', fontWeight: 'bold' }}>Aa</span>
+                                    <span style={{ fontSize: '8px', fontWeight: 'bold' }}>Aa</span>
                                 </button>
                             </div>
 
                             {/* Alignments */}
-                            <div style={{ display: 'flex', gap: '4px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
+                            <div style={{ display: 'flex', gap: '3px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('justifyLeft'); }}
                                     style={getBtnStyle(activeStyles.alignLeft)} title="Align Left"
                                 >
-                                    <AlignLeft size={14} />
+                                    <AlignLeft size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('justifyCenter'); }}
                                     style={getBtnStyle(activeStyles.alignCenter)} title="Align Center"
                                 >
-                                    <AlignCenter size={14} />
+                                    <AlignCenter size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('justifyRight'); }}
                                     style={getBtnStyle(activeStyles.alignRight)} title="Align Right"
                                 >
-                                    <AlignRight size={14} />
+                                    <AlignRight size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('justifyFull'); }}
                                     style={getBtnStyle(activeStyles.alignJustify)} title="Justify"
                                 >
-                                    <span style={{ fontSize: '10px', fontWeight: 'bold' }}>≡</span>
+                                    <span style={{ fontSize: '8px', fontWeight: 'bold' }}>≡</span>
                                 </button>
                             </div>
 
                             {/* Lists & Indents */}
-                            <div style={{ display: 'flex', gap: '4px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
+                            <div style={{ display: 'flex', gap: '3px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('insertUnorderedList'); }}
                                     style={getBtnStyle(activeStyles.unorderedList)} title="Bullet List"
                                 >
-                                    <List size={14} />
+                                    <List size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('insertOrderedList'); }}
                                     style={getBtnStyle(activeStyles.orderedList)} title="Numbered List"
                                 >
-                                    <ListOrdered size={14} />
+                                    <ListOrdered size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('indent'); }}
                                     style={getBtnStyle(false)} title="Indent Spacing"
                                 >
-                                    <span style={{ fontSize: '10px', fontWeight: 'bold' }}>→|</span>
+                                    <span style={{ fontSize: '8px', fontWeight: 'bold' }}>→|</span>
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); applyFormat('outdent'); }}
                                     style={getBtnStyle(false)} title="Outdent Spacing"
                                 >
-                                    <span style={{ fontSize: '10px', fontWeight: 'bold' }}>|←</span>
+                                    <span style={{ fontSize: '8px', fontWeight: 'bold' }}>|←</span>
                                 </button>
                             </div>
 
                             {/* Inserts panel */}
-                            <div style={{ display: 'flex', gap: '4px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
+                            <div style={{ display: 'flex', gap: '3px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); handleLink(); }}
                                     style={getBtnStyle(false)} title="Insert Hyperlink"
                                 >
-                                    <Link size={14} />
+                                    <Link size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); handleImage(); }}
                                     style={getBtnStyle(false)} title="Insert Image"
                                 >
-                                    <LucideImage size={14} />
+                                    <LucideImage size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); insertCheckbox(); }}
                                     style={getBtnStyle(false)} title="Insert Checklist Box"
                                 >
-                                    <CheckSquare size={14} />
+                                    <CheckSquare size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); insertCodeBlock(); }}
-                                    style={getBtnStyle(false)} title="Code Snippet block"
+                                    style={getBtnStyle(false)} title="Code Block"
                                 >
-                                    <Code size={14} />
+                                    <Code size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); insertQuote(); }}
-                                    style={getBtnStyle(false)} title="Quote citation block"
+                                    style={getBtnStyle(false)} title="Blockquote"
                                 >
-                                    <Quote size={14} />
+                                    <Quote size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); insertTable(); }}
                                     style={getBtnStyle(false)} title="Insert Grid Table"
                                 >
-                                    <Table size={14} />
+                                    <Table size={12} />
                                 </button>
                                 <button
                                     onMouseDown={(e) => { e.preventDefault(); insertTimestamp(); }}
-                                    style={getBtnStyle(false)} title="Stamp Date & Time"
+                                    style={getBtnStyle(false)} title="Stamp Date/Time"
                                 >
-                                    <Calendar size={14} />
+                                    <Calendar size={12} />
                                 </button>
                             </div>
 
                             {/* Color Palettes (Pen, Highlight) */}
-                            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
                                     <span style={{ fontSize: '0.62rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Pen</span>
                                     {[
                                         { name: 'Dark', value: 'var(--text-primary)' },
@@ -1457,22 +1552,22 @@ export default function NotebookScratchpad() {
                                                 key={color.name}
                                                 onMouseDown={(e) => { e.preventDefault(); applyFormat('foreColor', color.value); }}
                                                 style={{
-                                                    width: '16px',
-                                                    height: '16px',
+                                                    width: '14px',
+                                                    height: '14px',
                                                     borderRadius: '50%',
                                                     backgroundColor: color.value === 'var(--text-primary)' ? 'var(--text-primary)' : color.value,
-                                                    border: isActive ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                                    border: isActive ? '1.8px solid var(--accent-color)' : '1px solid var(--border-color)',
                                                     cursor: 'pointer',
-                                                    boxShadow: isActive ? '0 0 4px var(--accent-color)' : '0 1px 3px rgba(0,0,0,0.1)',
-                                                    transform: isActive ? 'scale(1.2)' : 'scale(1)',
-                                                    transition: 'all 0.15s ease'
+                                                    boxShadow: isActive ? '0 0 3px var(--accent-color)' : '0 1px 2px rgba(0,0,0,0.08)',
+                                                    transform: isActive ? 'scale(1.15)' : 'scale(1)',
+                                                    transition: 'all 0.1s ease'
                                                 }}
                                                 title={`Pen Color: ${color.name}`}
                                             />
                                         );
                                     })}
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <span style={{ fontSize: '0.62rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Highlight</span>
                                     {[
                                         { name: 'None', value: 'transparent' },
@@ -1488,22 +1583,22 @@ export default function NotebookScratchpad() {
                                                 key={color.name}
                                                 onMouseDown={(e) => { e.preventDefault(); applyFormat('backColor', color.value); }}
                                                 style={{
-                                                    width: '16px',
-                                                    height: '16px',
+                                                    width: '14px',
+                                                    height: '14px',
                                                     borderRadius: '50%',
                                                     backgroundColor: color.value === 'transparent' ? 'transparent' : color.value,
-                                                    border: isActive ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                                    border: isActive ? '1.8px solid var(--accent-color)' : '1px solid var(--border-color)',
                                                     cursor: 'pointer',
-                                                    boxShadow: isActive ? '0 0 4px var(--accent-color)' : '0 1px 3px rgba(0,0,0,0.1)',
+                                                    boxShadow: isActive ? '0 0 3px var(--accent-color)' : '0 1px 2px rgba(0,0,0,0.08)',
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     justifyContent: 'center',
-                                                    transform: isActive ? 'scale(1.2)' : 'scale(1)',
-                                                    transition: 'all 0.15s ease'
+                                                    transform: isActive ? 'scale(1.15)' : 'scale(1)',
+                                                    transition: 'all 0.1s ease'
                                                 }}
                                                 title={`Highlight: ${color.name}`}
                                             >
-                                                {color.value === 'transparent' && <span style={{ fontSize: '8px', color: 'var(--text-secondary)', fontWeight: 'bold' }}>X</span>}
+                                                {color.value === 'transparent' && <span style={{ fontSize: '7px', color: 'var(--text-secondary)', fontWeight: 'bold' }}>X</span>}
                                             </button>
                                         );
                                     })}
@@ -1512,12 +1607,12 @@ export default function NotebookScratchpad() {
                         </div>
 
                         {/* ROW 4: Find & Replace, Document Locking preferences (Open & Arranged) */}
-                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', justifyContent: 'center', padding: '8px 40px', flexWrap: 'wrap', backgroundColor: 'var(--surface-bg)' }}>
+                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', justifyContent: 'flex-start', flexWrap: 'wrap' }}>
                             {/* Find & Replace Tools */}
-                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', borderRight: '1.5px solid var(--border-color)', paddingRight: '12px' }}>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center', borderRight: '1.5px solid var(--border-color)', paddingRight: '12px' }}>
                                 <span style={labelStyle}>Find</span>
                                 <input 
-                                    type="text" placeholder="Word..." value={findText} 
+                                    type="text" placeholder="Find..." value={findText} 
                                     onChange={(e) => setFindText(e.target.value)}
                                     style={{ ...selectStyle, width: '90px' }}
                                 />
@@ -1529,20 +1624,20 @@ export default function NotebookScratchpad() {
                                 />
                                 <button
                                     onClick={() => handleFindReplace(false)}
-                                    style={{ ...actionBtnStyle, width: 'auto', padding: '4px 8px' }}
+                                    style={{ ...actionBtnStyle, width: 'auto', padding: '3px 8px' }}
                                 >
                                     Replace
                                 </button>
                                 <button
                                     onClick={() => handleFindReplace(true)}
-                                    style={{ ...actionBtnStyle, width: 'auto', padding: '4px 8px' }}
+                                    style={{ ...actionBtnStyle, width: 'auto', padding: '3px 8px' }}
                                 >
                                     All
                                 </button>
                             </div>
 
                             {/* Lock note / Auto cap / Spellcheck options */}
-                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', borderRight: '1.5px solid var(--border-color)', paddingRight: '12px' }}>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', borderRight: '1.5px solid var(--border-color)', paddingRight: '12px', flexWrap: 'wrap' }}>
                                 <div style={checkboxContainerStyle}>
                                     <input 
                                         type="checkbox" id="readOnlyToggle" checked={readOnly} 
@@ -1565,7 +1660,7 @@ export default function NotebookScratchpad() {
                                         onChange={(e) => { setAutoCapitalize(e.target.checked); uSet('shelf_notebook_autocap', e.target.checked); }} 
                                         style={{ cursor: 'pointer' }}
                                     />
-                                    <label htmlFor="autoCapToggle" style={checkboxLabelStyle}>Auto Capitalize</label>
+                                    <label htmlFor="autoCapToggle" style={checkboxLabelStyle}>Auto Cap</label>
                                 </div>
                                 <div style={checkboxContainerStyle}>
                                     <input 
@@ -1603,13 +1698,13 @@ export default function NotebookScratchpad() {
                                     onClick={handleDownload}
                                     style={{ ...actionBtnStyle, width: 'auto', padding: '4px 10px' }}
                                 >
-                                    <Download size={12} /> Export TXT
+                                    <Download size={11} /> Export TXT
                                 </button>
                                 <button
                                     onClick={handleClearCanvas}
-                                    style={{ ...actionBtnStyle, width: 'auto', padding: '4px 10px', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--danger-color)', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+                                    style={{ ...actionBtnStyle, width: 'auto', padding: '4px 10px', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--danger-color)', border: '1px solid rgba(239, 68, 68, 0.18)' }}
                                 >
-                                    <Trash2 size={12} /> Clear Canvas
+                                    <Trash2 size={11} /> Clear Canvas
                                 </button>
                             </div>
                         </div>
