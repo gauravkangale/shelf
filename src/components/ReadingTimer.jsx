@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { THEME_COLOR_ROLES } from "../utils/themePresets";
-import { Pencil, Sun, Moon } from "lucide-react";
+import { Pencil, Sun, Moon, X, Plus, Trash2, Check } from "lucide-react";
 import { uGet, uSet } from "../utils/userKey";
+import NotebookScratchpad from "./NotebookScratchpad";
 
 export default function DesktopNeumorphicDashboard({ username }) {
     const [time, setTime] = useState(new Date());
@@ -155,32 +156,82 @@ export default function DesktopNeumorphicDashboard({ username }) {
 
     const [calendarDate, setCalendarDate] = useState(new Date());
     const [hasNotesMap, setHasNotesMap] = useState({});
+    const [selectedCalendarDate, setSelectedCalendarDate] = useState(new Date());
+    const [newNoteText, setNewNoteText] = useState('');
+    const [allNotes, setAllNotes] = useState(() => uGet('shelf_daily_notes', {}));
+    const [isCalendarTextClicked, setIsCalendarTextClicked] = useState(false);
+
 
     useEffect(() => {
-        const updateNotesMap = () => {
-            const parsed = uGet('shelf_daily_notes');
-            if (parsed) {
-                const map = {};
-                Object.keys(parsed).forEach(key => {
-                    if (parsed[key] && parsed[key].length > 0) {
-                        map[key] = true;
-                    }
-                });
-                setHasNotesMap(map);
-            } else {
-                setHasNotesMap({});
-            }
+        const updateNotes = () => {
+            const parsed = uGet('shelf_daily_notes') || {};
+            setAllNotes(parsed);
+            const map = {};
+            Object.keys(parsed).forEach(key => {
+                if (parsed[key] && parsed[key].length > 0) {
+                    map[key] = true;
+                }
+            });
+            setHasNotesMap(map);
         };
 
-        updateNotesMap();
+        updateNotes();
 
-        window.addEventListener('notes-updated', updateNotesMap);
-        window.addEventListener('storage', updateNotesMap);
+        window.addEventListener('notes-updated', updateNotes);
+        window.addEventListener('storage', updateNotes);
         return () => {
-            window.removeEventListener('notes-updated', updateNotesMap);
-            window.removeEventListener('storage', updateNotesMap);
+            window.removeEventListener('notes-updated', updateNotes);
+            window.removeEventListener('storage', updateNotes);
         };
     }, []);
+
+    const handleAddNote = (e) => {
+        e.preventDefault();
+        if (!selectedCalendarDate || !newNoteText.trim()) return;
+
+        const dateKey = selectedCalendarDate.toDateString();
+        const newNote = {
+            id: Date.now(),
+            text: newNoteText.trim(),
+            completed: false
+        };
+
+        const updated = {
+            ...allNotes,
+            [dateKey]: [...(allNotes[dateKey] || []), newNote]
+        };
+
+        setAllNotes(updated);
+        uSet('shelf_daily_notes', updated);
+        window.dispatchEvent(new Event('notes-updated'));
+        setNewNoteText('');
+    };
+
+    const handleToggleNote = (noteId) => {
+        if (!selectedCalendarDate) return;
+        const dateKey = selectedCalendarDate.toDateString();
+        const updated = {
+            ...allNotes,
+            [dateKey]: (allNotes[dateKey] || []).map((note) =>
+                note.id === noteId ? { ...note, completed: !note.completed } : note
+            )
+        };
+        setAllNotes(updated);
+        uSet('shelf_daily_notes', updated);
+        window.dispatchEvent(new Event('notes-updated'));
+    };
+
+    const handleDeleteNote = (noteId) => {
+        if (!selectedCalendarDate) return;
+        const dateKey = selectedCalendarDate.toDateString();
+        const updated = {
+            ...allNotes,
+            [dateKey]: (allNotes[dateKey] || []).filter((note) => note.id !== noteId)
+        };
+        setAllNotes(updated);
+        uSet('shelf_daily_notes', updated);
+        window.dispatchEvent(new Event('notes-updated'));
+    };
 
     const handlePrevMonth = () => {
         setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
@@ -391,6 +442,9 @@ export default function DesktopNeumorphicDashboard({ username }) {
                         <span>{minutes}</span>
                     </div>
 
+                    {/* Notebook Scratchpad */}
+                    <NotebookScratchpad />
+
                     <div style={{ textAlign: "right" }}>
                         <h2 style={{ fontSize: "2.2rem", margin: "0 0 10px 0", color: `var(${THEME_COLOR_ROLES.ink.cssVar})`, fontWeight: "600" }}>{dayName}</h2>
                         <p style={{ fontSize: "1.2rem", margin: 0, color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, letterSpacing: "1px" }}>{formattedDate}</p>
@@ -589,6 +643,7 @@ export default function DesktopNeumorphicDashboard({ username }) {
 
 
                 {/* Calendar */}
+                {/* Calendar */}
                 <div style={{
                     backgroundColor: `var(${THEME_COLOR_ROLES.panel.cssVar})`,
                     border: '1.5px solid var(--border-color)',
@@ -600,18 +655,69 @@ export default function DesktopNeumorphicDashboard({ username }) {
                     justifyContent: "center",
                     alignSelf: "flex-start"
                 }}>
+                    <style>{`
+                        @keyframes calendarGridFade {
+                            from {
+                                opacity: 0.5;
+                            }
+                            to {
+                                opacity: 1;
+                            }
+                        }
+                        @keyframes plansListFade {
+                            from {
+                                opacity: 0.6;
+                                transform: translateY(1.5px);
+                            }
+                            to {
+                                opacity: 1;
+                                transform: translateY(0);
+                            }
+                        }
+                    `}</style>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                         <span style={{ fontWeight: "700", fontSize: "1.2rem", color: `var(${THEME_COLOR_ROLES.ink.cssVar})` }}>
                             {months[calendarMonth]} {calendarYear}
                         </span>
                         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                             <button onClick={handlePrevMonth} style={{ background: "transparent", border: "none", cursor: "pointer", color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, fontWeight: "bold" }}>{"<"}</button>
-                            <span style={{ fontWeight: "600", fontSize: "0.9rem", color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, letterSpacing: "1px" }}>CALENDAR</span>
+                            <span 
+                                onClick={() => {
+                                    setCalendarDate(new Date());
+                                    setSelectedCalendarDate(new Date());
+                                    setIsCalendarTextClicked(true);
+                                    setTimeout(() => setIsCalendarTextClicked(false), 200);
+                                }}
+                                style={{ 
+                                    fontWeight: "600", 
+                                    fontSize: "0.9rem", 
+                                    color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, 
+                                    letterSpacing: "1px",
+                                    cursor: 'pointer',
+                                    userSelect: 'none',
+                                    transform: isCalendarTextClicked ? 'scale(0.92)' : 'scale(1)',
+                                    transition: 'transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                                    display: 'inline-block'
+                                }}
+                                title="Reset to Current Date"
+                            >
+                                CALENDAR
+                            </span>
                             <button onClick={handleNextMonth} style={{ background: "transparent", border: "none", cursor: "pointer", color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, fontWeight: "bold" }}>{">"}</button>
                         </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "8px", textAlign: "center", fontSize: "0.9rem" }}>
+                    <div 
+                        key={`${calendarMonth}-${calendarYear}`}
+                        style={{ 
+                            display: "grid", 
+                            gridTemplateColumns: "repeat(7, 1fr)", 
+                            gap: "8px", 
+                            textAlign: "center", 
+                            fontSize: "0.9rem",
+                            animation: "calendarGridFade 0.18s ease-out"
+                        }}
+                    >
                         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => (
                             <span key={d} style={{ color: i === 0 || i === 6 ? "var(--rust)" : `var(${THEME_COLOR_ROLES.accentColor.cssVar})`, fontWeight: "700", fontSize: "0.75rem", marginBottom: "4px" }}>
                                 {d}
@@ -625,10 +731,25 @@ export default function DesktopNeumorphicDashboard({ username }) {
                             const day = i + 1;
                             const isToday = time.getDate() === day && time.getMonth() === calendarMonth && time.getFullYear() === calendarYear;
                             const cellDate = new Date(calendarYear, calendarMonth, day);
+                            const isSelected = selectedCalendarDate && 
+                                selectedCalendarDate.getDate() === day && 
+                                selectedCalendarDate.getMonth() === calendarMonth && 
+                                selectedCalendarDate.getFullYear() === calendarYear;
                             const hasNotes = hasNotesMap[cellDate.toDateString()];
                             return (
                                 <div
                                     key={i}
+                                    onClick={() => setSelectedCalendarDate(cellDate)}
+                                    onMouseEnter={e => {
+                                        if (!isToday && !isSelected) {
+                                            e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.04)';
+                                        }
+                                    }}
+                                    onMouseLeave={e => {
+                                        if (!isToday && !isSelected) {
+                                            e.currentTarget.style.backgroundColor = 'transparent';
+                                        }
+                                    }}
                                     style={{
                                         fontWeight: "600",
                                         backgroundColor: isToday ? "var(--rust)" : "transparent",
@@ -636,8 +757,13 @@ export default function DesktopNeumorphicDashboard({ username }) {
                                         borderRadius: "6px",
                                         padding: "4px 0",
                                         boxShadow: isToday ? '0 3px 8px rgba(0, 0, 0, 0.12)' : "none",
-                                        position: "relative"
+                                        position: "relative",
+                                        cursor: "pointer",
+                                        border: isSelected ? "1.5px solid var(--rust)" : "1.5px solid transparent",
+                                        boxSizing: "border-box",
+                                        transition: 'all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1)'
                                     }}
+                                    title="Click to view/set Plans & Notes"
                                 >
                                     {day}
                                     {hasNotes && (
@@ -656,8 +782,145 @@ export default function DesktopNeumorphicDashboard({ username }) {
                             );
                         })}
                     </div>
-                </div>
 
+                    {/* Inline Separator */}
+                    <div style={{ borderTop: "1px solid var(--border-color)", margin: "16px 0" }} />
+
+                    {/* Inline Quick Plans & Notes Section */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: '700', fontSize: '0.95rem', color: `var(${THEME_COLOR_ROLES.ink.cssVar})` }}>
+                                {selectedCalendarDate ? selectedCalendarDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Select a date'} Plans
+                            </span>
+                        </div>
+
+                        <div 
+                            key={selectedCalendarDate ? selectedCalendarDate.toDateString() : 'empty'}
+                            style={{ 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                gap: '6px', 
+                                maxHeight: '140px', 
+                                overflowY: 'auto', 
+                                paddingRight: '2px',
+                                animation: "plansListFade 0.18s ease-out"
+                            }}
+                        >
+                            {(!selectedCalendarDate || !allNotes[selectedCalendarDate.toDateString()] || allNotes[selectedCalendarDate.toDateString()].length === 0) ? (
+                                <p style={{ margin: '8px 0', fontSize: '0.8rem', color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, fontStyle: 'italic', textAlign: 'center' }}>
+                                    No plans set for this day.
+                                </p>
+                            ) : (
+                                allNotes[selectedCalendarDate.toDateString()].map(note => (
+                                    <div 
+                                        key={note.id} 
+                                        style={{ 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'space-between', 
+                                            padding: '6px 8px', 
+                                            borderRadius: '8px', 
+                                            backgroundColor: note.completed ? `var(${THEME_COLOR_ROLES.optionBg.cssVar})` : 'transparent',
+                                            border: '1px solid var(--border-color)',
+                                            opacity: note.completed ? 0.7 : 1,
+                                            transition: 'all 0.2s ease-in-out'
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, cursor: 'pointer' }} onClick={() => handleToggleNote(note.id)}>
+                                            <div style={{
+                                                width: '14px',
+                                                height: '14px',
+                                                borderRadius: '4px',
+                                                border: `1.5px solid ${note.completed ? 'var(--rust)' : `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`}`,
+                                                backgroundColor: note.completed ? 'var(--rust)' : 'transparent',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                color: '#FFF',
+                                                transition: 'all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1)'
+                                            }}>
+                                                {note.completed && <Check size={10} strokeWidth={3} />}
+                                            </div>
+                                            <span style={{ 
+                                                fontSize: '0.8rem', 
+                                                color: `var(${THEME_COLOR_ROLES.ink.cssVar})`,
+                                                textDecoration: note.completed ? 'line-through' : 'none',
+                                                userSelect: 'none',
+                                                textAlign: 'left',
+                                                transition: 'all 0.2s ease'
+                                            }}>
+                                                {note.text}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => handleDeleteNote(note.id)}
+                                            style={{
+                                                background: 'transparent',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                color: 'var(--rust)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                padding: '2px',
+                                                opacity: 0.6,
+                                                transition: 'opacity 0.2s ease'
+                                            }}
+                                            onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                                            onMouseLeave={e => e.currentTarget.style.opacity = 0.6}
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        {selectedCalendarDate && (
+                            <form onSubmit={handleAddNote} style={{ display: 'flex', gap: '8px' }}>
+                                <input 
+                                    type="text"
+                                    placeholder="Add a plan or note..."
+                                    value={newNoteText}
+                                    onChange={e => setNewNoteText(e.target.value)}
+                                    style={{
+                                        flex: 1,
+                                        padding: '6px 10px',
+                                        borderRadius: '8px',
+                                        border: '1.5px solid var(--border-color)',
+                                        backgroundColor: `var(${THEME_COLOR_ROLES.optionBg.cssVar})`,
+                                        color: `var(${THEME_COLOR_ROLES.ink.cssVar})`,
+                                        fontFamily: 'var(--sans)',
+                                        fontSize: '0.8rem',
+                                        outline: 'none',
+                                        transition: 'border-color 0.2s ease'
+                                    }}
+                                />
+                                <button 
+                                    type="submit"
+                                    style={{
+                                        width: '28px',
+                                        height: '28px',
+                                        borderRadius: '50%',
+                                        backgroundColor: 'var(--rust)',
+                                        color: '#FFFFFF',
+                                        border: 'none',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                                        transition: 'transform 0.2s ease, background-color 0.2s ease'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                                >
+                                    <Plus size={14} />
+                                </button>
+                            </form>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

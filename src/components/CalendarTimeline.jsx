@@ -44,7 +44,12 @@ export default function CalendarTimeline({
   return (
     <section className="schedule-container">
       <div className="calendar-header">
-        <h2 className="calendar-title" style={{ fontSize: '16px' }}>
+        <h2
+          className="calendar-title"
+          onClick={goToToday}
+          style={{ fontSize: '16px', cursor: 'pointer' }}
+          title="Go to Today"
+        >
           {visibleMonthYear.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
         </h2>
         <div className="calendar-arrows">
