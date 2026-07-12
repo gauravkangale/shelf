@@ -414,12 +414,13 @@ export default function DesktopNeumorphicDashboard({ username }) {
                         gridColumn: "span 3",
                         backgroundColor: `var(${THEME_COLOR_ROLES.panel.cssVar})`,
                         border: '1.5px solid var(--border-color)',
-                        borderRadius: "20px",
+                        borderRadius: "24px",
                         boxShadow: outerShadow,
-                        padding: "20px 40px",
+                        padding: "24px 32px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
+                        gap: "32px",
                     }}
                 >
                     {/* Recessed Clock Display */}
@@ -427,14 +428,16 @@ export default function DesktopNeumorphicDashboard({ username }) {
                         style={{
                             backgroundColor: `var(${THEME_COLOR_ROLES.optionBg.cssVar})`,
                             border: '1px solid var(--border-color)',
-                            borderRadius: "12px",
-                            padding: "12px 24px",
-                            fontSize: "4.5rem",
+                            borderRadius: "14px",
+                            padding: "10px 20px",
+                            fontSize: "3.5rem",
                             fontWeight: "700",
                             color: `var(${THEME_COLOR_ROLES.ink.cssVar})`,
-                            letterSpacing: "3px",
+                            letterSpacing: "2px",
                             display: "flex",
                             alignItems: "center",
+                            justifyContent: "center",
+                            minWidth: "160px",
                         }}
                     >
                         <span>{hours}</span>
@@ -445,9 +448,9 @@ export default function DesktopNeumorphicDashboard({ username }) {
                     {/* Notebook Scratchpad */}
                     <NotebookScratchpad />
 
-                    <div style={{ textAlign: "right" }}>
-                        <h2 style={{ fontSize: "2.2rem", margin: "0 0 10px 0", color: `var(${THEME_COLOR_ROLES.ink.cssVar})`, fontWeight: "600" }}>{dayName}</h2>
-                        <p style={{ fontSize: "1.2rem", margin: 0, color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, letterSpacing: "1px" }}>{formattedDate}</p>
+                    <div style={{ textAlign: "right", minWidth: "140px" }}>
+                        <h2 style={{ fontSize: "1.8rem", margin: "0 0 4px 0", color: `var(${THEME_COLOR_ROLES.ink.cssVar})`, fontWeight: "700", letterSpacing: "0.5px" }}>{dayName}</h2>
+                        <p style={{ fontSize: "1rem", margin: 0, color: `var(${THEME_COLOR_ROLES.textSecondary.cssVar})`, letterSpacing: "0.5px", fontFamily: "monospace" }}>{formattedDate}</p>
                     </div>
                 </div>
 

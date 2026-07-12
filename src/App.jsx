@@ -493,22 +493,43 @@ function App() {
   const [profileAccounts, setProfileAccounts] = useState(() => {
     try {
       const stored = localStorage.getItem('profile_accounts');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Deduplicate in case glitch already occurred
-        const unique = [];
-        const seenEmails = new Set();
-        parsed.forEach(acc => {
-          if (acc.email && !seenEmails.has(acc.email)) {
-            unique.push(acc);
-            seenEmails.add(acc.email);
-          } else if (!acc.email) {
-            unique.push(acc); // keep accounts without email just in case
+      let accounts = stored ? JSON.parse(stored) : [];
+      
+      // Self-heal: If shelf_current_user exists but is not in profile_accounts, add it
+      const currentUserRaw = localStorage.getItem('shelf_current_user');
+      if (currentUserRaw) {
+        const currentUser = JSON.parse(currentUserRaw);
+        if (currentUser && currentUser.id) {
+          const exists = accounts.some(acc => acc.id === currentUser.id);
+          if (!exists) {
+            accounts = accounts.map(acc => ({ ...acc, active: false }));
+            accounts.push({
+              id: currentUser.id,
+              name: currentUser.name || 'Member',
+              username: currentUser.username || '',
+              email: currentUser.email || '',
+              phone: currentUser.phone || '',
+              avatar: currentUser.avatar || currentUser.avatar_url || '/profile.jpeg',
+              bio: currentUser.bio || '',
+              token: localStorage.getItem('shelf_auth_token') || '',
+              active: true
+            });
           }
-        });
-        return unique;
+        }
       }
-      return [];
+
+      // Deduplicate in case glitch already occurred
+      const unique = [];
+      const seenEmails = new Set();
+      accounts.forEach(acc => {
+        if (acc.email && !seenEmails.has(acc.email)) {
+          unique.push(acc);
+          seenEmails.add(acc.email);
+        } else if (!acc.email) {
+          unique.push(acc); // keep accounts without email just in case
+        }
+      });
+      return unique;
     } catch {
       return [];
     }
@@ -559,6 +580,32 @@ function App() {
       localStorage.setItem('profile_accounts', JSON.stringify(profileAccounts));
     }
   }, [profileAccounts]);
+
+  // Keep shelf_current_user and shelf_auth_token synced with activeProfile
+  useEffect(() => {
+    if (activeProfile) {
+      const current = JSON.parse(localStorage.getItem('shelf_current_user') || 'null');
+      if (!current || current.id !== activeProfile.id) {
+        localStorage.setItem('shelf_current_user', JSON.stringify({
+          id: activeProfile.id,
+          name: activeProfile.name,
+          username: activeProfile.username || '',
+          email: activeProfile.email || '',
+          phone: activeProfile.phone || '',
+          avatar_url: activeProfile.avatar || '/profile.jpeg',
+          avatar: activeProfile.avatar || '/profile.jpeg',
+          bio: activeProfile.bio || ''
+        }));
+        if (activeProfile.token) {
+          localStorage.setItem('shelf_auth_token', activeProfile.token);
+        } else {
+          localStorage.removeItem('shelf_auth_token');
+        }
+        window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new Event('user-switched'));
+      }
+    }
+  }, [activeProfile]);
 
   useEffect(() => {
     const savedThemeKey = localStorage.getItem('shelf_theme_key') || DEFAULT_THEME_KEY;
