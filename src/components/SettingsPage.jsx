@@ -3,8 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { LogOut, Shield, Palette, Bell, Lock, Trash2, ChevronRight, Settings as SettingsIcon, Pipette } from 'lucide-react';
 import { THEME_LIST, THEME_COLOR_ROLES, applyTheme, DEFAULT_THEME_KEY, getSavedThemeOverrides } from '../utils/themePresets';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useAlert } from '../context/AlertContext';
 
 export default function SettingsPage({ activeProfile, updateActiveProfile, profileAccounts, deleteProfileAccount, switchProfileAccount }) {
+  const { cConfirm } = useAlert();
   const isLoggedIn = !!localStorage.getItem('shelf_auth_token');
   const [settingSection, setSettingSection] = useState(isLoggedIn ? 'profile' : 'appearance');
   const [loading, setLoading] = useState(false);
@@ -204,7 +206,8 @@ export default function SettingsPage({ activeProfile, updateActiveProfile, profi
   };
 
   const handleDeleteAccount = async () => {
-    if (window.confirm('Are you absolutely sure? This action cannot be undone.')) {
+    const confirmed = await cConfirm("Delete Account", "Are you absolutely sure? This action cannot be undone.");
+    if (confirmed) {
       const token = localStorage.getItem('shelf_auth_token');
       if (token) {
         try {

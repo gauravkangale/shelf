@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Pencil, FileText, Trash2, Link2 } from 'lucide-react';
 import { uGet, uSet, uRemove } from '../utils/userKey';
+import { useAlert } from '../context/AlertContext';
 
 const STORAGE_KEY = 'welcome_decoration_index';
 const CUSTOM_IMG_KEY = 'welcome_decoration_custom';
@@ -56,6 +57,7 @@ const MenuButton = ({ icon, label, onClick, color }) => {
 };
 
 export default function WelcomeCard({ activeProfileName, setActiveTab }) {
+  const { cPrompt } = useAlert();
   const graphicRef = useRef(null);
   const uploadRef = useRef(null);
 
@@ -240,8 +242,8 @@ export default function WelcomeCard({ activeProfileName, setActiveTab }) {
     setShowUploadMenu(false);
   };
 
-  const handleAddLink = () => {
-    const url = prompt("Enter or paste your book link:");
+  const handleAddLink = async () => {
+    const url = await cPrompt("Add Link", "Enter or paste your book link:", "https://");
     if (url) {
       const formattedUrl = url.startsWith('http') ? url : `https://${url}`;
       saveResource({ type: 'link', value: formattedUrl });

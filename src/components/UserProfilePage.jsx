@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { UserPlus, UserCheck, UserMinus, ArrowLeft, Loader2, LogIn } from 'lucide-react';
 import { applyTheme, DEFAULT_THEME_KEY } from '../utils/themePresets';
+import { useAlert } from '../context/AlertContext';
 
 export default function UserProfilePage({ targetUsername }) {
+  const { cAlert, cConfirm } = useAlert();
   const [profile, setProfile] = useState(null);
   const [friendshipStatus, setFriendshipStatus] = useState('none');
   const [loading, setLoading] = useState(true);
@@ -80,7 +82,7 @@ export default function UserProfilePage({ targetUsername }) {
         setFriendshipStatus('pending_outgoing');
       } else {
         const d = await res.json();
-        alert(d.error || 'Failed to send request');
+        cAlert("Friend Request Error", d.error || 'Failed to send request');
       }
     } catch (err) {
       console.error(err);
@@ -104,7 +106,7 @@ export default function UserProfilePage({ targetUsername }) {
         setFriendshipStatus('accepted');
       } else {
         const d = await res.json();
-        alert(d.error || 'Failed to accept friend request');
+        cAlert("Friend Request Error", d.error || 'Failed to accept friend request');
       }
     } catch (err) {
       console.error(err);
@@ -114,7 +116,8 @@ export default function UserProfilePage({ targetUsername }) {
   };
 
   const handleUnfriend = async () => {
-    if (!window.confirm(`Are you sure you want to remove ${profile.name || profile.username} from your friends?`)) return;
+    const confirmed = await cConfirm("Unfriend", `Are you sure you want to remove ${profile.name || profile.username} from your friends?`);
+    if (!confirmed) return;
     try {
       setActionLoading(true);
       const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/friends/remove`, {
@@ -129,7 +132,7 @@ export default function UserProfilePage({ targetUsername }) {
         setFriendshipStatus('none');
       } else {
         const d = await res.json();
-        alert(d.error || 'Failed to remove friend');
+        cAlert("Unfriend Error", d.error || 'Failed to remove friend');
       }
     } catch (err) {
       console.error(err);

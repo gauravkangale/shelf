@@ -5,6 +5,7 @@ import ProfileSwitcher from './ProfileSwitcher';
 import CalendarTimeline from './CalendarTimeline';
 import FriendsList from './FriendsList';
 import NotesListSection from './NotesListSection';
+import { useAlert } from '../context/AlertContext';
 
 export default function RightSidebar({
   activeProfile,
@@ -34,6 +35,7 @@ export default function RightSidebar({
   handleCalendarScroll,
   handleCompleteLogout
 }) {
+  const { cConfirm } = useAlert();
   const DEFAULT_BOOK = {
     title: 'The Divine Segregation',
     currentPage: '163',
@@ -52,15 +54,19 @@ export default function RightSidebar({
   const [editAuthor, setEditAuthor] = React.useState('');
   const [notification, setNotification] = React.useState('');
 
-  const [showClearConfirm, setShowClearConfirm] = React.useState(false);
-
-  const confirmDeleteLocalData = () => {
-    setShowClearConfirm(true);
+  const confirmDeleteLocalData = async () => {
+    const confirmed = await cConfirm(
+      "Clear Local Data?",
+      "Are you sure you want to clear your local heavy data (books, notes)? This won't affect your main account info.",
+      "Clear Data",
+      "Cancel"
+    );
+    if (confirmed) {
+      handleDeleteLocalData();
+    }
   };
 
   const handleDeleteLocalData = async () => {
-    setShowClearConfirm(false);
-
     const token = localStorage.getItem('shelf_auth_token');
     if (!token) return;
 
@@ -264,80 +270,6 @@ export default function RightSidebar({
           />
         )}
       </div>
-
-      {/* Overlay Modal for Clear Data */}
-      {showClearConfirm && typeof document !== 'undefined' && createPortal(
-        <div className="modal-overlay" style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 999999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div className="modal-content" style={{
-            background: 'var(--bg-primary, #fbfaf8)',
-            padding: '32px',
-            borderRadius: '16px',
-            width: '90%',
-            maxWidth: '400px',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
-            position: 'relative',
-            textAlign: 'center'
-          }}>
-            <button
-              onClick={() => setShowClearConfirm(false)}
-              style={{
-                position: 'absolute', top: '16px', right: '16px',
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--brass, #b08953)'
-              }}
-            >
-              <X size={20} />
-            </button>
-            <div style={{
-              width: '56px', height: '56px', borderRadius: '50%',
-              background: 'rgba(179, 53, 51, 0.1)', display: 'flex',
-              alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 20px', color: 'var(--rust, #b33533)'
-            }}>
-              <AlertTriangle size={28} />
-            </div>
-            <h3 style={{
-              fontFamily: 'var(--serif)', fontSize: '22px',
-              color: 'var(--forest-deep)', margin: '0 0 12px',
-              fontWeight: 600
-            }}>Clear Local Data?</h3>
-            <p style={{
-              fontFamily: 'var(--sans)', fontSize: '14px',
-              color: '#7a7263', margin: '0 0 24px', lineHeight: 1.5
-            }}>
-              Are you sure you want to clear your local heavy data (books, notes)? This won't affect your main login info on NeonDB.
-            </p>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => setShowClearConfirm(false)}
-                style={{
-                  flex: 1, padding: '12px', borderRadius: '8px',
-                  border: '1px solid var(--brass, #b08953)',
-                  background: 'transparent', color: 'var(--brass, #b08953)',
-                  fontFamily: 'var(--sans)', fontSize: '14px',
-                  fontWeight: 600, cursor: 'pointer',
-                  transition: 'background 0.2s'
-                }}
-              >Cancel</button>
-              <button
-                onClick={handleDeleteLocalData}
-                style={{
-                  flex: 1, padding: '12px', borderRadius: '8px',
-                  border: 'none', background: 'var(--rust, #b33533)',
-                  color: 'white', fontFamily: 'var(--sans)',
-                  fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                  transition: 'opacity 0.2s'
-                }}
-              >Clear Data</button>
-            </div>
-          </div>
-        </div>,
-        document.getElementById('root') || document.body
-      )}
 
       {/* 2. Current Book Info Card */}
       <section className="current-book-card" style={{ position: 'relative' }}>

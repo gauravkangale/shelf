@@ -3,8 +3,10 @@ import { THEME_COLOR_ROLES } from "../utils/themePresets";
 import { Pencil, Sun, Moon, X, Plus, Trash2, Check } from "lucide-react";
 import { uGet, uSet } from "../utils/userKey";
 import NotebookScratchpad from "./NotebookScratchpad";
+import { useAlert } from "../context/AlertContext";
 
 export default function DesktopNeumorphicDashboard({ username }) {
+    const { cAlert } = useAlert();
     const [time, setTime] = useState(new Date());
     const [weather, setWeather] = useState(null);
     const [cryptoData, setCryptoData] = useState(null);
@@ -70,7 +72,7 @@ export default function DesktopNeumorphicDashboard({ username }) {
                 uSet("dashboard_image", compressed);
                 syncPrefs({ dashboard_image: compressed })
                     .then(success => {
-                        if (!success) alert("Failed to save image to database. It might be too large.");
+                        if (!success) cAlert("Image Save Failed", "Failed to save image to database. It might be too large.");
                     });
             };
 
@@ -79,7 +81,7 @@ export default function DesktopNeumorphicDashboard({ username }) {
                 uSet("dashboard_image", rawBase64);
                 syncPrefs({ dashboard_image: rawBase64 })
                     .then(success => {
-                        if (!success) alert("Failed to save image to database. It might be too large.");
+                        if (!success) cAlert("Image Save Failed", "Failed to save image to database. It might be too large.");
                     });
             };
 

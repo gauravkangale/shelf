@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Search, Send, ArrowLeft, BookOpen, Trash2, Users, MessageSquare, Image, X, MoreVertical, BookUser, MessageCircle, ExternalLink, Download, UserMinus } from 'lucide-react';
 import Avatar from './Avatar';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useAlert } from '../context/AlertContext';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatTime(dateVal) {
@@ -184,6 +185,7 @@ function renderParsedEmbedsOnly(text, isSelectMode, setActiveImageUrl) {
 
 // ─── Chat Conversation View ───────────────────────────────────────────────────
 function ChatView({ friend, currentUser, token, onBack }) {
+  const { cAlert, cConfirm } = useAlert();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -346,7 +348,7 @@ function ChatView({ friend, currentUser, token, onBack }) {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file.');
+      cAlert('Invalid File', 'Please select an image file.');
       return;
     }
 
@@ -414,7 +416,8 @@ function ChatView({ friend, currentUser, token, onBack }) {
   };
 
   const handleDelete = async (msgId) => {
-    if (!window.confirm('Delete this message?')) return;
+    const confirmed = await cConfirm('Delete Message', 'Delete this message?');
+    if (!confirmed) return;
     setMessages(prev => prev.filter(m => m.id !== msgId));
     try {
       await fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/api/chat/message/${msgId}`, {
@@ -427,7 +430,8 @@ function ChatView({ friend, currentUser, token, onBack }) {
 
   const handleDeleteSelected = async () => {
     if (selectedMsgIds.length === 0) return;
-    if (!window.confirm(`Delete the ${selectedMsgIds.length} selected message(s)?`)) return;
+    const confirmed = await cConfirm('Delete Selected', `Delete the ${selectedMsgIds.length} selected message(s)?`);
+    if (!confirmed) return;
 
     setMessages(prev => prev.filter(m => !selectedMsgIds.includes(m.id)));
     const ids = [...selectedMsgIds];
@@ -447,7 +451,8 @@ function ChatView({ friend, currentUser, token, onBack }) {
   };
 
   const handleClearChat = async () => {
-    if (!window.confirm('Clear all messages in this conversation? This cannot be undone.')) return;
+    const confirmed = await cConfirm('Clear Chat', 'Clear all messages in this conversation? This cannot be undone.');
+    if (!confirmed) return;
     setMessages([]);
     setShowMenu(false);
     try {
@@ -1365,6 +1370,7 @@ function FriendCard({ friend, active, onClick, isFriend, onUnfriend }) {
 // ─── Main FriendsSection ─────────────────────────────────────────────────────
   // eslint-disable-next-line no-unused-vars
 export default function FriendsSection({ setActiveTab }) {
+  const { cAlert, cConfirm } = useAlert();
   const [friends, setFriends] = useState([]);
   const [teammates, setTeammates] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1382,7 +1388,8 @@ export default function FriendsSection({ setActiveTab }) {
   });
 
   const handleUnfriend = async (friendId) => {
-    if (!window.confirm("Are you sure you want to remove this friend?")) return;
+    const confirmed = await cConfirm("Remove Friend", "Are you sure you want to remove this friend?");
+    if (!confirmed) return;
     try {
       const res = await fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/api/friends/remove`, {
         method: 'DELETE',
@@ -1399,11 +1406,11 @@ export default function FriendsSection({ setActiveTab }) {
         }
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to remove friend');
+        cAlert("Remove Friend Error", data.error || 'Failed to remove friend');
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to connect to the server');
+      cAlert("Connection Error", 'Failed to connect to the server');
     }
   };
 

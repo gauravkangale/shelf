@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { uGet, uSet, userKey } from '../utils/userKey';
 import { getScratchpadContent, setScratchpadContent } from '../utils/scratchpadStore';
-import CustomAlertModal from './CustomAlertModal';
+import { useAlert } from '../context/AlertContext';
 
 export default function NotebookScratchpad() {
     const [content, setContent] = useState(() => {
@@ -72,6 +72,7 @@ export default function NotebookScratchpad() {
     // Find & Replace Inputs
     const [findText, setFindText] = useState('');
     const [replaceText, setReplaceText] = useState('');
+    const [activeMatchIndex, setActiveMatchIndex] = useState(0);
 
     // Active tool state indicators
     const [activeStyles, setActiveStyles] = useState({
@@ -98,78 +99,105 @@ export default function NotebookScratchpad() {
     const sheetColorInputRef = useRef(null);
     const [showMoreSettings, setShowMoreSettings] = useState(false);
     const [activeImageElement, setActiveImageElement] = useState(null);
-    const [modalConfig, setModalConfig] = useState({
-        isOpen: false,
-        type: 'alert',
-        title: '',
-        message: '',
-        placeholder: '',
-        defaultValue: '',
-        onConfirm: () => { },
-        onCancel: () => { }
-    });
+    const { cAlert, cConfirm, cPrompt } = useAlert();
 
-    const showModal = (type, title, message, placeholder = '', defaultValue = '') => {
-        return new Promise((resolve) => {
-            setModalConfig({
-                isOpen: true,
-                type,
-                title,
-                message,
-                placeholder,
-                defaultValue,
-                onConfirm: (val) => {
-                    setModalConfig(prev => ({ ...prev, isOpen: false }));
-                    resolve(val);
-                },
-                onCancel: () => {
-                    setModalConfig(prev => ({ ...prev, isOpen: false }));
-                    resolve(null);
-                }
-            });
-        });
-    };
+    const getSearchRanges = (root, query) => {
+        if (!query) return [];
+        const ranges = [];
+        const queryLower = query.toLowerCase();
 
-    const cAlert = (title, message) => showModal('alert', title, message);
-    const cConfirm = (title, message) => showModal('confirm', title, message);
-    const cPrompt = (title, message, placeholder = '', defaultValue = '') => showModal('prompt', title, message, placeholder, defaultValue);
-
-    const highlightSearchQuery = (element, query) => {
-        removeSearchHighlights(element);
-        if (!query) return;
-
-        const regex = new RegExp(`(${query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
-
-        const traverse = (node) => {
-            if (node.nodeType === 3) { // Text node
-                const text = node.nodeValue;
-                if (regex.test(text)) {
-                    const span = document.createElement('span');
-                    span.className = 'find-highlight';
-                    span.innerHTML = text.replace(regex, '<mark style="background-color: #fef08a; color: #1e293b; padding: 1px 2px; border-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">$1</mark>');
-                    node.parentNode.replaceChild(span, node);
-                }
-            } else if (node.nodeType === 1 && node.childNodes && !['SCRIPT', 'STYLE', 'TEXTAREA'].includes(node.nodeName) && node.className !== 'find-highlight') {
-                for (let i = node.childNodes.length - 1; i >= 0; i--) {
-                    traverse(node.childNodes[i]);
+        const textNodes = [];
+        const walk = (node) => {
+            if (node.nodeType === 3) {
+                textNodes.push(node);
+            } else if (node.nodeType === 1 && !['SCRIPT', 'STYLE', 'TEXTAREA'].includes(node.nodeName)) {
+                for (let child of node.childNodes) {
+                    walk(child);
                 }
             }
         };
+        walk(root);
 
-        traverse(element);
+        textNodes.forEach(node => {
+            const text = node.nodeValue;
+            let index = text.toLowerCase().indexOf(queryLower);
+            while (index !== -1) {
+                const range = document.createRange();
+                range.setStart(node, index);
+                range.setEnd(node, index + query.length);
+                ranges.push(range);
+                index = text.toLowerCase().indexOf(queryLower, index + 1);
+            }
+        });
+
+        return ranges;
+    };
+
+    const highlightRanges = (ranges, activeIdx = 0) => {
+        if (!CSS.highlights) {
+            if (ranges.length > 0) {
+                try {
+                    const activeRange = ranges[Math.min(activeIdx, ranges.length - 1)];
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(activeRange);
+                    const activeNode = activeRange.startContainer.parentElement;
+                    if (activeNode) {
+                        activeNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                } catch (e) { }
+            }
+            return;
+        }
+
+        CSS.highlights.delete('search-results');
+        CSS.highlights.delete('active-search-result');
+
+        if (ranges.length === 0) return;
+
+        const allRanges = [];
+        let activeRange = null;
+        const targetIdx = Math.max(0, Math.min(activeIdx, ranges.length - 1));
+
+        ranges.forEach((range, idx) => {
+            if (idx === targetIdx) {
+                activeRange = range;
+            } else {
+                allRanges.push(range);
+            }
+        });
+
+        if (allRanges.length > 0) {
+            const searchResultsHighlight = new Highlight(...allRanges);
+            CSS.highlights.set('search-results', searchResultsHighlight);
+        }
+        if (activeRange) {
+            const activeHighlight = new Highlight(activeRange);
+            CSS.highlights.set('active-search-result', activeHighlight);
+
+            try {
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(activeRange);
+            } catch (e) { }
+
+            const activeNode = activeRange.startContainer.parentElement;
+            if (activeNode) {
+                activeNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    };
+
+    const highlightSearchQuery = (element, query, activeIdx = 0) => {
+        const ranges = getSearchRanges(element, query);
+        highlightRanges(ranges, activeIdx);
     };
 
     const removeSearchHighlights = (element) => {
-        if (!element) return;
-        const highlights = element.querySelectorAll('.find-highlight');
-        highlights.forEach(span => {
-            const parent = span.parentNode;
-            if (parent) {
-                const textNode = document.createTextNode(span.innerText);
-                parent.replaceChild(textNode, span);
-                parent.normalize();
-            }
-        });
+        if (CSS.highlights) {
+            CSS.highlights.delete('search-results');
+            CSS.highlights.delete('active-search-result');
+        }
     };
 
     const getCleanHTML = (element) => {
@@ -184,15 +212,19 @@ export default function NotebookScratchpad() {
                 parent.normalize();
             }
         });
+        const images = clone.querySelectorAll('img');
+        images.forEach(img => {
+            img.classList.remove('selected-for-resize');
+        });
         return clone.innerHTML;
     };
 
     useEffect(() => {
         const activeRef = isExpanded ? modalRef : inlineRef;
         if (activeRef.current) {
-            highlightSearchQuery(activeRef.current, findText);
+            highlightSearchQuery(activeRef.current, findText, activeMatchIndex);
         }
-    }, [findText, isExpanded]);
+    }, [findText, content, isExpanded, activeMatchIndex]);
 
     // Sync content and styles if modified elsewhere
     useEffect(() => {
@@ -467,17 +499,52 @@ export default function NotebookScratchpad() {
         const timeStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         applyFormat('insertHTML', `&nbsp;<strong>[${timeStr}]</strong>&nbsp;`);
     };
-
     const insertCheckbox = () => {
-        applyFormat('insertHTML', `<div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;"><input type="checkbox" style="cursor: pointer;" />&nbsp;Task</div>`);
+        const uniqueId = 'task-' + Math.random().toString(36).substring(2, 9);
+        applyFormat(
+            'insertHTML',
+            `<div class="scratchpad-task-item" style="display: flex; align-items: center; gap: 10px; margin: 8px 0; line-height: 1.5;">
+                <input type="checkbox" class="scratchpad-task-checkbox" style="cursor: pointer; width: 16px; height: 16px; margin: 0; accent-color: var(--accent-color);" />
+                <span id="${uniqueId}" data-placeholder="Task" style="flex-grow: 1; outline: none; min-width: 50px; display: inline-block;"></span>
+            </div>`
+        );
+        selectInsertedElement(uniqueId);
     };
 
     const insertCodeBlock = () => {
-        applyFormat('insertHTML', `<pre style="background: var(--option-bg); border: 1px solid var(--border-color); padding: 8px; border-radius: 6px; font-family: monospace; font-size: 0.9rem; margin: 8px 0; overflow-x: auto;">Code Here</pre>`);
+        const uniqueId = 'code-' + Math.random().toString(36).substring(2, 9);
+        applyFormat(
+            'insertHTML',
+            `<pre id="${uniqueId}" data-placeholder="Write your code here..." style="background-color: #1e293b; color: #1e293b; border: 1.5px solid var(--border-color, #cbd5e1); padding: 14px 18px; border-radius: 8px; font-family: monospace; font-size: 0.85rem; margin: 16px 0; overflow: auto; resize: vertical; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); outline: none; white-space: pre-wrap; word-break: break-all; min-height: 60px; display: block;"></pre>`
+        );
+        selectInsertedElement(uniqueId);
     };
 
     const insertQuote = () => {
-        applyFormat('insertHTML', `<blockquote style="border-left: 4px solid var(--accent-color); padding-left: 12px; margin: 12px 0; font-style: italic; color: var(--text-secondary);">Quote Here</blockquote>`);
+        const uniqueId = 'quote-' + Math.random().toString(36).substring(2, 9);
+        applyFormat(
+            'insertHTML',
+            `<blockquote id="${uniqueId}" data-placeholder="Write your quote here..." style="border-left: 4px solid var(--accent-color, #10b981); background-color: var(--option-bg, rgba(0, 0, 0, 0.02)); padding: 12px 18px; margin: 16px 0; border-radius: 6px; font-style: italic; color: var(--text-secondary); outline: none; min-height: 24px;"></blockquote>`
+        );
+        selectInsertedElement(uniqueId);
+    };
+
+    const selectInsertedElement = (elementId) => {
+        setTimeout(() => {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+
+            el.focus();
+
+            const range = document.createRange();
+            range.selectNodeContents(el);
+
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+
+            el.removeAttribute("id");
+        }, 10);
     };
 
     const insertTable = () => {
@@ -578,33 +645,51 @@ export default function NotebookScratchpad() {
     const handleFindReplace = (all = false) => {
         if (!findText) return;
         const activeRef = isExpanded ? modalRef : inlineRef;
-        if (!activeRef.current) return;
+        const editor = activeRef.current;
+        if (!editor) return;
 
-        if (window.find) {
-            const selection = window.getSelection();
-            selection.removeAllRanges();
+        const ranges = getSearchRanges(editor, findText);
+        if (ranges.length === 0) {
+            cAlert('Text Not Found', `Could not find "${findText}" in document.`);
+            return;
+        }
 
-            if (all) {
-                let found = window.find(findText, false, false, true, false, true, false);
-                while (found) {
-                    document.execCommand('insertHTML', false, replaceText);
-                    found = window.find(findText, false, false, true, false, true, false);
-                }
-            } else {
-                const found = window.find(findText, false, false, true, false, true, false);
-                if (found) {
-                    document.execCommand('insertHTML', false, replaceText);
-                } else {
-                    cAlert('Text Not Found', `Could not find "${findText}" in document.`);
-                }
+        if (all) {
+            // Replace all matches backwards to preserve node offsets
+            for (let i = ranges.length - 1; i >= 0; i--) {
+                const range = ranges[i];
+                range.deleteContents();
+                const textNode = document.createTextNode(replaceText);
+                range.insertNode(textNode);
             }
+
+            editor.normalize();
+            handleInput({ currentTarget: editor });
+            setActiveMatchIndex(0);
+            removeSearchHighlights(editor);
         } else {
-            let html = activeRef.current.innerHTML;
-            const escaped = findText.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-            const regex = new RegExp(escaped, all ? 'g' : '');
-            const newHtml = html.replace(regex, replaceText);
-            activeRef.current.innerHTML = newHtml;
-            handleInput({ currentTarget: activeRef.current });
+            // Replace the currently active match
+            const idx = Math.max(0, Math.min(activeMatchIndex, ranges.length - 1));
+            const range = ranges[idx];
+            if (range) {
+                range.deleteContents();
+                const textNode = document.createTextNode(replaceText);
+                range.insertNode(textNode);
+            }
+
+            editor.normalize();
+            handleInput({ currentTarget: editor });
+
+            // Get new ranges to determine next selection index
+            const newRanges = getSearchRanges(editor, findText);
+            if (newRanges.length > 0) {
+                const newIdx = idx >= newRanges.length ? 0 : idx;
+                setActiveMatchIndex(newIdx);
+                highlightRanges(newRanges, newIdx);
+            } else {
+                setActiveMatchIndex(0);
+                removeSearchHighlights(editor);
+            }
         }
     };
 
@@ -790,6 +875,56 @@ export default function NotebookScratchpad() {
             if (activeImageElement) {
                 activeImageElement.classList.remove('selected-for-resize');
                 setActiveImageElement(null);
+            }
+
+            // Click-to-position logic when clicking below existing lines
+            if (e.target === e.currentTarget && !readOnly) {
+                const editor = e.currentTarget;
+                const rect = editor.getBoundingClientRect();
+
+                // Get line spacing and padding top based on mode (expanded vs inline)
+                const spacing = isExpanded ? lineSpacing : 24;
+                const paddingTop = isExpanded ? 20 : 12;
+
+                // Click Y relative to the top of the editor content (including scroll)
+                const relativeY = e.clientY - rect.top + editor.scrollTop - paddingTop;
+
+                // Which line was clicked (0-indexed)
+                const targetLineIndex = Math.max(0, Math.floor(relativeY / spacing));
+
+                // Count current line blocks/elements
+                const children = Array.from(editor.children);
+                let currentLineCount = children.length;
+                if (currentLineCount === 0) {
+                    currentLineCount = 1;
+                }
+
+                if (targetLineIndex >= currentLineCount) {
+                    const linesToAdd = targetLineIndex - currentLineCount + 1;
+
+                    // Create and append empty paragraphs
+                    for (let i = 0; i < linesToAdd; i++) {
+                        const emptyLine = document.createElement('p');
+                        emptyLine.innerHTML = '<br>';
+                        editor.appendChild(emptyLine);
+                    }
+
+                    // Trigger input to save state
+                    handleInput({ currentTarget: editor });
+
+                    // Focus and select the last empty line
+                    setTimeout(() => {
+                        const lastLine = editor.lastElementChild;
+                        if (lastLine) {
+                            const range = document.createRange();
+                            range.selectNodeContents(lastLine);
+                            const selection = window.getSelection();
+                            selection.removeAllRanges();
+                            selection.addRange(range);
+                            lastLine.focus();
+                        }
+                    }, 10);
+                }
             }
         }
     };
@@ -1009,7 +1144,7 @@ export default function NotebookScratchpad() {
 
     const getPaperBackground = (style, spacingVal, opacityVal, styleVal, colorVal, thicknessVal) => {
         const opacityDecimal = opacityVal / 100;
-        const lineColorStr = `rgba(148, 163, 184, ${opacityDecimal})`;
+        const lineColorStr = `rgba(100, 116, 139, ${opacityDecimal})`;
         const thicknessPx = `${thicknessVal}px`;
         const spacingPx = `${spacingVal}px`;
 
@@ -1037,11 +1172,11 @@ export default function NotebookScratchpad() {
                 const rule24 = `${(spacingVal * 3) / 4}px`;
                 return {
                     background: `
-                        linear-gradient(rgba(148, 163, 184, ${opacityDecimal * 0.35}) ${thicknessPx}, transparent ${thicknessPx}),
-                        linear-gradient(rgba(148, 163, 184, ${opacityDecimal * 0.35}) ${thicknessPx}, transparent ${thicknessPx}),
-                        linear-gradient(rgba(148, 163, 184, ${opacityDecimal * 0.35}) ${thicknessPx}, transparent ${thicknessPx}),
+                        linear-gradient(rgba(100, 116, 139, ${opacityDecimal * 0.35}) ${thicknessPx}, transparent ${thicknessPx}),
+                        linear-gradient(rgba(100, 116, 139, ${opacityDecimal * 0.35}) ${thicknessPx}, transparent ${thicknessPx}),
+                        linear-gradient(rgba(100, 116, 139, ${opacityDecimal * 0.35}) ${thicknessPx}, transparent ${thicknessPx}),
                         linear-gradient(${lineColorStr} ${thicknessVal * 1.5}px, transparent ${thicknessVal * 1.5}px),
-                        linear-gradient(90deg, rgba(148, 163, 184, ${opacityDecimal * 0.5}) ${thicknessPx}, transparent ${thicknessPx})
+                        linear-gradient(90deg, rgba(100, 116, 139, ${opacityDecimal * 0.5}) ${thicknessPx}, transparent ${thicknessPx})
                     `,
                     backgroundSize: `100% ${rule8}, 100% ${rule16}, 100% ${rule24}, 100% ${spacingPx}, ${spacingPx} 100%`,
                     backgroundPosition: `0 ${rule8}, 0 ${rule16}, 0 ${rule24}, 0 0, 0 0`,
@@ -1249,6 +1384,7 @@ export default function NotebookScratchpad() {
                 {isOpen && (
                     <div
                         onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
                         style={{
                             position: 'absolute',
                             top: 'calc(100% + 4px)',
@@ -1305,6 +1441,9 @@ export default function NotebookScratchpad() {
         );
     };
 
+    const leftPadding = (paperStyle === 'lines' && marginStyle === 'left') ? `${marginOffset + 24}px` : `${docPadding}px`;
+    const rightPadding = (paperStyle === 'lines' && marginStyle === 'right') ? `${marginOffset + 24}px` : `${docPadding}px`;
+
     return (
         <div style={{ display: 'flex', flex: 1, height: '110px', position: 'relative' }}>
             {/* CSS Animation Injector, placeholders, handwriting fonts and formatting typography tags */}
@@ -1323,11 +1462,66 @@ export default function NotebookScratchpad() {
                         border-radius: 0;
                     }
                 }
+                ::highlight(search-results) {
+                    background-color: #fef08a;
+                    color: #1e293b;
+                }
+                ::highlight(active-search-result) {
+                    background-color: #f97316;
+                    color: #ffffff;
+                }
                 .scratchpad-editor:empty:before {
                     content: attr(placeholder);
                     color: var(--text-secondary);
                     opacity: 0.65;
                     font-style: italic;
+                }
+                /* Hardware-accelerated dynamic sheet backgrounds using CSS variables */
+                .scratchpad-editor.dots {
+                    background-image: radial-gradient(rgba(100, 116, 139, var(--notebook-opacity, 0.35)) var(--notebook-thickness, 1.2px), transparent var(--notebook-thickness, 1.2px)) !important;
+                    background-size: var(--notebook-spacing, 24px) var(--notebook-spacing, 24px) !important;
+                    background-attachment: local !important;
+                }
+                .scratchpad-editor.grid {
+                    background-image: 
+                        linear-gradient(rgba(100, 116, 139, var(--notebook-opacity, 0.35)) var(--notebook-thickness, 1.2px), transparent var(--notebook-thickness, 1.2px)),
+                        linear-gradient(90deg, rgba(100, 116, 139, var(--notebook-opacity, 0.35)) var(--notebook-thickness, 1.2px), transparent var(--notebook-thickness, 1.2px)) !important;
+                    background-size: var(--notebook-spacing, 24px) var(--notebook-spacing, 24px) !important;
+                    background-attachment: local !important;
+                }
+                .scratchpad-editor.lines {
+                    background-image: linear-gradient(rgba(100, 116, 139, var(--notebook-opacity, 0.35)) var(--notebook-thickness, 1.2px), transparent var(--notebook-thickness, 1.2px)) !important;
+                    background-size: 100% var(--notebook-spacing, 24px) !important;
+                    background-attachment: local !important;
+                }
+                .scratchpad-editor.seyes {
+                    background-image: 
+                        linear-gradient(rgba(100, 116, 139, calc(var(--notebook-opacity, 0.35) * 0.35)) var(--notebook-thickness, 1px), transparent var(--notebook-thickness, 1px)),
+                        linear-gradient(rgba(100, 116, 139, calc(var(--notebook-opacity, 0.35) * 0.35)) var(--notebook-thickness, 1px), transparent var(--notebook-thickness, 1px)),
+                        linear-gradient(rgba(100, 116, 139, calc(var(--notebook-opacity, 0.35) * 0.35)) var(--notebook-thickness, 1px), transparent var(--notebook-thickness, 1px)),
+                        linear-gradient(rgba(100, 116, 139, var(--notebook-opacity, 0.35)) calc(var(--notebook-thickness, 1px) * 1.5), transparent calc(var(--notebook-thickness, 1px) * 1.5)),
+                        linear-gradient(90deg, rgba(100, 116, 139, calc(var(--notebook-opacity, 0.35) * 0.6)) var(--notebook-thickness, 1px), transparent var(--notebook-thickness, 1px)) !important;
+                    background-size: 100% calc(var(--notebook-spacing, 24px) / 4), 100% calc(var(--notebook-spacing, 24px) / 2), 100% calc(var(--notebook-spacing, 24px) * 3 / 4), 100% var(--notebook-spacing, 24px), var(--notebook-spacing, 24px) 100% !important;
+                    background-position: 0 calc(var(--notebook-spacing, 24px) / 4), 0 calc(var(--notebook-spacing, 24px) / 2), 0 calc(var(--notebook-spacing, 24px) * 3 / 4), 0 0, 0 0 !important;
+                    background-attachment: local !important;
+                }
+                .scratchpad-editor.isometric {
+                    background-image: 
+                        linear-gradient(30deg, rgba(100, 116, 139, var(--notebook-opacity, 0.35)) var(--notebook-thickness, 1px), transparent var(--notebook-thickness, 1px)),
+                        linear-gradient(150deg, rgba(100, 116, 139, var(--notebook-opacity, 0.35)) var(--notebook-thickness, 1px), transparent var(--notebook-thickness, 1px)),
+                        linear-gradient(90deg, rgba(100, 116, 139, var(--notebook-opacity, 0.35)) var(--notebook-thickness, 1px), transparent var(--notebook-thickness, 1px)) !important;
+                    background-size: var(--notebook-spacing, 24px) var(--notebook-spacing, 24px) !important;
+                    background-attachment: local !important;
+                }
+                .scratchpad-editor.blank {
+                    background-image: none !important;
+                }
+                .scratchpad-editor [data-placeholder]:empty:before {
+                    content: attr(data-placeholder);
+                    color: var(--text-secondary, #94a3b8);
+                    opacity: 0.75;
+                    pointer-events: none;
+                    display: inline-block;
                 }
                 .scratchpad-editor h1 {
                     font-family: var(--serif);
@@ -1595,14 +1789,17 @@ export default function NotebookScratchpad() {
                         margin: 0,
                         boxSizing: 'border-box',
                         padding: textPaddingInline,
-                        ...getPaperBackground(paperStyle, inlineSpacing, inlineOpacity, inlineLineStyle, inlinePaperColor, inlineThickness),
+                        backgroundColor: paperColor.startsWith('var') ? 'var(--surface-bg)' : paperColor,
                         overflowY: 'auto',
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                         zIndex: 1,
-                        '--print-spacing': `${inlineSpacing}px`,
-                        '--print-thickness': `${inlineThickness}px`,
-                        '--print-opacity': `${inlineOpacity / 100}`
+                        '--notebook-spacing': `${lineSpacing}px`,
+                        '--notebook-thickness': `${lineThickness}px`,
+                        '--notebook-opacity': `${lineOpacity / 100}`,
+                        '--print-spacing': `${lineSpacing}px`,
+                        '--print-thickness': `${lineThickness}px`,
+                        '--print-opacity': `${lineOpacity / 100}`
                     }}
                 />
 
@@ -2407,7 +2604,22 @@ export default function NotebookScratchpad() {
                                 <span style={labelStyle}>Find</span>
                                 <input
                                     type="text" placeholder="Find..." value={findText}
-                                    onChange={(e) => setFindText(e.target.value)}
+                                    onChange={(e) => {
+                                        setFindText(e.target.value);
+                                        setActiveMatchIndex(0);
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            const activeRef = isExpanded ? modalRef : inlineRef;
+                                            if (activeRef.current) {
+                                                const marks = activeRef.current.querySelectorAll('.search-mark');
+                                                if (marks.length > 0) {
+                                                    setActiveMatchIndex((prev) => (prev + 1) % marks.length);
+                                                }
+                                            }
+                                        }
+                                    }}
                                     style={{ ...selectStyle, width: '90px' }}
                                 />
                                 <span style={labelStyle}>Replace</span>
@@ -2850,37 +3062,27 @@ export default function NotebookScratchpad() {
                                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', borderLeft: '1.5px solid var(--border-color)', paddingLeft: '12px', flexWrap: 'wrap' }}>
                                         {renderPopoverButton('spacing', 'Spacing', `${lineSpacing}px`, 20, 48, 1, lineSpacing, (e) => {
                                             const val = parseInt(e.target.value);
-                                            setLineSpacing(val);
-                                            uSet('shelf_notebook_line_spacing', val);
+                                            if (!isNaN(val)) {
+                                                setLineSpacing(val);
+                                                uSet('shelf_notebook_line_spacing', val);
+                                            }
                                         })}
 
                                         {renderPopoverButton('opacity', 'Opacity', `${lineOpacity}%`, 10, 100, 1, lineOpacity, (e) => {
                                             const val = parseInt(e.target.value);
-                                            setLineOpacity(val);
-                                            uSet('shelf_notebook_line_opacity', val);
+                                            if (!isNaN(val)) {
+                                                setLineOpacity(val);
+                                                uSet('shelf_notebook_line_opacity', val);
+                                            }
                                         })}
 
                                         {renderPopoverButton('thickness', 'Stroke', `${lineThickness}px`, 0.5, 3, 0.2, lineThickness, (e) => {
                                             const val = parseFloat(e.target.value);
-                                            setLineThickness(val);
-                                            uSet('shelf_notebook_line_thickness', val);
+                                            if (!isNaN(val)) {
+                                                setLineThickness(val);
+                                                uSet('shelf_notebook_line_thickness', val);
+                                            }
                                         })}
-
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                            <span style={labelStyle}>Design</span>
-                                            <select
-                                                value={lineStyle}
-                                                onChange={(e) => {
-                                                    setLineStyle(e.target.value);
-                                                    uSet('shelf_notebook_line_style', e.target.value);
-                                                }}
-                                                style={{ ...selectStyle, width: '75px' }}
-                                            >
-                                                <option value="solid">Solid</option>
-                                                <option value="dashed">Dashed</option>
-                                                <option value="dotted">Dotted</option>
-                                            </select>
-                                        </div>
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                                             <input
@@ -2969,14 +3171,16 @@ export default function NotebookScratchpad() {
                                 color: 'var(--text-primary)',
                                 margin: 0,
                                 boxSizing: 'border-box',
-                                padding: `20px ${docPadding}px 60px ${docPadding}px`,
+                                padding: `20px ${rightPadding} 60px ${leftPadding}`,
                                 style: { lineHeight: lineHeight }, // inline height override
-                                ...getPaperBackground(paperStyle, lineSpacing, lineOpacity, lineStyle, paperColor, lineThickness),
+                                backgroundColor: paperColor.startsWith('var') ? 'var(--surface-bg)' : paperColor,
                                 zIndex: 1,
                                 overflowY: 'auto',
                                 whiteSpace: 'pre-wrap',
                                 wordBreak: 'break-word',
-                                transition: 'all 0.15s ease',
+                                '--notebook-spacing': `${lineSpacing}px`,
+                                '--notebook-thickness': `${lineThickness}px`,
+                                '--notebook-opacity': `${lineOpacity / 100}`,
                                 '--print-spacing': `${lineSpacing}px`,
                                 '--print-thickness': `${lineThickness}px`,
                                 '--print-opacity': `${lineOpacity / 100}`
@@ -3055,8 +3259,6 @@ export default function NotebookScratchpad() {
                     }}
                 />
             )}
-
-            <CustomAlertModal {...modalConfig} />
         </div>
     );
 }
@@ -3082,6 +3284,39 @@ const ImageResizerOverlay = ({ target, onClose, onChangeSize }) => {
             scrollContainers.forEach(container => container.removeEventListener('scroll', updateRect));
         };
     }, [target]);
+
+    const onChangePlacement = (placement) => {
+        if (!target) return;
+        if (placement === 'inline') {
+            target.style.display = 'inline-block';
+            target.style.verticalAlign = 'middle';
+            target.style.float = 'none';
+            target.style.clear = 'none';
+            target.style.margin = '8px 12px';
+        } else if (placement === 'above') {
+            target.style.display = 'block';
+            target.style.float = 'none';
+            target.style.clear = 'both';
+            target.style.margin = '12px auto 6px auto';
+        } else if (placement === 'below') {
+            target.style.display = 'block';
+            target.style.float = 'none';
+            target.style.clear = 'both';
+            target.style.margin = '6px auto 12px auto';
+        }
+        // Save the modifications
+        onChangeSize(null, null);
+    };
+
+    let activePlacement = 'inline';
+    if (target && target.style.display === 'block') {
+        const marginStr = target.style.margin || '';
+        if (marginStr.startsWith('12px') || target.style.marginTop === '12px') {
+            activePlacement = 'above';
+        } else {
+            activePlacement = 'below';
+        }
+    }
 
     if (!rect) return null;
 
@@ -3234,7 +3469,7 @@ const ImageResizerOverlay = ({ target, onClose, onChangeSize }) => {
                     animation: 'notebookFullScreenOpen 0.15s ease'
                 }}
                 onClick={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.preventDefault()}
+                onMouseDown={(e) => e.stopPropagation()}
             >
                 <span style={{ fontSize: '0.68rem', fontWeight: 'bold', minWidth: '32px', fontFamily: 'monospace' }}>
                     {numericWidth}px
@@ -3244,37 +3479,104 @@ const ImageResizerOverlay = ({ target, onClose, onChangeSize }) => {
                     min="60"
                     max="800"
                     value={numericWidth}
-                    onChange={(e) => onChangeSize(`${e.target.value}px`, null)}
-                    style={{ width: '100px', cursor: 'pointer', accentColor: 'var(--accent-color)' }}
+                    onChange={(e) => onChangeSize(`${e.target.value}px`, 'auto')}
+                    style={{ width: '80px', cursor: 'pointer', accentColor: 'var(--accent-color)' }}
                 />
                 <div style={{ display: 'flex', gap: '3px' }}>
                     <button
-                        onClick={() => onChangeSize('150px', null)}
+                        onClick={() => onChangeSize('150px', 'auto')}
+                        onMouseDown={(e) => e.preventDefault()}
                         style={{ padding: '2px 6px', fontSize: '0.65rem', border: 'none', borderRadius: '4px', background: '#334155', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
                     >
                         S
                     </button>
                     <button
-                        onClick={() => onChangeSize('300px', null)}
+                        onClick={() => onChangeSize('300px', 'auto')}
+                        onMouseDown={(e) => e.preventDefault()}
                         style={{ padding: '2px 6px', fontSize: '0.65rem', border: 'none', borderRadius: '4px', background: '#334155', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
                     >
                         M
                     </button>
                     <button
-                        onClick={() => onChangeSize('500px', null)}
+                        onClick={() => onChangeSize('500px', 'auto')}
+                        onMouseDown={(e) => e.preventDefault()}
                         style={{ padding: '2px 6px', fontSize: '0.65rem', border: 'none', borderRadius: '4px', background: '#334155', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
                     >
                         L
                     </button>
                     <button
                         onClick={() => onChangeSize('100%', 'auto')}
+                        onMouseDown={(e) => e.preventDefault()}
                         style={{ padding: '2px 6px', fontSize: '0.65rem', border: 'none', borderRadius: '4px', background: '#334155', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
                     >
                         Full
                     </button>
                 </div>
+
+                {/* Vertical Divider */}
+                <div style={{ width: '1px', height: '16px', backgroundColor: 'rgba(255,255,255,0.15)', margin: '0 2px' }} />
+
+                {/* Placement Options */}
+                <div style={{ display: 'flex', gap: '3px' }}>
+                    <button
+                        onClick={() => onChangePlacement('inline')}
+                        onMouseDown={(e) => e.preventDefault()}
+                        style={{
+                            padding: '2px 6px',
+                            fontSize: '0.65rem',
+                            border: 'none',
+                            borderRadius: '4px',
+                            background: activePlacement === 'inline' ? 'var(--accent-color, #10b981)' : '#334155',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                            whiteSpace: 'nowrap'
+                        }}
+                        title="Inline in text"
+                    >
+                        In Text
+                    </button>
+                    <button
+                        onClick={() => onChangePlacement('above')}
+                        onMouseDown={(e) => e.preventDefault()}
+                        style={{
+                            padding: '2px 6px',
+                            fontSize: '0.65rem',
+                            border: 'none',
+                            borderRadius: '4px',
+                            background: activePlacement === 'above' ? 'var(--accent-color, #10b981)' : '#334155',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                            whiteSpace: 'nowrap'
+                        }}
+                        title="Block above text"
+                    >
+                        Above Text
+                    </button>
+                    <button
+                        onClick={() => onChangePlacement('below')}
+                        onMouseDown={(e) => e.preventDefault()}
+                        style={{
+                            padding: '2px 6px',
+                            fontSize: '0.65rem',
+                            border: 'none',
+                            borderRadius: '4px',
+                            background: activePlacement === 'below' ? 'var(--accent-color, #10b981)' : '#334155',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                            whiteSpace: 'nowrap'
+                        }}
+                        title="Block below text"
+                    >
+                        Below Text
+                    </button>
+                </div>
+
                 <button
                     onClick={onClose}
+                    onMouseDown={(e) => e.preventDefault()}
                     style={{
                         border: 'none',
                         background: 'transparent',

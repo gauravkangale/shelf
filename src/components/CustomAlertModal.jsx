@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlertCircle, HelpCircle, Link2, Image, RotateCcw, Trash2 } from 'lucide-react';
 
 export default function CustomAlertModal({
@@ -8,10 +8,18 @@ export default function CustomAlertModal({
     message,
     placeholder = '',
     defaultValue = '',
+    confirmText,
+    cancelText,
     onConfirm,
     onCancel
 }) {
     const [inputValue, setInputValue] = useState(defaultValue);
+
+    useEffect(() => {
+        if (isOpen) {
+            setInputValue(defaultValue);
+        }
+    }, [isOpen, defaultValue]);
 
     if (!isOpen) return null;
 
@@ -139,7 +147,7 @@ export default function CustomAlertModal({
                                 e.currentTarget.style.color = 'var(--text-secondary)';
                             }}
                         >
-                            Cancel
+                            {cancelText || 'Cancel'}
                         </button>
                     )}
                     <button 
@@ -158,7 +166,7 @@ export default function CustomAlertModal({
                         onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(1.1)'}
                         onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}
                     >
-                        {type === 'alert' ? 'OK' : 'Confirm'}
+                        {confirmText || (type === 'alert' ? 'OK' : 'Confirm')}
                     </button>
                 </div>
             </div>

@@ -12,6 +12,7 @@ import { cachedFetch } from './utils/apiCache';
 import { applyTheme, DEFAULT_THEME_KEY } from './utils/themePresets';
 import ProfileModal from './components/ProfileModal';
 import { useIsMobile } from './hooks/useIsMobile';
+import { useAlert } from './context/AlertContext';
 
 // ── Profile Settings Sub-component ──
 function ProfileSettings({ activeProfile, updateActiveProfile }) {
@@ -448,6 +449,7 @@ function ProfileSettings({ activeProfile, updateActiveProfile }) {
 }
 
 function App() {
+  const { cAlert } = useAlert();
   const isMobile = useIsMobile();
 
   // If path is a public profile card /u/username, render UserProfilePage directly
@@ -746,7 +748,7 @@ function App() {
     
     // Prevent adding if account with email already exists
     if (profileAccounts.some(acc => acc.email?.toLowerCase() === emailToUse)) {
-      alert("An account with this email is already connected.");
+      cAlert("Email Connected", "An account with this email is already connected.");
       return;
     }
 
