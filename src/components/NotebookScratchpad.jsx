@@ -5,24 +5,129 @@ import {
     AlignLeft, AlignCenter, AlignRight, List, ListOrdered,
     Link, Image as LucideImage, Eraser, Download, Trash2,
     Calendar, CheckSquare, Code, Quote, Table, RotateCcw,
-    Upload, Sliders, Palette, Eye, EyeOff
+    Upload, Sliders, Palette, Eye, EyeOff,
+    ChevronLeft, ChevronRight, Plus, Edit3, BookOpen,
+    MousePointer, StickyNote
 } from 'lucide-react';
 import { uGet, uSet, userKey } from '../utils/userKey';
 import { getScratchpadContent, setScratchpadContent } from '../utils/scratchpadStore';
 import { useAlert } from '../context/AlertContext';
 
 export default function NotebookScratchpad() {
-    const [content, setContent] = useState(() => {
+    const getScrapbookFromUrl = () => {
+        try {
+            const hash = window.location.hash;
+            let match = hash.match(/[?&]scrapbook=([^&]+)/);
+            if (!match) {
+                match = hash.match(/\/scrapbook-([^\/?&]+)/);
+            }
+            if (!match) {
+                const searchParams = new URLSearchParams(window.location.search);
+                const data = searchParams.get('scrapbook');
+                if (data) return data;
+            } else {
+                return match[1];
+            }
+        } catch (e) {
+            console.error(e);
+        }
+        return null;
+    };
+
+    const [pages, setPages] = useState(() => {
+        try {
+            const dataStr = getScrapbookFromUrl();
+            if (dataStr) {
+                const base64UrlSafe = dataStr.replace(/-/g, '+').replace(/_/g, '/');
+                const binary = atob(base64UrlSafe);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                const jsonStr = new TextDecoder().decode(bytes);
+                const decoded = JSON.parse(jsonStr);
+                if (decoded && decoded.pages) {
+                    return decoded.pages;
+                }
+            }
+        } catch (e) { }
+
+        try {
+            const key = userKey('shelf_notebook_pages');
+            const stored = localStorage.getItem(key);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            }
+        } catch (e) { }
+
         try {
             const key = userKey('shelf_notebook_scratchpad_html');
-            return localStorage.getItem(key) || '';
+            const existing = localStorage.getItem(key) || '';
+            return [{ id: 'page-1', title: 'new note', content: existing }];
         } catch {
-            return '';
+            return [{ id: 'page-1', title: 'new note', content: '' }];
         }
     });
+
+    const [currentPageIndex, setCurrentPageIndex] = useState(0);
+
+    const [content, setContent] = useState(() => {
+        try {
+            const dataStr = getScrapbookFromUrl();
+            if (dataStr) {
+                const base64UrlSafe = dataStr.replace(/-/g, '+').replace(/_/g, '/');
+                const binary = atob(base64UrlSafe);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                const jsonStr = new TextDecoder().decode(bytes);
+                const decoded = JSON.parse(jsonStr);
+                if (decoded && decoded.pages && decoded.pages[0]) {
+                    return decoded.pages[0].content;
+                }
+            }
+        } catch (e) { }
+
+        return pages[0]?.content || '';
+    });
+
+    const [isViewerMode, setIsViewerMode] = useState(() => !!getScrapbookFromUrl());
+    const [sharedScrapbook, setSharedScrapbook] = useState(() => {
+        try {
+            const dataStr = getScrapbookFromUrl();
+            if (dataStr) {
+                const base64UrlSafe = dataStr.replace(/-/g, '+').replace(/_/g, '/');
+                const binary = atob(base64UrlSafe);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                const jsonStr = new TextDecoder().decode(bytes);
+                const decoded = JSON.parse(jsonStr);
+                if (decoded && decoded.pages) return decoded;
+            }
+        } catch (e) { }
+        return null;
+    });
+
     const [copied, setCopied] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
+    const [pagesSidebarOpen, setPagesSidebarOpen] = useState(() => uGet('shelf_notebook_sidebar_open') !== false);
+    const [pagesSidebarMinimized, setPagesSidebarMinimized] = useState(() => uGet('shelf_notebook_sidebar_minimized') || false);
+    const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+    const [checkedPageIds, setCheckedPageIds] = useState([]);
+    const [activePenColor, setActivePenColor] = useState('#000000');
+    const [isMultiColor, setIsMultiColor] = useState(false);
+    const multiColorIndexRef = React.useRef(0);
+    const MULTI_COLORS = ['#e03c3c', '#e07c3c', '#d4b800', '#2a9e4e', '#2b5cc8', '#7b2fb5'];
+    const [isLassoMode, setIsLassoMode] = useState(false);
+    const [selectedElements, setSelectedElements] = useState([]);
+    const [stickyColor, setStickyColor] = useState('#fef08a');
     const [activeColorPicker, setActiveColorPicker] = useState(null); // 'sheet' | 'pen' | 'highlight' | null
+    const [penHexInput, setPenHexInput] = useState('#000000');
+    const [highlightHexInput, setHighlightHexInput] = useState('#fef08a');
 
     const rgbToHex = (rgbStr) => {
         if (!rgbStr) return '#000000';
@@ -60,6 +165,7 @@ export default function NotebookScratchpad() {
     const [marginColor, setMarginColor] = useState(() => uGet('shelf_notebook_margin_color') || '#c83f3f');
 
     const [readOnly, setReadOnly] = useState(() => uGet('shelf_notebook_readonly') || false);
+    const isReadOnlyMode = readOnly || isViewerMode;
     const [spellcheck, setSpellcheck] = useState(() => uGet('shelf_notebook_spellcheck') || true);
     const [autoCapitalize, setAutoCapitalize] = useState(() => uGet('shelf_notebook_autocap') || true);
     const [focusMode, setFocusMode] = useState(() => uGet('shelf_notebook_focusmode') || false);
@@ -100,6 +206,653 @@ export default function NotebookScratchpad() {
     const [showMoreSettings, setShowMoreSettings] = useState(false);
     const [activeImageElement, setActiveImageElement] = useState(null);
     const { cAlert, cConfirm, cPrompt } = useAlert();
+
+    const handleAddPage = () => {
+        const newPage = {
+            id: `page-${Date.now()}`,
+            title: 'new note',
+            content: ''
+        };
+        const updated = [...pages, newPage];
+        setPages(updated);
+        const pagesKey = userKey('shelf_notebook_pages');
+        localStorage.setItem(pagesKey, JSON.stringify(updated));
+        setCurrentPageIndex(updated.length - 1);
+        setContent('');
+    };
+
+    const handleRenamePage = () => {
+        const currentTitle = pages[currentPageIndex]?.title || 'new note';
+        cPrompt('Rename Page', 'Enter new title:', currentTitle).then((newTitle) => {
+            if (newTitle && newTitle.trim()) {
+                const updated = [...pages];
+                updated[currentPageIndex] = {
+                    ...updated[currentPageIndex],
+                    title: newTitle.trim()
+                };
+                setPages(updated);
+                const pagesKey = userKey('shelf_notebook_pages');
+                localStorage.setItem(pagesKey, JSON.stringify(updated));
+            }
+        });
+    };
+
+    const handleDeletePage = () => {
+        if (pages.length <= 1) {
+            cAlert('Error', 'Cannot delete the last remaining page.');
+            return;
+        }
+        cConfirm('Delete Page', 'Are you sure you want to delete this page?').then((confirmed) => {
+            if (confirmed) {
+                const updated = pages.filter((_, idx) => idx !== currentPageIndex);
+                setPages(updated);
+                const pagesKey = userKey('shelf_notebook_pages');
+                localStorage.setItem(pagesKey, JSON.stringify(updated));
+                const newIdx = Math.max(0, currentPageIndex - 1);
+                setCurrentPageIndex(newIdx);
+                setContent(updated[newIdx].content || '');
+            }
+        });
+    };
+
+    const handleRenamePageAtIndex = (index) => {
+        const currentTitle = pages[index]?.title || 'new note';
+        cPrompt('Rename Page', 'Enter new title:', currentTitle).then((newTitle) => {
+            if (newTitle && newTitle.trim()) {
+                const updated = [...pages];
+                updated[index] = {
+                    ...updated[index],
+                    title: newTitle.trim()
+                };
+                setPages(updated);
+                const pagesKey = userKey('shelf_notebook_pages');
+                localStorage.setItem(pagesKey, JSON.stringify(updated));
+            }
+        });
+    };
+
+    const handleDeletePageAtIndex = (index, e) => {
+        if (e) e.stopPropagation();
+        if (pages.length <= 1) {
+            cAlert('Error', 'Cannot delete the last remaining page.');
+            return;
+        }
+        cConfirm('Delete Page', 'Are you sure you want to delete this page?').then((confirmed) => {
+            if (confirmed) {
+                const updated = pages.filter((_, idx) => idx !== index);
+                setPages(updated);
+                const pagesKey = userKey('shelf_notebook_pages');
+                localStorage.setItem(pagesKey, JSON.stringify(updated));
+
+                let newIdx = currentPageIndex;
+                if (currentPageIndex >= updated.length) {
+                    newIdx = updated.length - 1;
+                } else if (currentPageIndex === index) {
+                    newIdx = Math.max(0, index - 1);
+                } else if (currentPageIndex > index) {
+                    newIdx = currentPageIndex - 1;
+                }
+                setCurrentPageIndex(newIdx);
+                setContent(updated[newIdx].content || '');
+            }
+        });
+    };
+
+    const togglePageChecked = (pageId) => {
+        setCheckedPageIds(prev =>
+            prev.includes(pageId)
+                ? prev.filter(id => id !== pageId)
+                : [...prev, pageId]
+        );
+    };
+
+    const handleDeleteSelectedPages = () => {
+        if (checkedPageIds.length === 0) {
+            cAlert('Info', 'Please select at least one page to delete.');
+            return;
+        }
+        if (checkedPageIds.length >= pages.length) {
+            cAlert('Error', 'Cannot delete all pages. At least one page must remain.');
+            return;
+        }
+        cConfirm('Delete Selected Pages', `Are you sure you want to delete the ${checkedPageIds.length} selected pages?`).then((confirmed) => {
+            if (confirmed) {
+                const updated = pages.filter(p => !checkedPageIds.includes(p.id));
+                setPages(updated);
+                const pagesKey = userKey('shelf_notebook_pages');
+                localStorage.setItem(pagesKey, JSON.stringify(updated));
+
+                let newIdx = currentPageIndex;
+                const currentPageId = pages[currentPageIndex]?.id;
+                if (checkedPageIds.includes(currentPageId)) {
+                    newIdx = 0;
+                } else {
+                    const newCurrentPage = updated.find(p => p.id === currentPageId);
+                    newIdx = updated.indexOf(newCurrentPage);
+                    if (newIdx === -1) newIdx = 0;
+                }
+                setCurrentPageIndex(newIdx);
+                setContent(updated[newIdx]?.content || '');
+                setCheckedPageIds([]);
+                setBulkDeleteMode(false);
+            }
+        });
+    };
+
+    const handleExitSharedView = () => {
+        window.location.hash = window.location.hash.split('?')[0].split('/')[0];
+    };
+
+    const stickyThemes = {
+        '#fef08a': { bg: '#fef08a', border: '#1e293b', shadow: '#ca8a04', text: '#1e293b' }, // Yellow note, solid yellow shadow
+        '#bbf7d0': { bg: '#bbf7d0', border: '#1e293b', shadow: '#15803d', text: '#1e293b' }, // Green note, solid green shadow
+        '#bfdbfe': { bg: '#bfdbfe', border: '#1e293b', shadow: '#1d4ed8', text: '#1e293b' }, // Blue note, solid blue shadow
+        '#fbcfe8': { bg: '#fbcfe8', border: '#1e293b', shadow: '#be185d', text: '#1e293b' }, // Pink note, solid pink shadow
+        '#fed7aa': { bg: '#fed7aa', border: '#1e293b', shadow: '#c2410c', text: '#1e293b' }  // Orange note, solid orange shadow
+    };
+
+    const updateStickyColor = (color) => {
+        setStickyColor(color);
+        if (window.activeStickyNoteId) {
+            const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+            if (activeEditor) {
+                const activeSticky = activeEditor.querySelector(`#${window.activeStickyNoteId}`);
+                if (activeSticky) {
+                    const theme = stickyThemes[color] || stickyThemes['#fef08a'];
+                    activeSticky.style.setProperty('background-color', theme.bg, 'important');
+                    activeSticky.style.borderColor = theme.border;
+                    activeSticky.style.boxShadow = `6px 6px 0px ${theme.shadow}`;
+                    const tape = activeSticky.querySelector('.sticky-note-tape');
+                    if (tape) tape.style.backgroundColor = theme.shadow;
+                    const body = activeSticky.querySelector('.sticky-note-body');
+                    if (body) body.style.color = theme.text;
+                    handleInput({ currentTarget: activeEditor });
+                }
+            }
+        }
+    };
+
+    const setupStickyHandlers = (sticky) => {
+        const deleteBtn = sticky.querySelector('.sticky-delete-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                sticky.remove();
+                const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+                if (activeEditor) handleInput({ currentTarget: activeEditor });
+            });
+        }
+
+        const body = sticky.querySelector('.sticky-note-body');
+        if (body) {
+            body.addEventListener('focus', () => {
+                window.activeStickyNoteId = sticky.id;
+            });
+            body.addEventListener('input', () => {
+                const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+                if (activeEditor) handleInput({ currentTarget: activeEditor });
+            });
+        }
+    };
+
+    const insertStickyNote = () => {
+        const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+        if (!activeEditor) return;
+
+        const stickyId = `sticky-${Date.now()}`;
+        const sticky = document.createElement('span');
+        sticky.className = 'sticky-note-container';
+        sticky.id = stickyId;
+        sticky.setAttribute('contenteditable', 'false');
+        
+        const theme = stickyThemes[stickyColor] || stickyThemes['#fef08a'];
+        sticky.style.cssText = [
+            'position: relative',
+            'display: inline-block',
+            'vertical-align: middle',
+            'margin: 6px 8px',
+            `background-color: ${theme.bg}`,
+            'background-image: none',
+            `border-color: ${theme.border}`,
+            `box-shadow: 5px 5px 0px ${theme.shadow}`,
+            `font-family: ${fontFamily}`,
+        ].join('; ');
+
+        sticky.innerHTML = `<span class="sticky-note-tape" style="background-color: ${theme.shadow};"></span><button class="sticky-delete-btn scratchpad-print-hide" title="Delete"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button><span class="sticky-note-body" contenteditable="true" style="color: ${theme.text}; font-family: ${fontFamily};"></span>`;
+
+        // Attach delete button listener directly (clicks inside contenteditable=false spans don't bubble)
+        const setupDelete = () => {
+            const btn = sticky.querySelector('.sticky-delete-btn');
+            if (btn) {
+                btn.addEventListener('mousedown', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    sticky.remove();
+                    if (activeEditor) handleInput({ currentTarget: activeEditor });
+                });
+            }
+        };
+        setupDelete();
+
+        // Insert at cursor position
+        const selection = window.getSelection();
+        let inserted = false;
+        if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            if (activeEditor.contains(range.commonAncestorContainer)) {
+                range.collapse(true);
+                range.insertNode(sticky);
+                // Move cursor after the sticky
+                range.setStartAfter(sticky);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                inserted = true;
+            }
+        }
+        
+        if (!inserted) {
+            activeEditor.appendChild(sticky);
+        }
+        
+        // Focus the body for immediate editing
+        requestAnimationFrame(() => {
+            const body = sticky.querySelector('.sticky-note-body');
+            if (body) {
+                body.focus();
+                const r = document.createRange();
+                r.selectNodeContents(body);
+                const sel = window.getSelection();
+                if (sel) { sel.removeAllRanges(); sel.addRange(r); }
+            }
+        });
+
+        handleInput({ currentTarget: activeEditor });
+    };
+
+    const setupGroupHandlers = (groupContainer) => {
+        const lockBtn = groupContainer.querySelector('.lock-btn');
+        const ungroupBtn = groupContainer.querySelector('.ungroup-btn');
+
+        if (lockBtn) {
+            lockBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const isLocked = groupContainer.classList.toggle('locked');
+                const lockSpan = lockBtn.querySelector('.lock-icon-span');
+                if (lockSpan) lockSpan.innerHTML = isLocked ? 'Unlock' : 'Lock';
+                const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+                if (activeEditor) handleInput({ currentTarget: activeEditor });
+            });
+        }
+
+        if (ungroupBtn) {
+            ungroupBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+                if (!activeEditor) return;
+
+                const contentArea = groupContainer.querySelector('.group-content-area');
+                if (contentArea) {
+                    const children = Array.from(contentArea.children);
+                    const groupRect = groupContainer.getBoundingClientRect();
+                    const editorRect = activeEditor.getBoundingClientRect();
+                    const leftOffset = groupRect.left - editorRect.left + activeEditor.scrollLeft;
+                    const topOffset = groupRect.top - editorRect.top + activeEditor.scrollTop;
+
+                    children.forEach(child => {
+                        const childLeft = parseInt(child.style.left) || 0;
+                        const childTop = parseInt(child.style.top) || 0;
+                        
+                        child.style.position = 'absolute';
+                        child.style.left = `${leftOffset + childLeft}px`;
+                        child.style.top = `${topOffset + childTop}px`;
+                        
+                        activeEditor.appendChild(child);
+                    });
+                }
+                groupContainer.remove();
+                handleInput({ currentTarget: activeEditor });
+            });
+        }
+    };
+
+    const handleGroupElements = (elements) => {
+        if (elements.length === 0) return;
+
+        const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+        if (!activeEditor) return;
+
+        const editorRect = activeEditor.getBoundingClientRect();
+        let minLeft = Infinity;
+        let minTop = Infinity;
+        let maxRight = -Infinity;
+        let maxBottom = -Infinity;
+
+        elements.forEach(el => {
+            const rect = el.getBoundingClientRect();
+            const relLeft = rect.left - editorRect.left + activeEditor.scrollLeft;
+            const relTop = rect.top - editorRect.top + activeEditor.scrollTop;
+            const relRight = relLeft + rect.width;
+            const relBottom = relTop + rect.height;
+
+            if (relLeft < minLeft) minLeft = relLeft;
+            if (relTop < minTop) minTop = relTop;
+            if (relRight > maxRight) maxRight = relRight;
+            if (relBottom > maxBottom) maxBottom = relBottom;
+        });
+
+        minLeft = Math.max(0, minLeft - 10);
+        minTop = Math.max(0, minTop - 10);
+
+        const groupId = `group-${Date.now()}`;
+        const groupContainer = document.createElement('div');
+        groupContainer.className = 'grouped-container';
+        groupContainer.id = groupId;
+        groupContainer.setAttribute('contenteditable', 'false');
+        groupContainer.style.position = 'absolute';
+        groupContainer.style.left = `${minLeft}px`;
+        groupContainer.style.top = `${minTop}px`;
+        groupContainer.style.width = `${(maxRight - minLeft) + 10}px`;
+        groupContainer.style.height = `${(maxBottom - minTop) + 10}px`;
+
+        const controls = document.createElement('div');
+        controls.className = 'group-controls-overlay scratchpad-print-hide';
+        controls.innerHTML = `
+            <button class="group-control-btn lock-btn" style="background: transparent; border: none; font-size: 0.65rem; cursor: pointer; color: var(--text-primary); display: flex; align-items: center; gap: 4px;" title="Toggle Lock">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <span class="lock-icon-span">Lock</span>
+            </button>
+            <button class="group-control-btn ungroup-btn" style="background: transparent; border: none; font-size: 0.65rem; cursor: pointer; color: var(--text-primary); display: flex; align-items: center; gap: 4px;" title="Ungroup Elements">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-2-2h-5M3 8v8a2 2 0 0 0 2 2h5"></path><polyline points="10 21 15 16 10 11"></polyline></svg>
+                <span>Ungroup</span>
+            </button>
+        `;
+        groupContainer.appendChild(controls);
+
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'group-content-area';
+        contentWrapper.setAttribute('contenteditable', 'true');
+        contentWrapper.style.width = '100%';
+        contentWrapper.style.height = '100%';
+        contentWrapper.style.position = 'relative';
+        contentWrapper.style.outline = 'none';
+        groupContainer.appendChild(contentWrapper);
+
+        elements.forEach(el => {
+            const rect = el.getBoundingClientRect();
+            const relLeft = rect.left - editorRect.left + activeEditor.scrollLeft - minLeft;
+            const relTop = rect.top - editorRect.top + activeEditor.scrollTop - minTop;
+
+            el.style.position = 'absolute';
+            el.style.left = `${relLeft}px`;
+            el.style.top = `${relTop}px`;
+            el.style.margin = '0';
+            
+            el.classList.remove('lasso-selected');
+            contentWrapper.appendChild(el);
+        });
+
+        activeEditor.appendChild(groupContainer);
+        setupGroupHandlers(groupContainer);
+        setSelectedElements([]);
+        handleInput({ currentTarget: activeEditor });
+    };
+
+    // Lasso selection box listener
+    useEffect(() => {
+        const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+        if (!activeEditor) return;
+
+        let isDrawing = false;
+        let startX = 0;
+        let startY = 0;
+        let editorRect = null;
+        let selectionBox = null;
+
+        const handleMouseDown = (e) => {
+            const shouldStart = isLassoMode || e.shiftKey;
+            if (!shouldStart) return;
+
+            if (e.target.closest('.group-controls-overlay') || e.target.closest('.grouped-container') || e.target.closest('.sticky-note-container')) {
+                return;
+            }
+
+            isDrawing = true;
+            editorRect = activeEditor.getBoundingClientRect();
+            startX = e.clientX - editorRect.left + activeEditor.scrollLeft;
+            startY = e.clientY - editorRect.top + activeEditor.scrollTop;
+
+            e.preventDefault();
+
+            selectionBox = document.createElement('div');
+            selectionBox.className = 'lasso-selection-box';
+            selectionBox.style.left = `${startX}px`;
+            selectionBox.style.top = `${startY}px`;
+            selectionBox.style.width = '0px';
+            selectionBox.style.height = '0px';
+            activeEditor.appendChild(selectionBox);
+
+            activeEditor.querySelectorAll('.lasso-selected').forEach(el => el.classList.remove('lasso-selected'));
+            setSelectedElements([]);
+        };
+
+        const handleMouseMove = (e) => {
+            if (!isDrawing || !selectionBox) return;
+
+            const currentX = e.clientX - editorRect.left + activeEditor.scrollLeft;
+            const currentY = e.clientY - editorRect.top + activeEditor.scrollTop;
+
+            const left = Math.min(startX, currentX);
+            const top = Math.min(startY, currentY);
+            const width = Math.abs(startX - currentX);
+            const height = Math.abs(startY - currentY);
+
+            selectionBox.style.left = `${left}px`;
+            selectionBox.style.top = `${top}px`;
+            selectionBox.style.width = `${width}px`;
+            selectionBox.style.height = `${height}px`;
+
+            const candidates = activeEditor.querySelectorAll('img, p, h1, h2, blockquote, pre, .grouped-container, .sticky-note-container');
+            const boxRect = selectionBox.getBoundingClientRect();
+            const newlySelected = [];
+
+            candidates.forEach(el => {
+                const elRect = el.getBoundingClientRect();
+                const overlaps = !(boxRect.right < elRect.left || 
+                                  boxRect.left > elRect.right || 
+                                  boxRect.bottom < elRect.top || 
+                                  boxRect.top > elRect.bottom);
+
+                if (overlaps) {
+                    el.classList.add('lasso-selected');
+                    newlySelected.push(el);
+                } else {
+                    el.classList.remove('lasso-selected');
+                }
+            });
+
+            setSelectedElements(newlySelected);
+        };
+
+        const handleMouseUp = () => {
+            if (!isDrawing) return;
+            isDrawing = false;
+
+            if (selectionBox && selectionBox.parentNode) {
+                selectionBox.parentNode.removeChild(selectionBox);
+            }
+            selectionBox = null;
+        };
+
+        activeEditor.addEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            activeEditor.removeEventListener('mousedown', handleMouseDown);
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isLassoMode, isExpanded, modalRef.current, inlineRef.current]);
+
+    // Group & Sticky note dragging listener
+    useEffect(() => {
+        const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+        if (!activeEditor) return;
+
+        let dragTarget = null;
+
+        const handleMouseDown = (e) => {
+            const group = e.target.closest('.grouped-container');
+            const sticky = e.target.closest('.sticky-note-container');
+            
+            if (e.target.closest('.sticky-delete-btn') || e.target.closest('.group-controls-overlay')) {
+                return;
+            }
+
+            const targetEl = group && !group.classList.contains('locked') ? group : sticky;
+            if (!targetEl) return;
+
+            dragTarget = {
+                element: targetEl,
+                startX: e.clientX,
+                startY: e.clientY,
+                initialLeft: parseFloat(targetEl.style.left) || 0,
+                initialTop: parseFloat(targetEl.style.top) || 0,
+                hasMoved: false
+            };
+        };
+
+        const handleMouseMove = (e) => {
+            if (!dragTarget) return;
+
+            const deltaX = e.clientX - dragTarget.startX;
+            const deltaY = e.clientY - dragTarget.startY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+            if (distance > 3) {
+                dragTarget.hasMoved = true;
+                e.preventDefault();
+                dragTarget.element.style.left = `${dragTarget.initialLeft + deltaX}px`;
+                dragTarget.element.style.top = `${dragTarget.initialTop + deltaY}px`;
+            }
+        };
+
+        const handleMouseUp = (e) => {
+            if (!dragTarget) return;
+
+            if (dragTarget.hasMoved) {
+                e.preventDefault();
+                handleInput({ currentTarget: activeEditor });
+            }
+            dragTarget = null;
+        };
+
+        activeEditor.addEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            activeEditor.removeEventListener('mousedown', handleMouseDown);
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isExpanded, modalRef.current, inlineRef.current]);
+
+    // Reconnect handlers on dynamically loaded groups and stickies
+    useEffect(() => {
+        const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+        if (!activeEditor) return;
+
+        const groups = activeEditor.querySelectorAll('.grouped-container');
+        groups.forEach(group => {
+            if (!group.dataset.handlersAttached) {
+                setupGroupHandlers(group);
+                group.dataset.handlersAttached = 'true';
+            }
+        });
+
+        // Event delegation for focus in
+        const handleFocusIn = (e) => {
+            const sticky = e.target.closest('.sticky-note-container');
+            if (sticky) {
+                window.activeStickyNoteId = sticky.id;
+            }
+        };
+
+        activeEditor.addEventListener('focusin', handleFocusIn);
+        return () => {
+            activeEditor.removeEventListener('focusin', handleFocusIn);
+        };
+    }, [content, isExpanded, modalRef.current, inlineRef.current]);
+
+    const handleImportSharedView = () => {
+        if (!sharedScrapbook) return;
+        cConfirm('Import Scrapbook', 'Do you want to import these shared pages into your local Notebook? This will replace your current notebook pages.').then((confirmed) => {
+            if (confirmed) {
+                setPages(sharedScrapbook.pages);
+                const pagesKey = userKey('shelf_notebook_pages');
+                localStorage.setItem(pagesKey, JSON.stringify(sharedScrapbook.pages));
+                setCurrentPageIndex(0);
+                setContent(sharedScrapbook.pages[0]?.content || '');
+                setIsViewerMode(false);
+                setSharedScrapbook(null);
+
+                // Clear URL param
+                window.location.hash = window.location.hash.split('?')[0].split('/')[0];
+                cAlert('Imported', 'Shared pages imported successfully!');
+            }
+        });
+    };
+
+    const handleShareScrapbook = () => {
+        try {
+            const dataToShare = {
+                pages: pages,
+                style: {
+                    paperStyle,
+                    fontFamily,
+                    baseFontSize,
+                    lineSpacing,
+                    lineHeight,
+                    letterSpacing,
+                    docPadding,
+                    paperColor,
+                    lineStyle,
+                    lineOpacity,
+                    lineThickness,
+                    doubleLines,
+                    marginStyle,
+                    marginOffset,
+                    marginColor
+                }
+            };
+            const jsonStr = JSON.stringify(dataToShare);
+            const bytes = new TextEncoder().encode(jsonStr);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            const base64 = btoa(binary)
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=+$/, '');
+
+            const shareUrl = `${window.location.origin}${window.location.pathname}#timer?scrapbook=${base64}`;
+
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                cAlert('Success', 'Interactive Scrapbook share link copied to clipboard!');
+            }).catch(() => {
+                cPrompt('Share Link', 'Copy this share link:', shareUrl).then(() => { });
+            });
+        } catch (err) {
+            cAlert('Error', 'Failed to generate interactive scrapbook share link.');
+        }
+    };
 
     const getSearchRanges = (root, query) => {
         if (!query) return [];
@@ -226,96 +979,233 @@ export default function NotebookScratchpad() {
         }
     }, [findText, content, isExpanded, activeMatchIndex]);
 
+    // Sync shared scrapbook state from URL
+    useEffect(() => {
+        const checkForSharedScrapbook = () => {
+            const dataStr = getScrapbookFromUrl();
+            if (dataStr) {
+                try {
+                    const base64UrlSafe = dataStr.replace(/-/g, '+').replace(/_/g, '/');
+                    const binary = atob(base64UrlSafe);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) {
+                        bytes[i] = binary.charCodeAt(i);
+                    }
+                    const jsonStr = new TextDecoder().decode(bytes);
+                    const decoded = JSON.parse(jsonStr);
+                    if (decoded && decoded.pages) {
+                        setSharedScrapbook(decoded);
+                        setIsViewerMode(true);
+                        setPages(decoded.pages);
+                        setCurrentPageIndex(0);
+                        setContent(decoded.pages[0]?.content || '');
+
+                        // Apply layout styles from the shared scrapbook
+                        if (decoded.style) {
+                            if (decoded.style.paperStyle) setPaperStyle(decoded.style.paperStyle);
+                            if (decoded.style.fontFamily) setFontFamily(decoded.style.fontFamily);
+                            if (decoded.style.baseFontSize) setBaseFontSize(decoded.style.baseFontSize);
+                            if (decoded.style.lineSpacing) setLineSpacing(decoded.style.lineSpacing);
+                            if (decoded.style.lineHeight) setLineHeight(decoded.style.lineHeight);
+                            if (decoded.style.letterSpacing) setLetterSpacing(decoded.style.letterSpacing);
+                            if (decoded.style.docPadding) setDocPadding(decoded.style.docPadding);
+                            if (decoded.style.paperColor) setPaperColor(decoded.style.paperColor);
+                            if (decoded.style.lineStyle) setLineStyle(decoded.style.lineStyle);
+                            if (decoded.style.lineOpacity) setLineOpacity(decoded.style.lineOpacity);
+                            if (decoded.style.lineThickness) setLineThickness(decoded.style.lineThickness);
+                            if (decoded.style.doubleLines) setDoubleLines(decoded.style.doubleLines);
+                            if (decoded.style.marginStyle) setMarginStyle(decoded.style.marginStyle);
+                            if (decoded.style.marginOffset) setMarginOffset(decoded.style.marginOffset);
+                            if (decoded.style.marginColor) setMarginColor(decoded.style.marginColor);
+                        }
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Failed to parse shared scrapbook", e);
+                }
+            }
+
+            setIsViewerMode(false);
+            setSharedScrapbook(null);
+
+            // Reload local pages
+            try {
+                const pagesKey = userKey('shelf_notebook_pages');
+                const stored = localStorage.getItem(pagesKey);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        setPages(parsed);
+                        setCurrentPageIndex(0);
+                        setContent(parsed[0]?.content || '');
+                        triggerLocalSettingsReload();
+                        return;
+                    }
+                }
+            } catch (e) { }
+
+            try {
+                const key = userKey('shelf_notebook_scratchpad_html');
+                const existing = localStorage.getItem(key) || '';
+                const defaultPages = [{ id: 'page-1', title: 'new note', content: existing }];
+                setPages(defaultPages);
+                setCurrentPageIndex(0);
+                setContent(existing);
+            } catch {
+                const defaultPages = [{ id: 'page-1', title: 'new note', content: '' }];
+                setPages(defaultPages);
+                setCurrentPageIndex(0);
+                setContent('');
+            }
+            triggerLocalSettingsReload();
+        };
+
+        const triggerLocalSettingsReload = () => {
+            const savedStyle = uGet('shelf_notebook_paper_style');
+            if (savedStyle !== null && savedStyle !== undefined) setPaperStyle(savedStyle);
+            const savedFont = uGet('shelf_notebook_font_family');
+            if (savedFont !== null && savedFont !== undefined) setFontFamily(savedFont);
+            const savedSize = uGet('shelf_notebook_font_size');
+            if (savedSize !== null && savedSize !== undefined) setBaseFontSize(savedSize);
+            const savedLHeight = uGet('shelf_notebook_line_height');
+            if (savedLHeight !== null && savedLHeight !== undefined) setLineHeight(savedLHeight);
+            const savedLSpacingLetter = uGet('shelf_notebook_letter_spacing');
+            if (savedLSpacingLetter !== null && savedLSpacingLetter !== undefined) setLetterSpacing(savedLSpacingLetter);
+            const savedDPadding = uGet('shelf_notebook_doc_padding');
+            if (savedDPadding !== null && savedDPadding !== undefined) setDocPadding(savedDPadding);
+            const savedPColor = uGet('shelf_notebook_paper_color');
+            if (savedPColor !== null && savedPColor !== undefined) setPaperColor(savedPColor);
+            const savedLStyle = uGet('shelf_notebook_line_style');
+            if (savedLStyle !== null && savedLStyle !== undefined) setLineStyle(savedLStyle);
+            const savedLOpacity = uGet('shelf_notebook_line_opacity');
+            if (savedLOpacity !== null && savedLOpacity !== undefined) setLineOpacity(savedLOpacity);
+            const savedLThickness = uGet('shelf_notebook_line_thickness');
+            if (savedLThickness !== null && savedLThickness !== undefined) setLineThickness(savedLThickness);
+            const savedDoubleL = uGet('shelf_notebook_double_lines');
+            if (savedDoubleL !== null && savedDoubleL !== undefined) setDoubleLines(savedDoubleL);
+            const savedMStyle = uGet('shelf_notebook_margin_style');
+            if (savedMStyle !== null && savedMStyle !== undefined) setMarginStyle(savedMStyle);
+            const savedMOffset = uGet('shelf_notebook_margin_offset');
+            if (savedMOffset !== null && savedMOffset !== undefined) setMarginOffset(savedMOffset);
+            const savedMColor = uGet('shelf_notebook_margin_color');
+            if (savedMColor !== null && savedMColor !== undefined) setMarginColor(savedMColor);
+        };
+
+        checkForSharedScrapbook();
+        window.addEventListener('hashchange', checkForSharedScrapbook);
+        return () => window.removeEventListener('hashchange', checkForSharedScrapbook);
+    }, []);
+
     // Sync content and styles if modified elsewhere
     useEffect(() => {
         const handleSync = async () => {
-            const key = userKey('shelf_notebook_scratchpad_html');
-            const savedContent = await getScratchpadContent(key);
-            if (savedContent !== null && savedContent !== undefined) {
-                setContent(savedContent);
+            if (isViewerMode) return;
+            const pagesKey = userKey('shelf_notebook_pages');
+            const storedPages = localStorage.getItem(pagesKey);
+            if (storedPages) {
+                try {
+                    const parsed = JSON.parse(storedPages);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        if (JSON.stringify(parsed) !== JSON.stringify(pages)) {
+                            setPages(parsed);
+                        }
+                        const idx = Math.min(currentPageIndex, parsed.length - 1);
+                        const newContent = parsed[idx]?.content || '';
+                        if (newContent !== content) {
+                            setContent(newContent);
+                        }
+                    }
+                } catch (e) { }
+            } else {
+                const key = userKey('shelf_notebook_scratchpad_html');
+                const savedContent = await getScratchpadContent(key);
+                if (savedContent !== null && savedContent !== undefined && savedContent !== content) {
+                    setContent(savedContent);
+                    setPages([{ id: 'page-1', title: 'new note', content: savedContent }]);
+                }
             }
             const savedStyle = uGet('shelf_notebook_paper_style');
-            if (savedStyle !== null && savedStyle !== undefined) {
+            if (savedStyle !== null && savedStyle !== undefined && savedStyle !== paperStyle) {
                 setPaperStyle(savedStyle);
             }
             const savedFont = uGet('shelf_notebook_font_family');
-            if (savedFont !== null && savedFont !== undefined) {
+            if (savedFont !== null && savedFont !== undefined && savedFont !== fontFamily) {
                 setFontFamily(savedFont);
             }
             const savedSize = uGet('shelf_notebook_font_size');
-            if (savedSize !== null && savedSize !== undefined) {
+            if (savedSize !== null && savedSize !== undefined && savedSize !== baseFontSize) {
                 setBaseFontSize(savedSize);
             }
             const savedLHeight = uGet('shelf_notebook_line_height');
-            if (savedLHeight !== null && savedLHeight !== undefined) {
+            if (savedLHeight !== null && savedLHeight !== undefined && savedLHeight !== lineHeight) {
                 setLineHeight(savedLHeight);
             }
             const savedLSpacingLetter = uGet('shelf_notebook_letter_spacing');
-            if (savedLSpacingLetter !== null && savedLSpacingLetter !== undefined) {
+            if (savedLSpacingLetter !== null && savedLSpacingLetter !== undefined && savedLSpacingLetter !== letterSpacing) {
                 setLetterSpacing(savedLSpacingLetter);
             }
             const savedDPadding = uGet('shelf_notebook_doc_padding');
-            if (savedDPadding !== null && savedDPadding !== undefined) {
+            if (savedDPadding !== null && savedDPadding !== undefined && savedDPadding !== docPadding) {
                 setDocPadding(savedDPadding);
             }
             const savedColor = uGet('shelf_notebook_paper_color');
-            if (savedColor !== null && savedColor !== undefined) {
+            if (savedColor !== null && savedColor !== undefined && savedColor !== paperColor) {
                 setPaperColor(savedColor);
             }
             const savedLStyle = uGet('shelf_notebook_line_style');
-            if (savedLStyle !== null && savedLStyle !== undefined) {
+            if (savedLStyle !== null && savedLStyle !== undefined && savedLStyle !== lineStyle) {
                 setLineStyle(savedLStyle);
             }
             const savedLSpacing = uGet('shelf_notebook_line_spacing');
-            if (savedLSpacing !== null && savedLSpacing !== undefined) {
+            if (savedLSpacing !== null && savedLSpacing !== undefined && savedLSpacing !== lineSpacing) {
                 setLineSpacing(savedLSpacing);
             }
             const savedLOpacity = uGet('shelf_notebook_line_opacity');
-            if (savedLOpacity !== null && savedLOpacity !== undefined) {
+            if (savedLOpacity !== null && savedLOpacity !== undefined && savedLOpacity !== lineOpacity) {
                 setLineOpacity(savedLOpacity);
             }
             const savedLThickness = uGet('shelf_notebook_line_thickness');
-            if (savedLThickness !== null && savedLThickness !== undefined) {
+            if (savedLThickness !== null && savedLThickness !== undefined && savedLThickness !== lineThickness) {
                 setLineThickness(savedLThickness);
             }
             const savedDoubleLines = uGet('shelf_notebook_double_lines');
-            if (savedDoubleLines !== null && savedDoubleLines !== undefined) {
+            if (savedDoubleLines !== null && savedDoubleLines !== undefined && savedDoubleLines !== doubleLines) {
                 setDoubleLines(savedDoubleLines);
             }
             const savedMargin = uGet('shelf_notebook_margin_style');
-            if (savedMargin !== null && savedMargin !== undefined) {
+            if (savedMargin !== null && savedMargin !== undefined && savedMargin !== marginStyle) {
                 setMarginStyle(savedMargin);
             }
             const savedMarginOffset = uGet('shelf_notebook_margin_offset');
-            if (savedMarginOffset !== null && savedMarginOffset !== undefined) {
+            if (savedMarginOffset !== null && savedMarginOffset !== undefined && savedMarginOffset !== marginOffset) {
                 setMarginOffset(savedMarginOffset);
             }
             const savedMarginColor = uGet('shelf_notebook_margin_color');
-            if (savedMarginColor !== null && savedMarginColor !== undefined) {
+            if (savedMarginColor !== null && savedMarginColor !== undefined && savedMarginColor !== marginColor) {
                 setMarginColor(savedMarginColor);
             }
             const savedReadOnly = uGet('shelf_notebook_readonly');
-            if (savedReadOnly !== null && savedReadOnly !== undefined) {
+            if (savedReadOnly !== null && savedReadOnly !== undefined && savedReadOnly !== readOnly) {
                 setReadOnly(savedReadOnly);
             }
             const savedSpellcheck = uGet('shelf_notebook_spellcheck');
-            if (savedSpellcheck !== null && savedSpellcheck !== undefined) {
+            if (savedSpellcheck !== null && savedSpellcheck !== undefined && savedSpellcheck !== spellcheck) {
                 setSpellcheck(savedSpellcheck);
             }
             const savedAutoCap = uGet('shelf_notebook_autocap');
-            if (savedAutoCap !== null && savedAutoCap !== undefined) {
+            if (savedAutoCap !== null && savedAutoCap !== undefined && savedAutoCap !== autoCapitalize) {
                 setAutoCapitalize(savedAutoCap);
             }
             const savedFocus = uGet('shelf_notebook_focusmode');
-            if (savedFocus !== null && savedFocus !== undefined) {
+            if (savedFocus !== null && savedFocus !== undefined && savedFocus !== focusMode) {
                 setFocusMode(savedFocus);
             }
             const savedWordCount = uGet('shelf_notebook_wordcount');
-            if (savedWordCount !== null && savedWordCount !== undefined) {
+            if (savedWordCount !== null && savedWordCount !== undefined && savedWordCount !== showWordCount) {
                 setShowWordCount(savedWordCount);
             }
             const savedCharCount = uGet('shelf_notebook_charcount');
-            if (savedCharCount !== null && savedCharCount !== undefined) {
+            if (savedCharCount !== null && savedCharCount !== undefined && savedCharCount !== showCharCount) {
                 setShowCharCount(savedCharCount);
             }
         };
@@ -330,7 +1220,12 @@ export default function NotebookScratchpad() {
             window.removeEventListener('notebook-updated', handleSync);
             window.removeEventListener('user-switched', handleSync);
         };
-    }, []);
+    }, [
+        isViewerMode, currentPageIndex, pages, content, paperStyle, fontFamily, baseFontSize,
+        lineHeight, letterSpacing, docPadding, paperColor, lineStyle, lineSpacing, lineOpacity,
+        lineThickness, doubleLines, marginStyle, marginOffset, marginColor, readOnly, spellcheck,
+        autoCapitalize, focusMode, showWordCount, showCharCount
+    ]);
 
     const setInlineRef = (el) => {
         inlineRef.current = el;
@@ -387,6 +1282,16 @@ export default function NotebookScratchpad() {
     // Hook to track active styling attributes under selection
     useEffect(() => {
         const handleSelectionChange = () => {
+            // Always save selection so toolbar buttons can restore it (works in both inline & expanded)
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                // Only save if range is inside our editor
+                const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+                if (activeEditor && activeEditor.contains(range.commonAncestorContainer)) {
+                    savedSelectionRef.current = range.cloneRange();
+                }
+            }
             if (!isExpanded) return;
             try {
                 setActiveStyles({
@@ -421,8 +1326,24 @@ export default function NotebookScratchpad() {
     }, [isExpanded]);
 
     const handleInput = (e) => {
+        if (isReadOnlyMode) return;
         const html = getCleanHTML(e.currentTarget);
         setContent(html);
+
+        // Update pages state
+        setPages(prevPages => {
+            const updated = [...prevPages];
+            if (updated[currentPageIndex]) {
+                updated[currentPageIndex] = {
+                    ...updated[currentPageIndex],
+                    content: html
+                };
+            }
+            const pagesKey = userKey('shelf_notebook_pages');
+            localStorage.setItem(pagesKey, JSON.stringify(updated));
+            return updated;
+        });
+
         const key = userKey('shelf_notebook_scratchpad_html');
         setScratchpadContent(key, html).then(() => {
             window.dispatchEvent(new Event('notebook-updated'));
@@ -444,9 +1365,41 @@ export default function NotebookScratchpad() {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    // Saved selection for toolbar actions (selecting text then clicking toolbar loses focus)
+    const savedSelectionRef = React.useRef(null);
+
+    const saveSelection = () => {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+            savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
+        }
+    };
+
+    const restoreSelection = () => {
+        const activeRef = isExpanded ? modalRef : inlineRef;
+        // Focus the editor first so addRange doesn't silently fail
+        if (activeRef.current) {
+            activeRef.current.focus();
+        }
+        const sel = window.getSelection();
+        if (savedSelectionRef.current && sel) {
+            try {
+                sel.removeAllRanges();
+                sel.addRange(savedSelectionRef.current);
+            } catch (e) { }
+        }
+    };
+
     const applyFormat = (command, value = null) => {
-        if (readOnly) return;
-        document.execCommand(command, false, value);
+        if (isReadOnlyMode) return;
+        // Restore saved selection so toolbar clicks don't lose the text selection
+        restoreSelection();
+        if (command === 'backColor') {
+            // backColor via execCommand is unreliable; wrap selection in a span
+            applyHighlightColor(value);
+        } else {
+            document.execCommand(command, false, value);
+        }
         const activeRef = isExpanded ? modalRef : inlineRef;
         if (activeRef.current) {
             handleInput({ currentTarget: activeRef.current });
@@ -475,8 +1428,37 @@ export default function NotebookScratchpad() {
         }, 10);
     };
 
+    // Reliable highlight: wrap selected text in a span with background-color
+    const applyHighlightColor = (color) => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+        const range = sel.getRangeAt(0);
+        if (color === 'transparent' || color === 'none') {
+            // Remove existing highlight spans in selection
+            document.execCommand('removeFormat', false, null);
+            return;
+        }
+        const mark = document.createElement('mark');
+        mark.style.backgroundColor = color;
+        mark.style.color = 'inherit';
+        mark.style.padding = '0 1px';
+        mark.style.borderRadius = '2px';
+        try {
+            range.surroundContents(mark);
+        } catch {
+            // surroundContents fails on partial cross-element selections; use extractContents
+            const frag = range.extractContents();
+            mark.appendChild(frag);
+            range.insertNode(mark);
+        }
+        sel.removeAllRanges();
+        sel.collapse(mark, mark.childNodes.length);
+        const activeRef = isExpanded ? modalRef : inlineRef;
+        if (activeRef.current) handleInput({ currentTarget: activeRef.current });
+    };
+
     const changeCase = (type) => {
-        if (readOnly) return;
+        if (isReadOnlyMode) return;
         const selection = window.getSelection();
         if (!selection.rangeCount) return;
         const range = selection.getRangeAt(0);
@@ -850,6 +1832,73 @@ export default function NotebookScratchpad() {
     };
 
     const handleEditorClick = (e) => {
+        // Sticky delete delegation
+        const deleteBtn = e.target.closest('.sticky-delete-btn');
+        if (deleteBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const sticky = deleteBtn.closest('.sticky-note-container');
+            if (sticky) {
+                sticky.remove();
+                const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+                if (activeEditor) handleInput({ currentTarget: activeEditor });
+            }
+            return;
+        }
+
+        // Active sticky note tracking delegation
+        const activeSticky = e.target.closest('.sticky-note-container');
+        if (activeSticky) {
+            window.activeStickyNoteId = activeSticky.id;
+        }
+
+        // Group Lock toggle delegation
+        const lockBtn = e.target.closest('.lock-btn');
+        if (lockBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const group = lockBtn.closest('.grouped-container');
+            if (group) {
+                const isLocked = group.classList.toggle('locked');
+                const lockSpan = lockBtn.querySelector('.lock-icon-span');
+                if (lockSpan) lockSpan.innerHTML = isLocked ? 'Unlock' : 'Lock';
+                const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+                if (activeEditor) handleInput({ currentTarget: activeEditor });
+            }
+            return;
+        }
+
+        // Group Ungroup delegation
+        const ungroupBtn = e.target.closest('.ungroup-btn');
+        if (ungroupBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const group = ungroupBtn.closest('.grouped-container');
+            const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+            if (group && activeEditor) {
+                const contentArea = group.querySelector('.group-content-area');
+                if (contentArea) {
+                    const children = Array.from(contentArea.children);
+                    const groupRect = group.getBoundingClientRect();
+                    const editorRect = activeEditor.getBoundingClientRect();
+                    const leftOffset = groupRect.left - editorRect.left + activeEditor.scrollLeft;
+                    const topOffset = groupRect.top - editorRect.top + activeEditor.scrollTop;
+
+                    children.forEach(child => {
+                        const childLeft = parseInt(child.style.left) || 0;
+                        const childTop = parseInt(child.style.top) || 0;
+                        child.style.position = 'absolute';
+                        child.style.left = `${leftOffset + childLeft}px`;
+                        child.style.top = `${topOffset + childTop}px`;
+                        activeEditor.appendChild(child);
+                    });
+                }
+                group.remove();
+                handleInput({ currentTarget: activeEditor });
+            }
+            return;
+        }
+
         const anchor = e.target.closest('a');
         if (anchor) {
             e.preventDefault();
@@ -878,7 +1927,7 @@ export default function NotebookScratchpad() {
             }
 
             // Click-to-position logic when clicking below existing lines
-            if (e.target === e.currentTarget && !readOnly) {
+            if (e.target === e.currentTarget && !isReadOnlyMode) {
                 const editor = e.currentTarget;
                 const rect = editor.getBoundingClientRect();
 
@@ -930,6 +1979,27 @@ export default function NotebookScratchpad() {
     };
 
     const handleKeyDown = (e) => {
+        // Multicolor mode: cycle through rainbow colors per printable character
+        if (isMultiColor && e.key && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1) {
+            try {
+                const color = MULTI_COLORS[multiColorIndexRef.current % MULTI_COLORS.length];
+                document.execCommand('foreColor', false, color);
+                multiColorIndexRef.current += 1;
+            } catch (err) { }
+        } else if (!isMultiColor && activePenColor && e.key && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            // Sticky pen color formatting
+            const isPrintable = e.key.length === 1;
+            const isEnter = e.key === 'Enter';
+            if (isPrintable || isEnter) {
+                try {
+                    const currentSelectionColor = document.queryCommandValue('foreColor');
+                    if (!isColorActive(currentSelectionColor, activePenColor)) {
+                        document.execCommand('foreColor', false, activePenColor);
+                    }
+                } catch (err) { }
+            }
+        }
+
         // Selection state inside pre code blocks: Cmd+A (Mac) or Ctrl+A (Windows)
         const isSelAll = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a';
         if (isSelAll) {
@@ -993,6 +2063,11 @@ export default function NotebookScratchpad() {
     };
 
     const handleKeyUp = (e) => {
+        // Save selection for toolbar actions
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+            savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
+        }
         // Selection state
         try {
             setActiveStyles({
@@ -1045,9 +2120,22 @@ export default function NotebookScratchpad() {
     };
 
     const handleClearCanvas = () => {
+        if (isReadOnlyMode) return;
         cConfirm('Clear Canvas', 'Are you sure you want to clear all contents of the canvas?').then((confirmed) => {
             if (confirmed) {
                 setContent('');
+                setPages(prevPages => {
+                    const updated = [...prevPages];
+                    if (updated[currentPageIndex]) {
+                        updated[currentPageIndex] = {
+                            ...updated[currentPageIndex],
+                            content: ''
+                        };
+                    }
+                    const pagesKey = userKey('shelf_notebook_pages');
+                    localStorage.setItem(pagesKey, JSON.stringify(updated));
+                    return updated;
+                });
                 const key = userKey('shelf_notebook_scratchpad_html');
                 setScratchpadContent(key, '').then(() => {
                     if (inlineRef.current) inlineRef.current.innerHTML = '';
@@ -1271,13 +2359,15 @@ export default function NotebookScratchpad() {
         }
     };
 
+
+
     const inlineSpacing = 24;
     const inlineOpacity = 30;
     const inlineLineStyle = 'solid';
     const inlinePaperColor = 'var(--surface-bg)';
     const inlineThickness = 1.2;
 
-    const textPaddingInline = paperStyle === 'lines' ? '12px 12px 12px 48px' : '12px 12px 12px 16px';
+    const textPaddingInline = paperStyle === 'lines' ? '32px 12px 12px 48px' : '32px 12px 12px 16px';
     const textPaddingModal = '20px 60px 60px 60px';
 
     const getBtnStyle = (isActive) => {
@@ -1450,7 +2540,169 @@ export default function NotebookScratchpad() {
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Caveat:wght@400;700&family=Homemade+Apple&family=Indie+Flower&family=Patrick+Hand&family=Shadows+Into+Light&family=Inter:wght@400;700&display=swap');
                 
-                @keyframes notebookFullScreenOpen {
+                /* Grouping & Drag selection styles */
+                .lasso-selection-box {
+                    position: absolute;
+                    border: 1.5px dashed var(--accent-color);
+                    background-color: rgba(59, 130, 246, 0.15);
+                    z-index: 10000;
+                    pointer-events: none;
+                }
+                .lasso-selected {
+                    outline: 2px dashed var(--accent-color) !important;
+                    outline-offset: 3px;
+                }
+                .grouped-container {
+                    position: absolute;
+                    display: inline-block;
+                    border: 2px dashed rgba(100, 116, 139, 0.4);
+                    border-radius: 8px;
+                    padding: 8px;
+                    background-color: rgba(255, 255, 255, 0.7);
+                    backdrop-filter: blur(2px);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+                    cursor: grab;
+                    user-select: none;
+                    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+                }
+                .grouped-container:hover {
+                    border-color: var(--accent-color);
+                    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+                }
+                .grouped-container.locked {
+                    border: 1.5px solid var(--border-color);
+                    background-color: transparent;
+                    backdrop-filter: none;
+                    box-shadow: none;
+                    cursor: default;
+                }
+                .grouped-container:active:not(.locked) {
+                    cursor: grabbing;
+                }
+                .group-controls-overlay {
+                    position: absolute;
+                    top: -28px;
+                    left: 4px;
+                    display: flex;
+                    gap: 4px;
+                    background-color: var(--panel-bg);
+                    border: 1px solid var(--border-color);
+                    border-radius: 4px;
+                    padding: 2px;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+                    z-index: 101;
+                    opacity: 0.1;
+                    transition: opacity 0.15s ease;
+                }
+                .grouped-container:hover .group-controls-overlay {
+                    opacity: 1;
+                }
+                .group-control-btn {
+                    background: transparent;
+                    border: none;
+                    border-radius: 3px;
+                    padding: 2px 6px;
+                    font-size: 0.65rem;
+                    cursor: pointer;
+                    color: var(--text-primary);
+                    display: flex;
+                    align-items: center;
+                    gap: 3px;
+                }
+                .group-control-btn:hover {
+                    background-color: var(--option-bg);
+                }
+
+                /* Cartoon Sticky Note Styles — inline, compact, draggable */
+                .sticky-note-container {
+                    position: relative;
+                    display: inline-block;
+                    vertical-align: middle;
+                    margin: 3px 6px;
+                    padding: 10px 6px 5px 6px;
+                    min-width: 50px;
+                    max-width: 180px;
+                    border-radius: 2px;
+                    border: 2px solid #1e293b;
+                    background-color: #fef08a;
+                    background-image: none !important;
+                    box-shadow: 3px 3px 0px #ca8a04;
+                    cursor: grab;
+                    box-sizing: border-box;
+                    user-select: none;
+                    font-size: 12px !important;
+                    line-height: 1.3 !important;
+                    font-family: sans-serif !important;
+                }
+                .sticky-note-container:active {
+                    cursor: grabbing;
+                }
+                .sticky-note-tape {
+                    position: absolute;
+                    top: -7px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    display: inline-block;
+                    width: 36px;
+                    height: 12px;
+                    background-color: #fbcfe8;
+                    border: 1.5px solid #1e293b;
+                    clip-path: polygon(
+                        0% 0%, 8% 33%, 0% 66%, 8% 100%,
+                        100% 100%, 92% 66%, 100% 33%, 92% 0%
+                    );
+                }
+                .sticky-delete-btn {
+                    position: absolute;
+                    top: 2px;
+                    right: 2px;
+                    background: transparent;
+                    border: none;
+                    cursor: pointer;
+                    color: #ef4444;
+                    padding: 1px 2px;
+                    line-height: 0;
+                    border-radius: 2px;
+                    opacity: 0;
+                    transition: opacity 0.12s ease;
+                    font-size: 0 !important;
+                }
+                .sticky-note-container:hover .sticky-delete-btn {
+                    opacity: 1;
+                }
+                .sticky-delete-btn:hover {
+                    background-color: rgba(239,68,68,0.12);
+                }
+                .sticky-note-body {
+                    display: block;
+                    background: transparent !important;
+                    background-image: none !important;
+                    border: none;
+                    outline: none;
+                    font-size: 15px !important;
+                    line-height: 1.4 !important;
+                    font-family: 'Caveat', cursive !important;
+                    min-height: 14px;
+                    word-break: break-word;
+                    white-space: pre-wrap;
+                    user-select: text;
+                    cursor: text;
+                    color: #1e293b;
+                    padding: 0;
+                    margin: 0;
+                }
+                
+                /* Sticky note body placeholder */
+                .sticky-note-body:empty::before {
+                    content: 'Write note...';
+                    color: rgba(0,0,0,0.3);
+                    pointer-events: none;
+                    font-family: 'Caveat', cursive !important;
+                    font-style: italic;
+                }
+                .sticky-note-body:focus::before {
+                    display: none;
+                }
                     from {
                         opacity: 0;
                         transform: scale(0.9) translateY(20px);
@@ -1726,6 +2978,8 @@ export default function NotebookScratchpad() {
                     }} />
                 )}
 
+                {/* Page Navigation & Management */}
+
                 {/* Paper Style Selector Circles */}
                 <div style={{
                     position: 'absolute',
@@ -1767,7 +3021,7 @@ export default function NotebookScratchpad() {
                 {/* Scroll-attached contentEditable Div */}
                 <div
                     ref={setInlineRef}
-                    contentEditable={!readOnly}
+                    contentEditable={!isReadOnlyMode}
                     onInput={handleInput}
                     onKeyDown={handleKeyDown}
                     onKeyUp={handleKeyUp}
@@ -1778,10 +3032,12 @@ export default function NotebookScratchpad() {
                     autoCapitalize={autoCapitalize ? 'sentences' : 'none'}
                     key={`${spellcheck}-${autoCapitalize}`}
                     style={{
+                        position: 'relative',
                         width: '100%',
                         height: '100%',
                         border: 'none',
                         outline: 'none',
+                        cursor: isLassoMode ? 'crosshair' : 'text',
                         fontFamily: fontFamily,
                         fontSize: '1.25rem',
                         lineHeight: '24px',
@@ -1936,10 +3192,339 @@ export default function NotebookScratchpad() {
                                 <h3 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: '1.25rem', color: 'var(--ink)' }}>
                                     Interactive Scratchpad
                                 </h3>
+
+
                             </div>
 
                             {/* Header Utilities Actions */}
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button
+                                        onClick={handleCopy}
+                                        style={{
+                                            background: copied ? 'var(--success-color)' : 'var(--panel-bg)',
+                                            border: '1px solid var(--border-color)',
+                                            borderRadius: '6px',
+                                            padding: '5px 12px',
+                                            fontSize: '0.75rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            cursor: 'pointer',
+                                            color: copied ? '#FFFFFF' : 'var(--text-primary)',
+                                            transition: 'all 0.2s ease',
+                                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                                        }}
+                                    >
+                                        {copied ? <Check size={12} strokeWidth={3} /> : <Copy size={12} />}
+                                        {copied ? 'Copied!' : 'Copy All'}
+                                    </button>
+                                    {/* Pages Manager Popover Trigger */}
+                                    <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
+                                        <button
+                                            onClick={() => setActivePopover(activePopover === 'pages' ? null : 'pages')}
+                                            style={{
+                                                ...actionBtnStyle,
+                                                width: 'auto',
+                                                padding: '4px 10px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                backgroundColor: activePopover === 'pages' ? 'var(--option-bg)' : 'var(--panel-bg)'
+                                            }}
+                                        >
+                                            <BookOpen size={11} /> Pages ({pages.length})
+                                        </button>
+
+                                        {activePopover === 'pages' && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: 'calc(100% + 4px)',
+                                                left: 0,
+                                                backgroundColor: 'var(--panel-bg)',
+                                                border: '1.5px solid var(--border-color)',
+                                                borderRadius: '8px',
+                                                padding: '8px',
+                                                boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                                                zIndex: 100,
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '4px',
+                                                minWidth: '220px',
+                                                maxWidth: '280px',
+                                                maxHeight: '200px',
+                                                overflowY: 'auto'
+                                            }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px', borderBottom: '1px solid var(--border-color)', marginBottom: '4px' }}>
+                                                    <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>Manage Pages</span>
+                                                    {!isViewerMode && (
+                                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                                            <button
+                                                                onClick={handleAddPage}
+                                                                style={{
+                                                                    background: 'transparent',
+                                                                    border: 'none',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    color: 'var(--text-secondary)'
+                                                                }}
+                                                                title="Add Note"
+                                                            >
+                                                                <Plus size={12} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleRenamePageAtIndex(currentPageIndex)}
+                                                                style={{
+                                                                    background: 'transparent',
+                                                                    border: 'none',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    color: 'var(--text-secondary)'
+                                                                }}
+                                                                title="Rename Selected Note"
+                                                            >
+                                                                <Edit3 size={12} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setBulkDeleteMode(prev => {
+                                                                        const next = !prev;
+                                                                        if (!next) setCheckedPageIds([]);
+                                                                        return next;
+                                                                    });
+                                                                }}
+                                                                style={{
+                                                                    background: bulkDeleteMode ? 'var(--option-bg)' : 'transparent',
+                                                                    border: bulkDeleteMode ? '1px solid var(--accent-color)' : 'none',
+                                                                    borderRadius: '4px',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    color: 'var(--text-secondary)',
+                                                                    padding: '2px'
+                                                                }}
+                                                                title="Select Multiple Pages"
+                                                            >
+                                                                <CheckSquare size={12} />
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    if (bulkDeleteMode) {
+                                                                        handleDeleteSelectedPages();
+                                                                    } else {
+                                                                        handleDeletePageAtIndex(currentPageIndex, e);
+                                                                    }
+                                                                }}
+                                                                disabled={!bulkDeleteMode && pages.length <= 1}
+                                                                style={{
+                                                                    background: 'transparent',
+                                                                    border: 'none',
+                                                                    cursor: (!bulkDeleteMode && pages.length <= 1) ? 'not-allowed' : 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    color: 'var(--danger-color)',
+                                                                    opacity: (!bulkDeleteMode && pages.length <= 1) ? 0.4 : 1
+                                                                }}
+                                                                title={bulkDeleteMode ? `Delete Checked Notes (${checkedPageIds.length})` : "Delete Selected Note"}
+                                                            >
+                                                                <Trash2 size={12} /> {bulkDeleteMode && `(${checkedPageIds.length})`}
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                    {pages.map((page, idx) => {
+                                                        const isActive = currentPageIndex === idx;
+                                                        const isChecked = checkedPageIds.includes(page.id);
+                                                        return (
+                                                            <div
+                                                                key={page.id || idx}
+                                                                onClick={() => {
+                                                                    if (bulkDeleteMode) {
+                                                                        togglePageChecked(page.id);
+                                                                    } else {
+                                                                        setCurrentPageIndex(idx);
+                                                                        setContent(page.content || '');
+                                                                    }
+                                                                }}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    padding: '6px 8px',
+                                                                    paddingLeft: isActive ? '6px' : '8px',
+                                                                    borderLeft: isActive ? '3px solid var(--accent-color)' : '3px solid transparent',
+                                                                    borderRadius: '4px',
+                                                                    backgroundColor: isChecked ? 'rgba(239, 68, 68, 0.08)' : (isActive ? 'var(--option-bg)' : 'transparent'),
+                                                                    color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                                                    cursor: 'pointer',
+                                                                    fontSize: '0.72rem',
+                                                                    fontWeight: isActive ? '600' : '400'
+                                                                }}
+                                                                onMouseEnter={(e) => { if (!isActive && !isChecked) e.currentTarget.style.backgroundColor = 'var(--border-color)'; }}
+                                                                onMouseLeave={(e) => { if (!isActive && !isChecked) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                                            >
+                                                                {bulkDeleteMode && (
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={isChecked}
+                                                                        onChange={(e) => {
+                                                                            e.stopPropagation();
+                                                                            togglePageChecked(page.id);
+                                                                        }}
+                                                                        style={{ marginRight: '6px', cursor: 'pointer' }}
+                                                                    />
+                                                                )}
+                                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                                                    {idx + 1}. {page.title || 'new note'}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
+                                        <button
+                                            onClick={() => setActivePopover(activePopover === 'export' ? null : 'export')}
+                                            style={{ ...actionBtnStyle, width: 'auto', padding: '4px 10px' }}
+                                        >
+                                            <Download size={11} /> Export Notes
+                                        </button>
+                                        {activePopover === 'export' && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: 'calc(100% + 4px)',
+                                                right: 0,
+                                                backgroundColor: 'var(--panel-bg)',
+                                                border: '1.5px solid var(--border-color)',
+                                                borderRadius: '8px',
+                                                padding: '8px',
+                                                boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                                                zIndex: 100,
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '4px',
+                                                minWidth: '170px'
+                                            }}>
+                                                <button
+                                                    onClick={() => { setActivePopover(null); handleDownload(); }}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        borderRadius: '4px',
+                                                        padding: '6px 8px',
+                                                        fontSize: '0.72rem',
+                                                        color: 'var(--text-primary)',
+                                                        cursor: 'pointer',
+                                                        textAlign: 'left',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        width: '100%'
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--option-bg)'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                >
+                                                    Export Plain Text (.txt)
+                                                </button>
+                                                <button
+                                                    onClick={() => { setActivePopover(null); handleExportMarkdown(); }}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        borderRadius: '4px',
+                                                        padding: '6px 8px',
+                                                        fontSize: '0.72rem',
+                                                        color: 'var(--text-primary)',
+                                                        cursor: 'pointer',
+                                                        textAlign: 'left',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        width: '100%'
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--option-bg)'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                >
+                                                    Export Markdown (.md)
+                                                </button>
+                                                <button
+                                                    onClick={() => { setActivePopover(null); handleExportHTML(); }}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        borderRadius: '4px',
+                                                        padding: '6px 8px',
+                                                        fontSize: '0.72rem',
+                                                        color: 'var(--text-primary)',
+                                                        cursor: 'pointer',
+                                                        textAlign: 'left',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        width: '100%'
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--option-bg)'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                >
+                                                    Export HTML Page (.html)
+                                                </button>
+                                                <button
+                                                    onClick={() => { setActivePopover(null); handleShareScrapbook(); }}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        borderRadius: '4px',
+                                                        padding: '6px 8px',
+                                                        fontSize: '0.72rem',
+                                                        color: 'var(--text-primary)',
+                                                        cursor: 'pointer',
+                                                        textAlign: 'left',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        width: '100%'
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--option-bg)'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                >
+                                                    Share Interactive Scrapbook Link
+                                                </button>
+                                                <button
+                                                    onClick={() => { setActivePopover(null); window.print(); }}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        borderRadius: '4px',
+                                                        padding: '6px 8px',
+                                                        fontSize: '0.72rem',
+                                                        color: 'var(--text-primary)',
+                                                        cursor: 'pointer',
+                                                        textAlign: 'left',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        width: '100%'
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--option-bg)'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                >
+                                                    Print / Save to PDF
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={handleClearCanvas}
+                                        style={{ ...actionBtnStyle, width: 'auto', padding: '4px 10px', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--danger-color)', border: '1px solid rgba(239, 68, 68, 0.18)' }}
+                                    >
+                                        <Trash2 size={11} /> Clear Canvas
+                                    </button>
+                                </div>
                                 <button
                                     onClick={handleResetSettings}
                                     style={{
@@ -1960,26 +3545,7 @@ export default function NotebookScratchpad() {
                                 >
                                     <RotateCcw size={12} /> Reset
                                 </button>
-                                <button
-                                    onClick={handleCopy}
-                                    style={{
-                                        background: copied ? 'var(--success-color)' : 'var(--panel-bg)',
-                                        border: '1px solid var(--border-color)',
-                                        borderRadius: '6px',
-                                        padding: '5px 12px',
-                                        fontSize: '0.75rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '4px',
-                                        cursor: 'pointer',
-                                        color: copied ? '#FFFFFF' : 'var(--text-primary)',
-                                        transition: 'all 0.2s ease',
-                                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-                                    }}
-                                >
-                                    {copied ? <Check size={12} strokeWidth={3} /> : <Copy size={12} />}
-                                    {copied ? 'Copied!' : 'Copy All'}
-                                </button>
+
                                 <button
                                     onClick={() => setShowMoreSettings(!showMoreSettings)}
                                     style={{
@@ -2301,30 +3867,59 @@ export default function NotebookScratchpad() {
                                 >
                                     <Calendar size={12} />
                                 </button>
+                                <button
+                                    onMouseDown={(e) => { e.preventDefault(); setIsLassoMode(!isLassoMode); }}
+                                    style={getBtnStyle(isLassoMode)} title="Lasso / Drag Selection Mode"
+                                >
+                                    <MousePointer size={12} />
+                                </button>
+                                <button
+                                    onMouseDown={(e) => { e.preventDefault(); insertStickyNote(); }}
+                                    style={getBtnStyle(false)} title="Insert Sticky Note"
+                                >
+                                    <StickyNote size={12} />
+                                </button>
                             </div>
 
                             {/* Color Palettes (Pen, Highlight) */}
                             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderRight: '1.5px solid var(--border-color)', paddingRight: '10px' }}>
                                     <span style={{ fontSize: '0.62rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Pen</span>
+                                    {/* Multicolor rainbow toggle */}
+                                    <button
+                                        onMouseDown={(e) => { e.preventDefault(); setIsMultiColor(prev => !prev); multiColorIndexRef.current = 0; }}
+                                        style={{
+                                            width: '14px',
+                                            height: '14px',
+                                            borderRadius: '50%',
+                                            background: 'conic-gradient(#e03c3c, #e07c3c, #d4b800, #2a9e4e, #2b5cc8, #7b2fb5, #e03c3c)',
+                                            border: isMultiColor ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                            cursor: 'pointer',
+                                            boxShadow: isMultiColor ? '0 0 5px var(--accent-color)' : '0 1px 2px rgba(0,0,0,0.08)',
+                                            transform: isMultiColor ? 'scale(1.2)' : 'scale(1)',
+                                            transition: 'all 0.15s ease',
+                                            flexShrink: 0
+                                        }}
+                                        title={isMultiColor ? 'Multicolor ON — click to disable' : 'Enable Multicolor (rainbow) mode'}
+                                    />
                                     {[
-                                        { name: 'Dark', value: 'var(--text-primary)' },
-                                        { name: 'Rust', value: '#c83f3f' },
-                                        { name: 'Forest', value: '#2a6f40' },
-                                        { name: 'Blue', value: '#2b5c8f' },
-                                        { name: 'Ochre', value: '#b8860b' },
-                                        { name: 'Plum', value: '#7b1fa2' }
+                                        { name: 'Dark', value: '#000000', display: 'var(--text-primary)' },
+                                        { name: 'Rust', value: '#c83f3f', display: '#c83f3f' },
+                                        { name: 'Forest', value: '#2a6f40', display: '#2a6f40' },
+                                        { name: 'Blue', value: '#2b5c8f', display: '#2b5c8f' },
+                                        { name: 'Ochre', value: '#b8860b', display: '#b8860b' },
+                                        { name: 'Plum', value: '#7b1fa2', display: '#7b1fa2' }
                                     ].map(color => {
-                                        const isActive = isColorActive(activeStyles.foreColor, color.value);
+                                        const isActive = isColorActive(activePenColor, color.value);
                                         return (
                                             <button
                                                 key={color.name}
-                                                onMouseDown={(e) => { e.preventDefault(); applyFormat('foreColor', color.value); }}
+                                                onMouseDown={(e) => { e.preventDefault(); setActivePenColor(color.value); applyFormat('foreColor', color.value); }}
                                                 style={{
                                                     width: '14px',
                                                     height: '14px',
                                                     borderRadius: '50%',
-                                                    backgroundColor: color.value === 'var(--text-primary)' ? 'var(--text-primary)' : color.value,
+                                                    backgroundColor: color.display || color.value,
                                                     border: isActive ? '1.8px solid var(--accent-color)' : '1px solid var(--border-color)',
                                                     cursor: 'pointer',
                                                     boxShadow: isActive ? '0 0 3px var(--accent-color)' : '0 1px 2px rgba(0,0,0,0.08)',
@@ -2339,13 +3934,13 @@ export default function NotebookScratchpad() {
                                     {/* Custom Pen Color Picker Popover */}
                                     <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
                                         <button
-                                            onMouseDown={(e) => { e.preventDefault(); setActiveColorPicker(activeColorPicker === 'pen' ? null : 'pen'); }}
+                                            onMouseDown={(e) => { e.preventDefault(); const next = activeColorPicker === 'pen' ? null : 'pen'; setActiveColorPicker(next); if (next === 'pen') setPenHexInput(rgbToHex(activeStyles.foreColor)); }}
                                             style={{
                                                 width: '14px',
                                                 height: '14px',
                                                 borderRadius: '50%',
                                                 background: 'conic-gradient(red, yellow, green, cyan, blue, magenta, red)',
-                                                border: activeStyles.foreColor && !['rgb(0, 0, 0)', 'var(--text-primary)', '#c83f3f', '#2a6f40', '#2b5c8f', '#b8860b', '#7b1fa2'].some(val => isColorActive(activeStyles.foreColor, val)) ? '1.8px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                                border: activePenColor && !['#000000', 'rgb(0,0,0)', '#c83f3f', '#2a6f40', '#2b5c8f', '#b8860b', '#7b1fa2'].some(val => isColorActive(activePenColor, val)) ? '1.8px solid var(--accent-color)' : '1px solid var(--border-color)',
                                                 cursor: 'pointer',
                                                 boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
                                                 display: 'flex',
@@ -2382,8 +3977,9 @@ export default function NotebookScratchpad() {
                                                     <div style={{ position: 'relative', width: '28px', height: '28px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.1)' }}>
                                                         <input
                                                             type="color"
-                                                            value={rgbToHex(activeStyles.foreColor)}
-                                                            onChange={(e) => applyFormat('foreColor', e.target.value)}
+                                                            value={penHexInput}
+                                                            onChange={(e) => { setPenHexInput(e.target.value); }}
+                                                            onBlur={(e) => { let v = e.target.value; if (v.length === 7 && v.startsWith('#')) { setActivePenColor(v); applyFormat('foreColor', v); } }}
                                                             style={{
                                                                 position: 'absolute',
                                                                 top: '-4px',
@@ -2400,11 +3996,18 @@ export default function NotebookScratchpad() {
                                                     </div>
                                                     <input
                                                         type="text"
-                                                        value={rgbToHex(activeStyles.foreColor)}
+                                                        value={penHexInput}
                                                         onChange={(e) => {
                                                             let val = e.target.value;
-                                                            if (!val.startsWith('#') && val.length > 0) val = '#' + val;
-                                                            applyFormat('foreColor', val);
+                                                            if (val.length > 0 && !val.startsWith('#')) val = '#' + val;
+                                                            setPenHexInput(val);
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                let val = penHexInput;
+                                                                if (val.length === 7 && val.startsWith('#')) { setActivePenColor(val); applyFormat('foreColor', val); }
+                                                                setActiveColorPicker(null);
+                                                            }
                                                         }}
                                                         placeholder="#Hex Code"
                                                         style={{
@@ -2421,7 +4024,7 @@ export default function NotebookScratchpad() {
                                                         }}
                                                     />
                                                     <button
-                                                        onClick={() => setActiveColorPicker(null)}
+                                                        onClick={() => { let val = penHexInput; if (val.length === 7 && val.startsWith('#')) { setActivePenColor(val); applyFormat('foreColor', val); } setActiveColorPicker(null); }}
                                                         style={{
                                                             height: '28px',
                                                             padding: '0 10px',
@@ -2486,7 +4089,7 @@ export default function NotebookScratchpad() {
                                     {/* Custom Highlight Color Picker Popover */}
                                     <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
                                         <button
-                                            onMouseDown={(e) => { e.preventDefault(); setActiveColorPicker(activeColorPicker === 'highlight' ? null : 'highlight'); }}
+                                            onMouseDown={(e) => { e.preventDefault(); const next = activeColorPicker === 'highlight' ? null : 'highlight'; setActiveColorPicker(next); if (next === 'highlight') setHighlightHexInput(rgbToHex(activeStyles.backColor)); }}
                                             style={{
                                                 width: '14px',
                                                 height: '14px',
@@ -2529,8 +4132,9 @@ export default function NotebookScratchpad() {
                                                     <div style={{ position: 'relative', width: '28px', height: '28px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.1)' }}>
                                                         <input
                                                             type="color"
-                                                            value={rgbToHex(activeStyles.backColor)}
-                                                            onChange={(e) => applyFormat('backColor', e.target.value)}
+                                                            value={highlightHexInput}
+                                                            onChange={(e) => { setHighlightHexInput(e.target.value); }}
+                                                            onBlur={(e) => { let v = e.target.value; if (v.length === 7 && v.startsWith('#')) { applyFormat('backColor', v); } }}
                                                             style={{
                                                                 position: 'absolute',
                                                                 top: '-4px',
@@ -2547,11 +4151,18 @@ export default function NotebookScratchpad() {
                                                     </div>
                                                     <input
                                                         type="text"
-                                                        value={rgbToHex(activeStyles.backColor)}
+                                                        value={highlightHexInput}
                                                         onChange={(e) => {
                                                             let val = e.target.value;
-                                                            if (!val.startsWith('#') && val.length > 0) val = '#' + val;
-                                                            applyFormat('backColor', val);
+                                                            if (val.length > 0 && !val.startsWith('#')) val = '#' + val;
+                                                            setHighlightHexInput(val);
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                let val = highlightHexInput;
+                                                                if (val.length === 7 && val.startsWith('#')) { applyFormat('backColor', val); }
+                                                                setActiveColorPicker(null);
+                                                            }
                                                         }}
                                                         placeholder="#Hex Code"
                                                         style={{
@@ -2568,7 +4179,7 @@ export default function NotebookScratchpad() {
                                                         }}
                                                     />
                                                     <button
-                                                        onClick={() => setActiveColorPicker(null)}
+                                                        onClick={() => { let val = highlightHexInput; if (val.length === 7 && val.startsWith('#')) { applyFormat('backColor', val); } setActiveColorPicker(null); }}
                                                         style={{
                                                             height: '28px',
                                                             padding: '0 10px',
@@ -2696,123 +4307,30 @@ export default function NotebookScratchpad() {
                                     />
                                     <label htmlFor="showCharToggle" style={checkboxLabelStyle}>Char Count</label>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
+                                <div style={{ display: 'flex', gap: '4px', alignItems: 'center', borderLeft: '1.5px solid var(--border-color)', paddingLeft: '12px', marginLeft: '6px' }}>
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: '600' }}>Sticky Color:</span>
+                                    {[
+                                        { name: 'Yellow', value: '#fef08a' },
+                                        { name: 'Green', value: '#bbf7d0' },
+                                        { name: 'Blue', value: '#bfdbfe' },
+                                        { name: 'Pink', value: '#fbcfe8' },
+                                        { name: 'Orange', value: '#fed7aa' }
+                                    ].map(c => (
                                         <button
-                                            onClick={() => setActivePopover(activePopover === 'export' ? null : 'export')}
-                                            style={{ ...actionBtnStyle, width: 'auto', padding: '4px 10px' }}
-                                        >
-                                            <Download size={11} /> Export Notes
-                                        </button>
-                                        {activePopover === 'export' && (
-                                            <div style={{
-                                                position: 'absolute',
-                                                bottom: 'calc(100% + 4px)',
-                                                right: 0,
-                                                backgroundColor: 'var(--panel-bg)',
-                                                border: '1.5px solid var(--border-color)',
-                                                borderRadius: '8px',
-                                                padding: '8px',
-                                                boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-                                                zIndex: 100,
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                gap: '4px',
-                                                minWidth: '170px'
-                                            }}>
-                                                <button
-                                                    onClick={() => { setActivePopover(null); handleDownload(); }}
-                                                    style={{
-                                                        background: 'transparent',
-                                                        border: 'none',
-                                                        borderRadius: '4px',
-                                                        padding: '6px 8px',
-                                                        fontSize: '0.72rem',
-                                                        color: 'var(--text-primary)',
-                                                        cursor: 'pointer',
-                                                        textAlign: 'left',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        width: '100%'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--option-bg)'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                >
-                                                    Export Plain Text (.txt)
-                                                </button>
-                                                <button
-                                                    onClick={() => { setActivePopover(null); handleExportMarkdown(); }}
-                                                    style={{
-                                                        background: 'transparent',
-                                                        border: 'none',
-                                                        borderRadius: '4px',
-                                                        padding: '6px 8px',
-                                                        fontSize: '0.72rem',
-                                                        color: 'var(--text-primary)',
-                                                        cursor: 'pointer',
-                                                        textAlign: 'left',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        width: '100%'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--option-bg)'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                >
-                                                    Export Markdown (.md)
-                                                </button>
-                                                <button
-                                                    onClick={() => { setActivePopover(null); handleExportHTML(); }}
-                                                    style={{
-                                                        background: 'transparent',
-                                                        border: 'none',
-                                                        borderRadius: '4px',
-                                                        padding: '6px 8px',
-                                                        fontSize: '0.72rem',
-                                                        color: 'var(--text-primary)',
-                                                        cursor: 'pointer',
-                                                        textAlign: 'left',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        width: '100%'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--option-bg)'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                >
-                                                    Export HTML Page (.html)
-                                                </button>
-                                                <button
-                                                    onClick={() => { setActivePopover(null); window.print(); }}
-                                                    style={{
-                                                        background: 'transparent',
-                                                        border: 'none',
-                                                        borderRadius: '4px',
-                                                        padding: '6px 8px',
-                                                        fontSize: '0.72rem',
-                                                        color: 'var(--text-primary)',
-                                                        cursor: 'pointer',
-                                                        textAlign: 'left',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        width: '100%'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--option-bg)'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                >
-                                                    Print / Save to PDF
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <button
-                                        onClick={handleClearCanvas}
-                                        style={{ ...actionBtnStyle, width: 'auto', padding: '4px 10px', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--danger-color)', border: '1px solid rgba(239, 68, 68, 0.18)' }}
-                                    >
-                                        <Trash2 size={11} /> Clear Canvas
-                                    </button>
+                                            key={c.value}
+                                            onClick={() => updateStickyColor(c.value)}
+                                            style={{
+                                                width: '12px',
+                                                height: '12px',
+                                                borderRadius: '50%',
+                                                backgroundColor: c.value,
+                                                border: stickyColor === c.value ? '1.5px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                                cursor: 'pointer',
+                                                padding: 0
+                                            }}
+                                            title={c.name}
+                                        />
+                                    ))}
                                 </div>
                             </div>
                         </div>
@@ -3146,9 +4664,282 @@ export default function NotebookScratchpad() {
 
                     {/* Full-Screen contentEditable Workspace (With custom padding margins) */}
                     <div style={{ display: 'flex', flex: 1, position: 'relative', overflow: 'hidden' }}>
+                        {/* Sidebar: Pages list (Collapsible, Premium Sidebar UI) */}
+                        {pagesSidebarOpen && (
+                            pagesSidebarMinimized ? (
+                                <div className="scratchpad-print-hide" style={{
+                                    width: '44px',
+                                    borderRight: '1.5px solid var(--border-color)',
+                                    backgroundColor: 'var(--panel-bg)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    height: '100%',
+                                    zIndex: 10,
+                                    flexShrink: 0,
+                                    padding: '8px 0',
+                                    gap: '12px'
+                                }}>
+                                    <button
+                                        onClick={() => {
+                                            setPagesSidebarMinimized(false);
+                                            uSet('shelf_notebook_sidebar_minimized', false);
+                                        }}
+                                        style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            color: 'var(--text-secondary)',
+                                            width: '28px',
+                                            height: '28px',
+                                            borderRadius: '50%',
+                                            transition: 'all 0.15s ease'
+                                        }}
+                                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--option-bg)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+                                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                                        title="Expand Sidebar"
+                                    >
+                                        <ChevronRight size={16} />
+                                    </button>
+
+                                    <div style={{ width: '20px', height: '1px', backgroundColor: 'var(--border-color)' }} />
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', flex: 1, width: '100%', alignItems: 'center' }}>
+                                        {pages.map((page, index) => {
+                                            const isActive = currentPageIndex === index;
+                                            return (
+                                                <button
+                                                    key={page.id || index}
+                                                    onClick={() => {
+                                                        setCurrentPageIndex(index);
+                                                        setContent(page.content || '');
+                                                    }}
+                                                    style={{
+                                                        width: '28px',
+                                                        height: '28px',
+                                                        borderRadius: '50%',
+                                                        border: isActive ? '1.5px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                                        backgroundColor: isActive ? 'var(--option-bg)' : 'var(--surface-bg)',
+                                                        color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                                        fontSize: '0.72rem',
+                                                        fontWeight: isActive ? '700' : '500',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        transition: 'all 0.15s ease'
+                                                    }}
+                                                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'var(--border-color)'; }}
+                                                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'var(--surface-bg)'; }}
+                                                    title={page.title || 'new note'}
+                                                >
+                                                    {index + 1}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="scratchpad-print-hide" style={{
+                                    width: '220px',
+                                    borderRight: '1.5px solid var(--border-color)',
+                                    backgroundColor: 'var(--panel-bg)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    height: '100%',
+                                    zIndex: 10,
+                                    flexShrink: 0
+                                }}>
+                                    {/* Sidebar Header */}
+                                    <div style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '8px',
+                                        padding: '12px 16px',
+                                        borderBottom: '1.5px solid var(--border-color)'
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontWeight: '700', fontSize: '0.8rem', color: 'var(--text-primary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                                                Pages
+                                            </span>
+                                            <button
+                                                onClick={() => {
+                                                    setPagesSidebarMinimized(true);
+                                                    uSet('shelf_notebook_sidebar_minimized', true);
+                                                }}
+                                                style={{
+                                                    background: 'transparent',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    color: 'var(--text-secondary)'
+                                                }}
+                                                title="Minimize Sidebar"
+                                            >
+                                                <ChevronLeft size={16} />
+                                            </button>
+                                        </div>
+
+                                        {/* Action Buttons for Selected Page */}
+                                        {!isViewerMode && (
+                                            <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '6px' }}>
+                                                <button
+                                                    onClick={handleAddPage}
+                                                    style={{
+                                                        background: 'var(--surface-bg)',
+                                                        border: '1px solid var(--border-color)',
+                                                        borderRadius: '4px',
+                                                        padding: '4px 8px',
+                                                        fontSize: '0.7rem',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        color: 'var(--text-primary)'
+                                                    }}
+                                                    title="Add New Note"
+                                                >
+                                                    <Plus size={12} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleRenamePageAtIndex(currentPageIndex)}
+                                                    style={{
+                                                        background: 'var(--surface-bg)',
+                                                        border: '1px solid var(--border-color)',
+                                                        borderRadius: '4px',
+                                                        padding: '4px 8px',
+                                                        fontSize: '0.7rem',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        color: 'var(--text-primary)'
+                                                    }}
+                                                    title="Rename Selected Note"
+                                                >
+                                                    <Edit3 size={12} />
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setBulkDeleteMode(prev => {
+                                                            const next = !prev;
+                                                            if (!next) setCheckedPageIds([]);
+                                                            return next;
+                                                        });
+                                                    }}
+                                                    style={{
+                                                        background: bulkDeleteMode ? 'var(--option-bg)' : 'var(--surface-bg)',
+                                                        border: bulkDeleteMode ? '1.5px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                                        borderRadius: '4px',
+                                                        padding: '4px 8px',
+                                                        fontSize: '0.7rem',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        color: 'var(--text-primary)'
+                                                    }}
+                                                    title="Select Multiple Pages"
+                                                >
+                                                    <CheckSquare size={12} />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        if (bulkDeleteMode) {
+                                                            handleDeleteSelectedPages();
+                                                        } else {
+                                                            handleDeletePageAtIndex(currentPageIndex, e);
+                                                        }
+                                                    }}
+                                                    disabled={!bulkDeleteMode && pages.length <= 1}
+                                                    style={{
+                                                        background: bulkDeleteMode ? 'rgba(239, 68, 68, 0.15)' : 'var(--surface-bg)',
+                                                        border: '1px solid var(--border-color)',
+                                                        borderRadius: '4px',
+                                                        padding: '4px 8px',
+                                                        fontSize: '0.7rem',
+                                                        cursor: (!bulkDeleteMode && pages.length <= 1) ? 'not-allowed' : 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        color: 'var(--danger-color)',
+                                                        opacity: (!bulkDeleteMode && pages.length <= 1) ? 0.5 : 1
+                                                    }}
+                                                    title={bulkDeleteMode ? `Delete Checked Notes (${checkedPageIds.length})` : "Delete Selected Note"}
+                                                >
+                                                    <Trash2 size={12} /> {bulkDeleteMode && `(${checkedPageIds.length})`}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Sidebar Pages List */}
+                                    <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+                                        {pages.map((page, index) => {
+                                            const isActive = currentPageIndex === index;
+                                            const isChecked = checkedPageIds.includes(page.id);
+                                            return (
+                                                <div
+                                                    key={page.id || index}
+                                                    onClick={() => {
+                                                        if (bulkDeleteMode) {
+                                                            togglePageChecked(page.id);
+                                                        } else {
+                                                            setCurrentPageIndex(index);
+                                                            setContent(page.content || '');
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        padding: '8px 12px',
+                                                        paddingLeft: isActive ? '9px' : '12px',
+                                                        borderLeft: isActive ? '3px solid var(--accent-color)' : '3px solid transparent',
+                                                        borderRadius: '6px',
+                                                        backgroundColor: isChecked ? 'rgba(239, 68, 68, 0.08)' : (isActive ? 'var(--option-bg)' : 'transparent'),
+                                                        color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                                        cursor: 'pointer',
+                                                        marginBottom: '4px',
+                                                        fontSize: '0.8rem',
+                                                        fontWeight: isActive ? '600' : '400',
+                                                        transition: 'all 0.15s ease'
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        if (!isActive && !isChecked) e.currentTarget.style.backgroundColor = 'var(--border-color)';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        if (!isActive && !isChecked) e.currentTarget.style.backgroundColor = 'transparent';
+                                                    }}
+                                                >
+                                                    {bulkDeleteMode && (
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isChecked}
+                                                            onChange={(e) => {
+                                                                e.stopPropagation();
+                                                                togglePageChecked(page.id);
+                                                            }}
+                                                            style={{ marginRight: '8px', cursor: 'pointer' }}
+                                                        />
+                                                    )}
+                                                    <span style={{ opacity: 0.6, fontSize: '0.7rem', marginRight: '8px' }}>{index + 1}.</span>
+                                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                                        {page.title || 'new note'}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )
+                        )}
                         <div
                             ref={setModalRef}
-                            contentEditable={!readOnly}
+                            contentEditable={!isReadOnlyMode}
                             onInput={handleInput}
                             onPaste={handlePaste}
                             onDrop={handleDrop}
@@ -3161,10 +4952,12 @@ export default function NotebookScratchpad() {
                             autoCapitalize={autoCapitalize ? 'sentences' : 'none'}
                             key={`${spellcheck}-${autoCapitalize}`}
                             style={{
+                                position: 'relative',
                                 width: '100%',
                                 height: '100%',
                                 border: 'none',
                                 outline: 'none',
+                                cursor: isLassoMode ? 'crosshair' : 'text',
                                 fontFamily: fontFamily,
                                 fontSize: `${baseFontSize}px`,
                                 lineHeight: `${lineSpacing}px`,
@@ -3258,6 +5051,71 @@ export default function NotebookScratchpad() {
                         }
                     }}
                 />
+            )}
+
+            {selectedElements.length > 0 && (
+                <div 
+                    className="scratchpad-print-hide"
+                    style={{
+                        position: 'fixed',
+                        bottom: '24px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        backgroundColor: 'var(--panel-bg)',
+                        border: '1.5px solid var(--accent-color)',
+                        borderRadius: '12px',
+                        padding: '10px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.2)',
+                        zIndex: 999999,
+                        animation: 'notebookFullScreenOpen 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+                    }}
+                >
+                    <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                        {selectedElements.length} items selected
+                    </span>
+                    <button
+                        onClick={() => handleGroupElements(selectedElements)}
+                        style={{
+                            background: 'var(--accent-color)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '6px 12px',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }}
+                    >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        Group & Lock
+                    </button>
+                    <button
+                        onClick={() => {
+                            const activeEditor = isExpanded ? modalRef.current : inlineRef.current;
+                            if (activeEditor) {
+                                activeEditor.querySelectorAll('.lasso-selected').forEach(el => el.classList.remove('lasso-selected'));
+                            }
+                            setSelectedElements([]);
+                        }}
+                        style={{
+                            background: 'transparent',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '6px',
+                            padding: '6px 12px',
+                            fontSize: '0.75rem',
+                            color: 'var(--text-secondary)',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Clear Selection
+                    </button>
+                </div>
             )}
         </div>
     );
