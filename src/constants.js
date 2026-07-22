@@ -59,7 +59,7 @@ export const INITIAL_SHORTCUTS = [
     title: 'Portfolio',
     subtitle: 'My Personal Site',
     author: 'Me',
-    url: 'https://portfolio-grvua.web.app',
+    url: 'https://grvua.me',
     coverImage: '/5.jpeg',
     shortcutKey: 'A'
   },
