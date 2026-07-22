@@ -1,10 +1,21 @@
 <div align="center">
+<div align="center">
 
+<h1 style="margin:0; color:#4F6D52; font-family:'Playfair Display', Georgia, serif; font-size:64px; font-weight:700; letter-spacing:8px; text-transform:uppercase; text-shadow:1px 1px 3px rgba(0,0,0,.08);">
+  SHELF
+</h1>
 
+<p style="margin:12px 0 26px; color:#6B7A5B; font-size:18px; font-family:Georgia, serif; font-style:italic; letter-spacing:1px;">
+  A Minimal Digital Library Experience
+</p>
 
-<br /><br />
+<p>
+  <a href="https://shelf-books.web.app/#home">
+    <img src="https://img.shields.io/badge/Live%20Website-A3B18A?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Live Website">
+  </a>
+</p>
+</div>
 
-<h1 style="color: #3E4E39; font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 56px; letter-spacing: 3px; margin-bottom: 0; text-transform: uppercase;">Shelf</h1>
 <p style="color: #A98F5C; font-family: 'Playfair Display', Georgia, serif; font-weight: 500; font-size: 13px; letter-spacing: 8px; text-transform: uppercase; margin-top: 6px;">Your Personal Reading Dashboard</p>
 
 <br />

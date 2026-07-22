@@ -1,6 +1,6 @@
-  // eslint-disable-next-line no-unused-vars
+// eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-  // eslint-disable-next-line no-unused-vars
+// eslint-disable-next-line no-unused-vars
 import { Search, Bell, Trash2, UserPlus, X, MessageSquare, Flame, BookOpen, Trophy, Users, Check, UserCheck, Clock, ArrowLeft } from 'lucide-react';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
@@ -181,7 +181,7 @@ function FindReadersPanel({ onClose, onProfileClick }) {
 
   // Search users — server now returns friendship_status per user
   useEffect(() => {
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!query.trim()) { setResults([]); return; }
     const t = setTimeout(async () => {
       setLoading(true);
@@ -440,7 +440,7 @@ export default function Header({
   // ── Fetch search suggestions ───────────────────────────────────────────────
   useEffect(() => {
     if (searchEngine !== 'google' || !searchQuery.trim()) {
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSuggestions([]);
       setShowSuggestions(false);
       return;
@@ -490,7 +490,7 @@ export default function Header({
           return (data.notifications || []).filter(n => !respondedIds.has(n.id));
         });
       }
-  // eslint-disable-next-line no-empty
+      // eslint-disable-next-line no-empty
     } catch { } finally {
       setNotifLoading(false);
     }
@@ -504,7 +504,7 @@ export default function Header({
 
   useEffect(() => {
     const tk = localStorage.getItem('shelf_auth_token');
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (tk) { setNotifLoading(true); startPolling(); }
     const handleAuthChange = () => {
       const newTk = localStorage.getItem('shelf_auth_token');
@@ -548,7 +548,7 @@ export default function Header({
       await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/notifications/${id}`, {
         method: 'DELETE', headers: { Authorization: `Bearer ${tk}` }
       });
-  // eslint-disable-next-line no-empty
+      // eslint-disable-next-line no-empty
     } catch { }
   };
 
@@ -562,7 +562,7 @@ export default function Header({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
         body: JSON.stringify({})
       });
-  // eslint-disable-next-line no-empty
+      // eslint-disable-next-line no-empty
     } catch { }
   };
 
@@ -729,104 +729,104 @@ export default function Header({
 
             {/* Trash Drop Zone — hidden on mobile (no drag & drop on touch) */}
             {!isMobile && (
-          <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragOverTrash(true); }}
-            onDragLeave={() => setIsDragOverTrash(false)}
-            onDrop={handleTrashDrop}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: '40px', height: '40px', borderRadius: '50%',
-              background: isDragOverTrash ? 'var(--danger-color)' : 'var(--ui-hover-bg)',
-              color: isDragOverTrash ? '#fff' : 'var(--text-secondary)',
-              border: isDragOverTrash ? 'none' : '1.5px dashed var(--border-color)',
-              transition: 'all 0.2s', cursor: 'default',
-              transform: isDragOverTrash ? 'scale(1.18)' : 'scale(1)',
-            }}
-            title="Drag a note or bookmark here to delete"
-          >
-            <Trash2 size={17} />
-          </div>
-          )}
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDragOverTrash(true); }}
+                onDragLeave={() => setIsDragOverTrash(false)}
+                onDrop={handleTrashDrop}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: '40px', height: '40px', borderRadius: '50%',
+                  background: isDragOverTrash ? 'var(--danger-color)' : 'var(--ui-hover-bg)',
+                  color: isDragOverTrash ? '#fff' : 'var(--text-secondary)',
+                  border: isDragOverTrash ? 'none' : '1.5px dashed var(--border-color)',
+                  transition: 'all 0.2s', cursor: 'default',
+                  transform: isDragOverTrash ? 'scale(1.18)' : 'scale(1)',
+                }}
+                title="Drag a note or bookmark here to delete"
+              >
+                <Trash2 size={17} />
+              </div>
+            )}
 
-          {/* Notification Bell */}
-          <div ref={notifRef} style={{ position: 'relative' }}>
-            <button
-              id="notif-bell-btn"
-              className="notification-bell"
-              aria-label="Notifications"
-              onClick={() => {
-                setShowNotifPanel(v => !v);
-                if (!showNotifPanel) fetchNotifications();
-              }}
-              style={{
-                background: showNotifPanel ? 'var(--accent-light)' : 'var(--ui-hover-bg)',
-                border: showNotifPanel ? '1.5px solid var(--accent-color)' : 'none',
-                width: '40px', height: '40px', borderRadius: '50%',
-                cursor: 'pointer', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', position: 'relative', transition: 'all 0.2s',
-              }}
-            >
-              <Bell size={18} style={{ color: 'var(--text-primary)' }} />
-              {unreadCount > 0 && (
-                <span style={{
-                  position: 'absolute', top: '8px', right: '8px',
-                  width: '8px', height: '8px', borderRadius: '50%',
-                  background: 'var(--accent-color)', border: '1.5px solid var(--surface-bg)',
-                }} />
+            {/* Notification Bell */}
+            <div ref={notifRef} style={{ position: 'relative' }}>
+              <button
+                id="notif-bell-btn"
+                className="notification-bell"
+                aria-label="Notifications"
+                onClick={() => {
+                  setShowNotifPanel(v => !v);
+                  if (!showNotifPanel) fetchNotifications();
+                }}
+                style={{
+                  background: showNotifPanel ? 'var(--accent-light)' : 'var(--ui-hover-bg)',
+                  border: showNotifPanel ? '1.5px solid var(--accent-color)' : 'none',
+                  width: '40px', height: '40px', borderRadius: '50%',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', position: 'relative', transition: 'all 0.2s',
+                }}
+              >
+                <Bell size={18} style={{ color: 'var(--text-primary)' }} />
+                {unreadCount > 0 && (
+                  <span style={{
+                    position: 'absolute', top: '8px', right: '8px',
+                    width: '8px', height: '8px', borderRadius: '50%',
+                    background: 'var(--accent-color)', border: '1.5px solid var(--surface-bg)',
+                  }} />
+                )}
+              </button>
+              {showNotifPanel && (
+                <NotificationPanel
+                  notifications={notifications}
+                  loading={notifLoading}
+                  onDismiss={dismissNotification}
+                  onMarkAllRead={markAllRead}
+                  onFriendRespond={handleFriendRespond}
+                  onProfileClick={openProfile}
+                />
               )}
-            </button>
-            {showNotifPanel && (
-              <NotificationPanel
-                notifications={notifications}
-                loading={notifLoading}
-                onDismiss={dismissNotification}
-                onMarkAllRead={markAllRead}
-                onFriendRespond={handleFriendRespond}
-                onProfileClick={openProfile}
-              />
-            )}
-          </div>
+            </div>
 
-          {/* Find Readers Button */}
-          <div ref={findReadersRef} style={{ position: 'relative' }}>
-            <button
-              id="add-friend-btn"
-              aria-label="Find & suggest readers"
-              title="Find readers to connect with"
-              onClick={() => setShowFindReaders(v => !v)}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: '40px', height: '40px', borderRadius: '50%',
-                background: showFindReaders ? 'var(--accent-color)' : 'var(--ui-hover-bg)',
-                border: 'none', cursor: 'pointer',
-                color: showFindReaders ? '#fff' : 'var(--text-secondary)',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={e => {
-                if (!showFindReaders) {
-                  e.currentTarget.style.background = 'var(--accent-color)';
-                  e.currentTarget.style.color = '#fff';
-                  e.currentTarget.style.transform = 'scale(1.1)';
-                }
-              }}
-              onMouseLeave={e => {
-                if (!showFindReaders) {
-                  e.currentTarget.style.background = 'var(--ui-hover-bg)';
-                  e.currentTarget.style.color = 'var(--text-secondary)';
-                  e.currentTarget.style.transform = 'scale(1)';
-                }
-              }}
-            >
-              <UserPlus size={17} />
-            </button>
+            {/* Find Readers Button */}
+            <div ref={findReadersRef} style={{ position: 'relative' }}>
+              <button
+                id="add-friend-btn"
+                aria-label="Find & suggest readers"
+                title="Find readers to connect with"
+                onClick={() => setShowFindReaders(v => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: '40px', height: '40px', borderRadius: '50%',
+                  background: showFindReaders ? 'var(--accent-color)' : 'var(--ui-hover-bg)',
+                  border: 'none', cursor: 'pointer',
+                  color: showFindReaders ? '#fff' : 'var(--text-secondary)',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={e => {
+                  if (!showFindReaders) {
+                    e.currentTarget.style.background = 'var(--accent-color)';
+                    e.currentTarget.style.color = '#fff';
+                    e.currentTarget.style.transform = 'scale(1.1)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!showFindReaders) {
+                    e.currentTarget.style.background = 'var(--ui-hover-bg)';
+                    e.currentTarget.style.color = 'var(--text-secondary)';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }
+                }}
+              >
+                <UserPlus size={17} />
+              </button>
 
-            {showFindReaders && (
-              <FindReadersPanel
-                onClose={() => setShowFindReaders(false)}
-                onProfileClick={openProfile}
-              />
-            )}
-          </div>
+              {showFindReaders && (
+                <FindReadersPanel
+                  onClose={() => setShowFindReaders(false)}
+                  onProfileClick={openProfile}
+                />
+              )}
+            </div>
           </div>
         )}
       </header>
